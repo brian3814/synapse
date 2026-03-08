@@ -1,13 +1,6 @@
 import { executeLLMRequestStreaming } from './llm-executor';
 import { runAgentLoop } from './agent-loop';
 
-async function getApiKey(): Promise<string> {
-  const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
-  const key = result.llmConfig?.apiKey;
-  if (!key) throw new Error('No API key configured');
-  return key;
-}
-
 // Chunk buffer to reduce IPC overhead
 class ChunkBuffer {
   private buffer = '';
@@ -64,12 +57,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       },
     });
 
-    getApiKey().then((apiKey) => {
-      const payloadWithKey = { ...message.payload, apiKey };
-      return executeLLMRequestStreaming(payloadWithKey, (chunk, done) => {
-        if (done) return; // handled below in .then()
-        buffer.add(chunk);
-      });
+    executeLLMRequestStreaming(message.payload, (chunk, done) => {
+      if (done) return; // handled below in .then()
+      buffer.add(chunk);
     })
       .then(({ content }) => {
         buffer.drain();
@@ -104,11 +94,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       },
     });
 
-    getApiKey().then((apiKey) => runAgentLoop({
+    runAgentLoop({
       runId,
       userPrompt: message.payload.userPrompt,
       tabId: message.payload.tabId,
-      apiKey,
+      apiKey: message.payload.apiKey,
       model: message.payload.model,
       maxIterations: message.payload.maxIterations,
       onProgress: (event) => {
@@ -122,11 +112,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }).catch(() => {});
         }
       },
-    })).catch((e) => {
-      chrome.runtime.sendMessage({
-        type: 'AGENT_PROGRESS',
-        payload: { runId, event: { type: 'error', error: e.message } },
-      }).catch(() => {});
     });
 
     return false;

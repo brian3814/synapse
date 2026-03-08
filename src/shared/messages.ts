@@ -64,7 +64,7 @@ export interface ExtractSelectionMessage extends ExtensionMessage {
   type: 'EXTRACT_SELECTION';
 }
 
-// Service worker -> Offscreen
+// UI -> Service worker (no apiKey — key is injected by the SW before forwarding to offscreen)
 export interface LLMRequestMessage extends ExtensionMessage {
   type: 'LLM_REQUEST';
   payload: {
@@ -73,6 +73,12 @@ export interface LLMRequestMessage extends ExtensionMessage {
     prompt: string;
     systemPrompt?: string;
   };
+}
+
+// Service worker -> Offscreen (internal, with apiKey injected by SW)
+export interface LLMRequestWithKeyMessage extends ExtensionMessage {
+  type: 'LLM_REQUEST';
+  payload: LLMRequestMessage['payload'] & { apiKey: string };
 }
 
 // Offscreen -> Service worker -> Panel/Tab
@@ -111,6 +117,7 @@ export interface ToggleDisplayModeMessage extends ExtensionMessage {
 }
 
 // Agent extraction messages
+// UI -> Service worker (no apiKey)
 export interface AgentRunStartMessage extends ExtensionMessage {
   type: 'AGENT_RUN_START';
   payload: {
@@ -121,6 +128,12 @@ export interface AgentRunStartMessage extends ExtensionMessage {
     model: string;
     maxIterations?: number;
   };
+}
+
+// Service worker -> Offscreen (internal, with apiKey injected by SW)
+export interface AgentRunStartWithKeyMessage extends ExtensionMessage {
+  type: 'AGENT_RUN_START';
+  payload: AgentRunStartMessage['payload'] & { apiKey: string };
 }
 
 export interface ToolExecuteMessage extends ExtensionMessage {

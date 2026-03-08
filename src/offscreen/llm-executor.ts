@@ -1,4 +1,4 @@
-import type { LLMRequestMessage } from '../shared/messages';
+import type { LLMRequestWithKeyMessage } from '../shared/messages';
 import type { ToolCall } from '../shared/types';
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a knowledge graph extraction assistant. Given text, extract entities (nodes) and relationships (edges) and return them as structured JSON.
@@ -21,11 +21,8 @@ Rules:
 - Ensure all edges reference entities that exist in the nodes array
 - Return ONLY valid JSON, no other text`;
 
-// Internal payload type — adds apiKey which is resolved from chrome.storage.local by the offscreen document
-type LLMPayloadWithKey = LLMRequestMessage['payload'] & { apiKey: string };
-
 export async function executeLLMRequestStreaming(
-  payload: LLMPayloadWithKey,
+  payload: LLMRequestWithKeyMessage['payload'],
   onChunk: (text: string, done: boolean) => void
 ): Promise<{ content: string }> {
   const { provider, model, apiKey, prompt, systemPrompt } = payload;

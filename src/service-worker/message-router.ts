@@ -41,9 +41,11 @@ async function handleMessageAsync(
     }
 
     case 'LLM_REQUEST': {
-      // Forward to offscreen document — it acks immediately, then streams chunks via broadcast
+      // Inject apiKey from storage before forwarding to offscreen (UI messages don't carry the key)
       await ensureOffscreenDocument();
-      const response = await chrome.runtime.sendMessage(message);
+      const apiKey = await getApiKeyFromStorage();
+      const withKey = { ...message, payload: { ...(message as any).payload, apiKey } };
+      const response = await chrome.runtime.sendMessage(withKey);
       return response;
     }
 
@@ -63,9 +65,11 @@ async function handleMessageAsync(
     }
 
     case 'AGENT_RUN_START': {
-      // Forward to offscreen document (same pattern as LLM_REQUEST)
+      // Inject apiKey from storage before forwarding to offscreen
       await ensureOffscreenDocument();
-      const response = await chrome.runtime.sendMessage(message);
+      const agentApiKey = await getApiKeyFromStorage();
+      const agentWithKey = { ...message, payload: { ...(message as any).payload, apiKey: agentApiKey } };
+      const response = await chrome.runtime.sendMessage(agentWithKey);
       return response;
     }
 
@@ -99,6 +103,13 @@ async function handleMessageAsync(
       console.warn('[SW] Unknown message type:', message.type);
       return { error: 'Unknown message type' };
   }
+}
+
+async function getApiKeyFromStorage(): Promise<string> {
+  const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+  const key = result.llmConfig?.apiKey;
+  if (!key) throw new Error('No API key configured. Go to Settings to add one.');
+  return key;
 }
 
 async function ensureContentScript(tabId: number): Promise<void> {
