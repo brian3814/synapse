@@ -1,10 +1,12 @@
 import React from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
+import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 import { useLLMExtraction } from '../../hooks/useLLMExtraction';
 import { TextInput } from './TextInput';
 import { PromptInput } from './PromptInput';
 import { AgentTimeline } from './AgentTimeline';
 import { DiffView } from './DiffView';
+import { ExtractionReview } from './ExtractionReview';
 import { ExtractionSummary } from './ExtractionSummary';
 import { StreamingOutput } from './StreamingOutput';
 import type { AgentStep } from '../../../shared/types';
@@ -100,8 +102,10 @@ export function LLMPanel() {
   const activeTab = useLLMStore((s) => s.activeTab);
   const setActiveTab = useLLMStore((s) => s.setActiveTab);
   const error = useLLMStore((s) => s.error);
-  const reset = useLLMStore((s) => s.reset);
-  const { startExtraction, startAgentExtraction, applyDiff, proceedToReview } = useLLMExtraction();
+  const resetLLM = useLLMStore((s) => s.reset);
+  const resetReview = useExtractionReviewStore((s) => s.reset);
+  const reset = () => { resetLLM(); resetReview(); };
+  const { startExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview } = useLLMExtraction();
 
   const isIdle = status === 'idle' || status === 'error';
 
@@ -155,7 +159,7 @@ export function LLMPanel() {
       ) : status === 'extracted' ? (
         <ExtractionSummary onProceed={proceedToReview} />
       ) : status === 'reviewing' ? (
-        <DiffView onApply={applyDiff} />
+        <ExtractionReview onApply={applyReview} />
       ) : status === 'merging' ? (
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />

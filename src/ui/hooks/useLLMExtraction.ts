@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
+import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../../graph/store/extraction-review-store';
 import { extractionResultSchema } from '../../shared/schema';
 import { entityResolution, sourceContent } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
@@ -364,9 +365,204 @@ export function useLLMExtraction() {
     chrome.runtime.onMessage.addListener(listener);
   }, []);
 
-  const proceedToReview = useCallback(() => {
+  const proceedToReview = useCallback(async () => {
+    const llm = useLLMStore.getState();
+    const diff = llm.diff;
+    if (!diff) return;
+
+    const graph = useGraphStore.getState();
+    const reviewNodes: ReviewNode[] = [];
+    const reviewEdges: ReviewEdge[] = [];
+    const labelToTempId = new Map<string, string>();
+
+    // Convert node DiffItems → ReviewNodes
+    for (const item of diff.items) {
+      if (item.type !== 'node') continue;
+      const extracted = item.extracted as { label: string; type: string; properties?: Record<string, unknown> };
+      const tempId = `temp-${crypto.randomUUID()}`;
+      labelToTempId.set(extracted.label.toLowerCase(), tempId);
+
+      let mergeRecommendation: ReviewNode['mergeRecommendation'];
+
+      if (item.action === 'merge' && item.existingMatch) {
+        const existing = item.existingMatch as { id: string; label: string };
+        mergeRecommendation = {
+          existingNodeId: existing.id,
+          existingLabel: existing.label,
+          matchType: 'exact',
+          similarity: 1,
+          status: 'pending',
+        };
+      } else if (item.action === 'add') {
+        // Try finding fuzzy matches for new nodes
+        try {
+          const matches: EntityMatch[] = await entityResolution.findMatches(extracted.label);
+          if (matches.length > 0) {
+            const best = matches[0];
+            const existingNode = graph.nodes.find((n) => n.id === best.nodeId);
+            if (existingNode) {
+              mergeRecommendation = {
+                existingNodeId: best.nodeId,
+                existingLabel: best.label,
+                matchType: best.matchType,
+                similarity: best.similarity,
+                status: 'pending',
+              };
+            }
+          }
+        } catch {
+          // Entity resolution not available
+        }
+      }
+
+      reviewNodes.push({
+        tempId,
+        label: extracted.label,
+        type: extracted.type,
+        properties: extracted.properties ?? {},
+        mergeRecommendation,
+        removed: false,
+      });
+    }
+
+    // Convert edge DiffItems → ReviewEdges
+    for (const item of diff.items) {
+      if (item.type !== 'edge') continue;
+      const extracted = item.extracted as { sourceLabel: string; targetLabel: string; label: string; type?: string };
+      const sourceTempId = labelToTempId.get(extracted.sourceLabel.toLowerCase());
+      const targetTempId = labelToTempId.get(extracted.targetLabel.toLowerCase());
+      if (!sourceTempId || !targetTempId) continue;
+
+      reviewEdges.push({
+        tempId: `temp-${crypto.randomUUID()}`,
+        sourceTempId,
+        targetTempId,
+        label: extracted.label,
+        type: extracted.type ?? 'related_to',
+        removed: false,
+      });
+    }
+
+    useExtractionReviewStore.getState().initialize(reviewNodes, reviewEdges, llm.sourceUrl);
     useLLMStore.getState().setStatus('reviewing');
   }, []);
 
-  return { startExtraction, startAgentExtraction, applyDiff, proceedToReview };
+  const applyReview = useCallback(async () => {
+    const llm = useLLMStore.getState();
+    const reviewStore = useExtractionReviewStore.getState();
+    const activeNodes = reviewStore.activeNodes();
+    const activeEdges = reviewStore.activeEdges();
+
+    if (activeNodes.length === 0 && activeEdges.length === 0) return;
+
+    llm.setStatus('merging');
+
+    try {
+      const graph = useGraphStore.getState();
+      const tempIdToRealId = new Map<string, string>();
+
+      // First pass: create/merge nodes
+      for (const node of activeNodes) {
+        if (node.mergeRecommendation?.status === 'accepted') {
+          // Merge: use existing node ID
+          const existingId = node.mergeRecommendation.existingNodeId;
+          tempIdToRealId.set(node.tempId, existingId);
+
+          // Register alias if labels differ
+          if (node.label.toLowerCase() !== node.mergeRecommendation.existingLabel.toLowerCase()) {
+            try {
+              await entityResolution.addAlias(existingId, node.label);
+            } catch {
+              // Alias may already exist
+            }
+          }
+
+          // Merge properties into existing node
+          if (Object.keys(node.properties).length > 0) {
+            const existing = graph.nodes.find((n) => n.id === existingId);
+            if (existing) {
+              await graph.updateNode({
+                id: existingId,
+                properties: { ...existing.properties, ...node.properties },
+              });
+            }
+          }
+        } else {
+          // New node: create it
+          const created = await graph.createNode({
+            label: node.label,
+            type: node.type,
+            properties: node.properties,
+            sourceUrl: llm.sourceUrl ?? undefined,
+          });
+          if (created) {
+            tempIdToRealId.set(node.tempId, created.id);
+          }
+        }
+      }
+
+      // Second pass: create edges
+      const updatedGraph = useGraphStore.getState();
+      const allReviewTempIds = new Set(reviewStore.nodes.map((n) => n.tempId));
+
+      for (const edge of activeEdges) {
+        const resolveEndpoint = (id: string): string | undefined => {
+          // 1. Check if it was mapped during node creation/merge
+          const mapped = tempIdToRealId.get(id);
+          if (mapped) return mapped;
+
+          // 2. If it's not a review node ID, it's already an existing graph node ID
+          if (!allReviewTempIds.has(id)) {
+            // Verify the node exists
+            if (updatedGraph.nodes.some((n) => n.id === id)) return id;
+            return undefined;
+          }
+
+          // 3. Fall back to label matching
+          const reviewNode = reviewStore.nodes.find((rn) => rn.tempId === id);
+          if (!reviewNode) return undefined;
+          return updatedGraph.nodes.find(
+            (n) => n.label.toLowerCase() === reviewNode.label.toLowerCase()
+          )?.id;
+        };
+
+        const sourceId = resolveEndpoint(edge.sourceTempId);
+        const targetId = resolveEndpoint(edge.targetTempId);
+
+        if (sourceId && targetId) {
+          await updatedGraph.createEdge({
+            sourceId,
+            targetId,
+            label: edge.label,
+            type: edge.type,
+            sourceUrl: llm.sourceUrl ?? undefined,
+          });
+        }
+      }
+
+      // Save source content
+      if (llm.sourceUrl && llm.inputText) {
+        try {
+          const resourceNodeId = useGraphStore.getState().nodes.find(
+            (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
+          )?.id;
+
+          await sourceContent.save({
+            nodeId: resourceNodeId,
+            url: llm.sourceUrl,
+            content: llm.inputText,
+          });
+        } catch (e) {
+          console.warn('[Extraction] Failed to save source content:', e);
+        }
+      }
+
+      useExtractionReviewStore.getState().reset();
+      useLLMStore.getState().reset();
+    } catch (e: any) {
+      useLLMStore.getState().setError(e.message);
+    }
+  }, []);
+
+  return { startExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview };
 }
