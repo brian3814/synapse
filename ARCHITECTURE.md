@@ -65,7 +65,7 @@ A Chrome Manifest V3 extension that provides a local-first knowledge graph with 
 |---|---|---|---|
 | **Service Worker** | Ephemeral (30s idle / 5min max) | `chrome.*` APIs, message routing, content script injection | No DOM, no long-running tasks |
 | **Side Panel / Tab** | User-controlled | Full DOM, WebGL, Web Workers, OPFS | CSP: `script-src 'self' 'wasm-unsafe-eval'` |
-| **Offscreen Document** | Managed by SW | DOM (hidden), fetch, long-lived; hosts agent loop + LLM streaming | No UI, no `chrome.tabs` |
+| **Offscreen Document** | Managed by SW | DOM (hidden), fetch, long-lived; hosts agent loop + LLM streaming | No UI, no `chrome.tabs`, no `chrome.storage` (see Pitfall #13) |
 | **Content Script** | Per-page, isolated world | Page DOM read access, agent tool execution | No extension storage, limited APIs |
 | **DB SharedWorker** | Shared across tabs | Message routing, sync event broadcast | No DOM, no `chrome.*` APIs, no `Worker` constructor |
 | **DB Dedicated Worker** | Spawned by UI, bridged to SharedWorker | WASM, OPFS, Asyncify | No DOM, no `chrome.*` APIs |
@@ -686,3 +686,42 @@ if (db === null) {
 **Tab that created the Worker closes:** The Dedicated Worker dies. SharedWorker's port goes dead. Subsequent requests time out (10s). On next `initDbClient()` call, SharedWorker responds `needsWorker: true` again and a fresh Worker is created.
 
 See `docs/pitfalls/shared-worker-cannot-spawn-workers.md` for full details.
+
+---
+
+### Pitfall #13: Offscreen Documents Cannot Access `chrome.storage`
+
+**Problem:** Offscreen documents have a very limited subset of Chrome extension APIs. `chrome.storage` is **not** one of them. Attempting to call `chrome.storage.local.get(...)` from an offscreen document throws:
+
+```
+TypeError: Cannot read properties of undefined (reading 'local')
+```
+
+This is not obvious because:
+1. TypeScript compiles fine — `chrome.storage` types are available via `@types/chrome`
+2. The offscreen document has `chrome.runtime` (for messaging), so it *looks* like a full extension context
+3. Chrome's documentation on offscreen API restrictions is sparse
+
+**Context:** The offscreen document handles LLM streaming and the agent loop, both of which need the user's API key. The original approach was to read the key from `chrome.storage.local` directly in the offscreen document.
+
+**Solution:** The **service worker** reads the API key from `chrome.storage.local` and injects it into the message payload before forwarding to the offscreen document. The UI sends messages *without* the API key (preventing key leakage via `chrome.runtime.sendMessage` broadcasts), and the service worker acts as a secure intermediary:
+
+```
+UI                          Service Worker                    Offscreen
+│                           │                                 │
+│─ LLM_REQUEST (no key) ──>│                                 │
+│                           │─ chrome.storage.local.get() ──> │
+│                           │<─ { apiKey: "sk-..." } ────────│
+│                           │                                 │
+│                           │─ LLM_REQUEST (with key) ──────>│
+│                           │                                 │─ fetch(api.openai.com)
+```
+
+This pattern has a security benefit: API keys never appear in `chrome.runtime.sendMessage` broadcasts from the UI, which are visible to all extension contexts. Only the service worker (trusted) injects the key into the specific forwarded message.
+
+**Available APIs in offscreen documents:** `chrome.runtime` (messaging only — `sendMessage`, `onMessage`, `id`, `getURL`). No `storage`, `tabs`, `scripting`, `sidePanel`, `action`, or other APIs.
+
+**Key files:**
+- `src/service-worker/message-router.ts` — `getApiKeyFromStorage()` reads key, `LLM_REQUEST` and `AGENT_RUN_START` handlers inject it
+- `src/offscreen/index.ts` — receives key from `message.payload.apiKey`
+- `src/shared/messages.ts` — `LLMRequestMessage` (no key, UI→SW) vs `LLMRequestWithKeyMessage` (with key, SW→offscreen)

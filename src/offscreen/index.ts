@@ -37,7 +37,9 @@ class ChunkBuffer {
   }
 }
 
-// Listen for messages from the service worker
+// Listen for messages from the service worker.
+// NOTE: This context does NOT have access to chrome.storage (see Pitfall #13 in ARCHITECTURE.md).
+// API keys are injected into message.payload by the service worker before forwarding here.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'LLM_REQUEST') {
     const requestId = message.requestId ?? crypto.randomUUID();

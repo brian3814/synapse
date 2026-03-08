@@ -41,7 +41,9 @@ async function handleMessageAsync(
     }
 
     case 'LLM_REQUEST': {
-      // Inject apiKey from storage before forwarding to offscreen (UI messages don't carry the key)
+      // Offscreen documents cannot access chrome.storage (see Pitfall #13 in ARCHITECTURE.md).
+      // The SW reads the API key from storage and injects it into the payload before forwarding.
+      // UI messages intentionally omit the key to prevent leakage via runtime broadcast.
       await ensureOffscreenDocument();
       const apiKey = await getApiKeyFromStorage();
       const withKey = { ...message, payload: { ...(message as any).payload, apiKey } };
@@ -65,7 +67,7 @@ async function handleMessageAsync(
     }
 
     case 'AGENT_RUN_START': {
-      // Inject apiKey from storage before forwarding to offscreen
+      // Same pattern as LLM_REQUEST — SW injects apiKey (Pitfall #13: offscreen lacks chrome.storage)
       await ensureOffscreenDocument();
       const agentApiKey = await getApiKeyFromStorage();
       const agentWithKey = { ...message, payload: { ...(message as any).payload, apiKey: agentApiKey } };
@@ -105,6 +107,8 @@ async function handleMessageAsync(
   }
 }
 
+// Reads API key from chrome.storage.local. Only the service worker has access to
+// chrome.storage — offscreen documents do not (Pitfall #13).
 async function getApiKeyFromStorage(): Promise<string> {
   const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
   const key = result.llmConfig?.apiKey;
