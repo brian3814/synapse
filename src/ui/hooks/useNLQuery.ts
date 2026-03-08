@@ -32,7 +32,6 @@ export function useNLQuery() {
         payload: {
           provider: config.provider,
           model: config.model,
-          apiKey: config.apiKey,
           prompt: input,
           systemPrompt,
         },

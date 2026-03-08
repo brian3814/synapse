@@ -119,14 +119,13 @@ export function useLLMExtraction() {
         throw new Error('No API key configured. Go to Settings to add one.');
       }
 
-      // Send LLM_REQUEST with requestId — offscreen acks immediately
+      // Send LLM_REQUEST with requestId — offscreen reads apiKey from storage directly
       chrome.runtime.sendMessage({
         type: 'LLM_REQUEST',
         requestId,
         payload: {
           provider: config.provider,
           model: config.model,
-          apiKey: config.apiKey,
           prompt: text,
         },
       });
@@ -294,7 +293,7 @@ export function useLLMExtraction() {
     llm.setStatus('agent-running');
     llm.setSourceUrl(tab.url ?? null);
 
-    // Send AGENT_RUN_START
+    // Send AGENT_RUN_START — offscreen reads apiKey from storage directly
     chrome.runtime.sendMessage({
       type: 'AGENT_RUN_START',
       payload: {
@@ -303,7 +302,6 @@ export function useLLMExtraction() {
         tabId: tab.id,
         provider: config.provider,
         model: config.model,
-        apiKey: config.apiKey,
       },
     });
 

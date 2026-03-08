@@ -70,7 +70,6 @@ export interface LLMRequestMessage extends ExtensionMessage {
   payload: {
     provider: string;
     model: string;
-    apiKey: string;
     prompt: string;
     systemPrompt?: string;
   };
@@ -120,7 +119,6 @@ export interface AgentRunStartMessage extends ExtensionMessage {
     tabId: number;
     provider: string;
     model: string;
-    apiKey: string;
     maxIterations?: number;
   };
 }

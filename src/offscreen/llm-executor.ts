@@ -21,8 +21,11 @@ Rules:
 - Ensure all edges reference entities that exist in the nodes array
 - Return ONLY valid JSON, no other text`;
 
+// Internal payload type — adds apiKey which is resolved from chrome.storage.local by the offscreen document
+type LLMPayloadWithKey = LLMRequestMessage['payload'] & { apiKey: string };
+
 export async function executeLLMRequestStreaming(
-  payload: LLMRequestMessage['payload'],
+  payload: LLMPayloadWithKey,
   onChunk: (text: string, done: boolean) => void
 ): Promise<{ content: string }> {
   const { provider, model, apiKey, prompt, systemPrompt } = payload;

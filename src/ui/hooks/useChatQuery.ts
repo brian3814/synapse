@@ -96,7 +96,6 @@ export function useChatQuery() {
       payload: {
         provider: config.provider,
         model: config.model,
-        apiKey: config.apiKey,
         prompt: ragPrompt,
         systemPrompt: RAG_SYSTEM_PROMPT,
       },
@@ -132,7 +131,6 @@ export function useChatQuery() {
       payload: {
         provider: config.provider,
         model: config.model,
-        apiKey: config.apiKey,
         prompt: input,
         systemPrompt,
       },

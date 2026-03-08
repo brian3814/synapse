@@ -438,7 +438,6 @@ Return JSON like: {"has_framework": "written_in"}`;
           payload: {
             provider: llmConfig.provider,
             model: llmConfig.model,
-            apiKey: llmConfig.apiKey,
             prompt,
           },
         });
