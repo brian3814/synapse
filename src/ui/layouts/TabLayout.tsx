@@ -1,16 +1,29 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Header } from '../components/Header';
 import { KnowledgeGraph } from '../components/graph/KnowledgeGraph';
 import { ActivePanel } from '../components/ActivePanel';
 import { ChatBot } from '../components/chat/ChatBot';
 import { RelatedWidget } from '../components/RelatedWidget';
+import { ResizeHandle } from '../components/ResizeHandle';
 import { useUIStore } from '../../graph/store/ui-store';
 
 export function TabLayout() {
   const activePanel = useUIStore((s) => s.activePanel);
   const chatOpen = useUIStore((s) => s.chatOpen);
   const chatDisplayMode = useUIStore((s) => s.chatDisplayMode);
+  const panelWidth = useUIStore((s) => s.panelWidth);
+  const chatSidebarWidth = useUIStore((s) => s.chatSidebarWidth);
+  const setPanelWidth = useUIStore((s) => s.setPanelWidth);
+  const setChatSidebarWidth = useUIStore((s) => s.setChatSidebarWidth);
   const showChatSidebar = chatOpen && chatDisplayMode === 'sidebar';
+
+  const onPanelResize = useCallback((delta: number) => {
+    setPanelWidth(panelWidth + delta);
+  }, [panelWidth, setPanelWidth]);
+
+  const onChatResize = useCallback((delta: number) => {
+    setChatSidebarWidth(chatSidebarWidth + delta);
+  }, [chatSidebarWidth, setChatSidebarWidth]);
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 relative">
@@ -20,14 +33,20 @@ export function TabLayout() {
           <KnowledgeGraph />
         </div>
         {activePanel !== 'none' && (
-          <div className="w-[400px] border-l border-zinc-700 overflow-y-auto">
-            <ActivePanel />
-          </div>
+          <>
+            <ResizeHandle onResize={onPanelResize} />
+            <div style={{ width: panelWidth }} className="shrink-0 overflow-y-auto">
+              <ActivePanel />
+            </div>
+          </>
         )}
         {showChatSidebar && (
-          <div className="w-[400px] border-l border-zinc-700 min-h-0">
-            <ChatBot />
-          </div>
+          <>
+            <ResizeHandle onResize={onChatResize} />
+            <div style={{ width: chatSidebarWidth }} className="shrink-0 min-h-0">
+              <ChatBot />
+            </div>
+          </>
         )}
       </div>
       {/* Float mode FAB / overlay */}

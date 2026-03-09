@@ -14,6 +14,8 @@ interface UIStore {
   graphKey: number; // increment to force graph re-render
   chatOpen: boolean;
   chatDisplayMode: ChatDisplayMode;
+  panelWidth: number;
+  chatSidebarWidth: number;
 
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
@@ -24,6 +26,8 @@ interface UIStore {
   toggleChat: () => void;
   setChatOpen: (open: boolean) => void;
   setChatDisplayMode: (mode: ChatDisplayMode) => void;
+  setPanelWidth: (width: number) => void;
+  setChatSidebarWidth: (width: number) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -35,6 +39,8 @@ export const useUIStore = create<UIStore>((set) => ({
   graphKey: 0,
   chatOpen: false,
   chatDisplayMode: 'float',
+  panelWidth: 400,
+  chatSidebarWidth: 400,
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setActivePanel: (panel) =>
@@ -58,4 +64,6 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({ chatOpen: !state.chatOpen })),
   setChatOpen: (open) => set({ chatOpen: open }),
   setChatDisplayMode: (mode) => set({ chatDisplayMode: mode }),
+  setPanelWidth: (width) => set({ panelWidth: Math.min(800, Math.max(200, width)) }),
+  setChatSidebarWidth: (width) => set({ chatSidebarWidth: Math.min(800, Math.max(200, width)) }),
 }));
