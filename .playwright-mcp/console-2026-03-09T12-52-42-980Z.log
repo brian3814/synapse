@@ -1,0 +1,23 @@
+[     171ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3847/favicon.ico:0
+[     445ms] TypeError: Cannot read properties of undefined (reading 'local')
+    at http://localhost:3847/assets/main-BGU-RaI7.js:49970:20
+    at commitHookEffectListMount (http://localhost:3847/assets/main-BGU-RaI7.js:6951:26)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8101:25)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8198:9)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8198:9)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8095:9)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+[     445ms] TypeError: Cannot read properties of undefined (reading 'onMessage')
+    at registerQueryMessageHandler (http://localhost:3847/assets/main-BGU-RaI7.js:13099:18)
+    at http://localhost:3847/assets/main-BGU-RaI7.js:50212:28
+    at commitHookEffectListMount (http://localhost:3847/assets/main-BGU-RaI7.js:6951:26)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8101:25)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8198:9)
+    at recursivelyTraversePassiveMountEffects (http://localhost:3847/assets/main-BGU-RaI7.js:8082:9)
+    at commitPassiveMountOnFiber (http://localhost:3847/assets/main-BGU-RaI7.js:8112:9)
+    at flushPassiveEffects (http://localhost:3847/assets/main-BGU-RaI7.js:9323:7)
+    at http://localhost:3847/assets/main-BGU-RaI7.js:9139:9
