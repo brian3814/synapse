@@ -97,7 +97,7 @@ function spawnAndAttachWorker(): void {
   );
 }
 
-function sendRequest(action: string, params?: unknown): Promise<unknown> {
+function sendRequest(action: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!port) {
       reject(new Error('DB SharedWorker not initialized'));
@@ -109,7 +109,7 @@ function sendRequest(action: string, params?: unknown): Promise<unknown> {
     const timer = setTimeout(() => {
       pendingRequests.delete(requestId);
       reject(new Error(`DB request timed out: ${action}`));
-    }, DB_REQUEST_TIMEOUT_MS);
+    }, timeoutMs ?? DB_REQUEST_TIMEOUT_MS);
 
     pendingRequests.set(requestId, { resolve, reject, timer });
 
@@ -221,6 +221,11 @@ export const graph = {
 export function clearAll(): Promise<{ success: boolean }> {
   return sendRequest('clearAll') as Promise<{ success: boolean }>;
 }
+
+export const stressTest = {
+  generate: (nodeCount: number) =>
+    sendRequest('stressTest.generate', { nodeCount }, 300_000) as Promise<{ nodes: number; edges: number }>,
+};
 
 export function isDbReady(): boolean {
   return initPromise !== null;

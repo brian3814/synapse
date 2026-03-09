@@ -9,6 +9,7 @@ import * as nodeTypeQueries from './queries/node-type-queries';
 import * as sourceContentQueries from './queries/source-content-queries';
 import * as entityResolutionQueries from './queries/entity-resolution-queries';
 import * as indexedFileQueries from './queries/indexed-file-queries';
+import * as stressTestQueries from './queries/stress-test-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -280,6 +281,14 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'indexedFiles.getByNodeId': {
       ensureInit();
       return { result: await indexedFileQueries.getByNodeId(params as string) };
+    }
+
+    // Stress test
+    case 'stressTest.generate': {
+      ensureInit();
+      const p = params as { nodeCount: number };
+      const result = await stressTestQueries.generateStressTestData(p.nodeCount);
+      return { result, syncEvent: { type: 'reset' } };
     }
 
     // Query engine operations
