@@ -4,7 +4,7 @@ import type { LLMProvider } from '../../../shared/types';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, disconnectFolder, type FolderStatus } from '../../../filesystem/folder-access';
 import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
-import { indexedFiles } from '../../../db/client/db-client';
+import { indexedFiles, stressTest } from '../../../db/client/db-client';
 
 export function SettingsPanel() {
   const [provider, setProvider] = useState<LLMProvider>('openai');
@@ -122,6 +122,8 @@ export function SettingsPanel() {
       <RelevanceSection />
 
       <FolderSection />
+
+      <StressTest />
 
       <DangerZone />
 
@@ -324,6 +326,54 @@ function FolderSection() {
             </p>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function StressTest() {
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState<{ nodes: number; edges: number; ms: number } | null>(null);
+  const loadAll = useGraphStore((s) => s.loadAll);
+
+  const handleGenerate = async (count: number) => {
+    setGenerating(true);
+    setResult(null);
+    const t0 = performance.now();
+    try {
+      const res = await stressTest.generate(count);
+      const ms = Math.round(performance.now() - t0);
+      setResult({ nodes: res.nodes, edges: res.edges, ms });
+      await loadAll();
+    } catch (e: any) {
+      console.error('[StressTest] Failed:', e);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-zinc-700 pt-4 mt-4">
+      <h4 className="text-xs font-medium text-zinc-400 mb-1">Stress Test</h4>
+      <p className="text-[10px] text-zinc-600 mb-2">
+        Generate synthetic nodes with hubs, chains, and clusters.
+      </p>
+      <div className="flex gap-2">
+        {[1000, 5000, 10000].map((n) => (
+          <button
+            key={n}
+            onClick={() => handleGenerate(n)}
+            disabled={generating}
+            className="flex-1 bg-zinc-700 text-zinc-200 text-xs py-1.5 rounded hover:bg-zinc-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generating ? '...' : `${(n / 1000).toFixed(0)}k`}
+          </button>
+        ))}
+      </div>
+      {result && (
+        <p className="text-[10px] text-zinc-500 mt-2">
+          {result.nodes.toLocaleString()} nodes + {result.edges.toLocaleString()} edges in {(result.ms / 1000).toFixed(1)}s
+        </p>
       )}
     </div>
   );
