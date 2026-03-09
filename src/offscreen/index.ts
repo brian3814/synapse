@@ -41,7 +41,7 @@ class ChunkBuffer {
 // NOTE: This context does NOT have access to chrome.storage (see Pitfall #13 in ARCHITECTURE.md).
 // API keys are injected into message.payload by the service worker before forwarding here.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === 'LLM_REQUEST') {
+  if (message.type === 'LLM_REQUEST_WITH_KEY') {
     const requestId = message.requestId ?? crypto.randomUUID();
 
     // Acknowledge immediately — do NOT return true
@@ -81,7 +81,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false; // Channel already closed via sendResponse
   }
 
-  if (message.type === 'AGENT_RUN_START') {
+  if (message.type === 'AGENT_RUN_START_WITH_KEY') {
     const { runId } = message.payload;
     sendResponse({ acknowledged: true, runId });
 

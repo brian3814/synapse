@@ -46,7 +46,7 @@ async function handleMessageAsync(
       // UI messages intentionally omit the key to prevent leakage via runtime broadcast.
       await ensureOffscreenDocument();
       const apiKey = await getApiKeyFromStorage();
-      const withKey = { ...message, payload: { ...(message as any).payload, apiKey } };
+      const withKey = { type: 'LLM_REQUEST_WITH_KEY', requestId: (message as any).requestId, payload: { ...(message as any).payload, apiKey } };
       const response = await chrome.runtime.sendMessage(withKey);
       return response;
     }
@@ -70,7 +70,7 @@ async function handleMessageAsync(
       // Same pattern as LLM_REQUEST — SW injects apiKey (Pitfall #13: offscreen lacks chrome.storage)
       await ensureOffscreenDocument();
       const agentApiKey = await getApiKeyFromStorage();
-      const agentWithKey = { ...message, payload: { ...(message as any).payload, apiKey: agentApiKey } };
+      const agentWithKey = { type: 'AGENT_RUN_START_WITH_KEY', payload: { ...(message as any).payload, apiKey: agentApiKey } };
       const response = await chrome.runtime.sendMessage(agentWithKey);
       return response;
     }

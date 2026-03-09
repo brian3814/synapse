@@ -77,7 +77,7 @@ export interface LLMRequestMessage extends ExtensionMessage {
 
 // Service worker -> Offscreen (internal, with apiKey injected by SW)
 export interface LLMRequestWithKeyMessage extends ExtensionMessage {
-  type: 'LLM_REQUEST';
+  type: 'LLM_REQUEST_WITH_KEY';
   payload: LLMRequestMessage['payload'] & { apiKey: string };
 }
 
@@ -132,7 +132,7 @@ export interface AgentRunStartMessage extends ExtensionMessage {
 
 // Service worker -> Offscreen (internal, with apiKey injected by SW)
 export interface AgentRunStartWithKeyMessage extends ExtensionMessage {
-  type: 'AGENT_RUN_START';
+  type: 'AGENT_RUN_START_WITH_KEY';
   payload: AgentRunStartMessage['payload'] & { apiKey: string };
 }
 
@@ -206,6 +206,7 @@ export type RuntimeMessage =
   | ExtractPageMessage
   | ExtractSelectionMessage
   | LLMRequestMessage
+  | LLMRequestWithKeyMessage
   | LLMStreamChunkMessage
   | LLMResponseMessage
   | OpenSidePanelMessage
@@ -215,6 +216,7 @@ export type RuntimeMessage =
   | QueryExecuteMessage
   | MutationExecuteMessage
   | AgentRunStartMessage
+  | AgentRunStartWithKeyMessage
   | ToolExecuteMessage
   | ToolResultMessage
   | AgentProgressMessage
