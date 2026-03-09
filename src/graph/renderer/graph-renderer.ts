@@ -300,6 +300,10 @@ export class GraphRenderer implements GraphRendererInstance {
     this.nodeMesh.dispose();
     this.edgeMesh.dispose();
     this.labelLayer.dispose();
+    // Force-release the WebGL context before disposing the renderer.
+    // THREE.dispose() alone doesn't release the context on all platforms,
+    // causing "context lost" blocks on Windows when contexts accumulate.
+    this.renderer.forceContextLoss();
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);

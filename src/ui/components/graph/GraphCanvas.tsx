@@ -30,6 +30,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
     // Create renderer on mount
     useEffect(() => {
       if (!containerRef.current) return;
+      // Dispose any previous renderer (React StrictMode double-mount)
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
       const renderer = new GraphRenderer(containerRef.current, {
         theme: props.theme,
         antialias: true,
