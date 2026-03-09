@@ -33,6 +33,41 @@ function contentScriptPlugin(): Plugin {
   };
 }
 
+// Plugin to build the layout worker as a separate ES module.
+function layoutWorkerPlugin(): Plugin {
+  return {
+    name: 'layout-worker-build',
+    apply: 'build',
+    closeBundle: async () => {
+      await viteBuild({
+        configFile: false,
+        base: '',
+        resolve: {
+          alias: {
+            '@': resolve(__dirname, 'src'),
+          },
+        },
+        build: {
+          outDir: resolve(__dirname, 'dist'),
+          emptyOutDir: false,
+          sourcemap: false,
+          rollupOptions: {
+            input: {
+              'layout-worker': resolve(__dirname, 'src/graph/layout/layout-worker.ts'),
+            },
+            output: {
+              entryFileNames: 'layout-worker.js',
+              assetFileNames: '[name][extname]',
+              chunkFileNames: 'assets/[name].js',
+              manualChunks: undefined,
+            },
+          },
+        },
+      });
+    },
+  };
+}
+
 // Plugin to build the db-worker as a separate self-contained ES module.
 // Chrome extension CSP blocks blob: URLs, so we build the worker separately
 // and load it via a direct chrome-extension:// URL.
@@ -135,14 +170,10 @@ function fixHtmlPlugin(): Plugin {
 
 export default defineConfig({
   base: '',
-  plugins: [react(), tailwindcss(), fixHtmlPlugin(), dbWorkerPlugin(), dbSharedWorkerPlugin(), contentScriptPlugin()],
+  plugins: [react(), tailwindcss(), fixHtmlPlugin(), dbWorkerPlugin(), dbSharedWorkerPlugin(), layoutWorkerPlugin(), contentScriptPlugin()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      // Redirect troika-worker-utils to our shim that runs everything on the
-      // main thread. Chrome MV3 CSP blocks blob: URLs which troika uses for
-      // inline workers, causing silent failures in text rendering.
-      'troika-worker-utils': resolve(__dirname, 'src/lib/troika-worker-utils-shim.ts'),
     },
   },
   build: {

@@ -1,10 +1,10 @@
 import React from 'react';
-import type { GraphCanvasRef } from 'reagraph';
+import type { GraphCanvasHandle } from '../../../graph/renderer/types';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { LAYOUT_OPTIONS } from '../../../shared/constants';
 
 interface GraphControlsProps {
-  graphRef: React.RefObject<GraphCanvasRef | null>;
+  graphRef: React.RefObject<GraphCanvasHandle | null>;
 }
 
 export function GraphControls({ graphRef }: GraphControlsProps) {
@@ -12,15 +12,15 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
   const isSidePanel = displayMode === 'sidePanel';
 
   const handleFitView = () => {
-    graphRef.current?.fitNodesInView();
+    graphRef.current?.fitToView();
   };
 
   const handleZoomIn = () => {
-    graphRef.current?.zoomIn?.();
+    graphRef.current?.zoomIn();
   };
 
   const handleZoomOut = () => {
-    graphRef.current?.zoomOut?.();
+    graphRef.current?.zoomOut();
   };
 
   const availableLayouts = isSidePanel

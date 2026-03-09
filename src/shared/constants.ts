@@ -45,9 +45,4 @@ export const LLM_CONFIG_STORAGE_KEY = 'llmConfig';
 
 export const LAYOUT_OPTIONS = [
   { id: 'forceDirected2d', label: 'Force Directed 2D' },
-  { id: 'forceDirected3d', label: 'Force Directed 3D' },
-  { id: 'treeTd2d', label: 'Tree (Top Down)' },
-  { id: 'treeLr2d', label: 'Tree (Left Right)' },
-  { id: 'radialOut2d', label: 'Radial' },
-  { id: 'hierarchicalTd', label: 'Hierarchical' },
 ] as const;
