@@ -106,28 +106,45 @@ export async function deleteNode(id: string): Promise<boolean> {
   return changes > 0;
 }
 
+const FTS5_SPECIAL = /["*()\-+^:{}~|]/g;
+
+function sanitizeFTS5Query(raw: string): string | null {
+  const tokens = raw
+    .split(/\s+/)
+    .map((t) => t.replace(FTS5_SPECIAL, '').trim())
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return null;
+  return tokens.map((t) => `"${t}"*`).join(' ');
+}
+
 export async function searchNodes(queryText: string, limit = 50): Promise<DbNode[]> {
   if (isFTS5Available()) {
-    // Use FTS5 for full-text search
-    const { rows } = await executeQuery<DbNode>(
-      `SELECT n.* FROM nodes n
-       JOIN nodes_fts fts ON n.rowid = fts.rowid
-       WHERE nodes_fts MATCH ?
-       ORDER BY rank
-       LIMIT ?;`,
-      [queryText + '*', limit]
-    );
-    return rows;
+    const ftsQuery = sanitizeFTS5Query(queryText);
+    if (ftsQuery !== null) {
+      try {
+        const { rows } = await executeQuery<DbNode>(
+          `SELECT n.* FROM nodes n
+           JOIN nodes_fts fts ON n.rowid = fts.rowid
+           WHERE nodes_fts MATCH ?
+           ORDER BY rank
+           LIMIT ?;`,
+          [ftsQuery, limit]
+        );
+        return rows;
+      } catch {
+        // FTS5 failed — fall through to LIKE
+      }
+    }
   }
 
   // Fallback: LIKE-based search
   const pattern = `%${queryText}%`;
   const { rows } = await executeQuery<DbNode>(
     `SELECT * FROM nodes
-     WHERE label LIKE ? OR type LIKE ? OR properties LIKE ?
+     WHERE label LIKE ? OR type LIKE ?
      ORDER BY label
      LIMIT ?;`,
-    [pattern, pattern, pattern, limit]
+    [pattern, pattern, limit]
   );
   return rows;
 }

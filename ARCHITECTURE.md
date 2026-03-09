@@ -430,19 +430,13 @@ export function checkModuleAvailable(moduleName: string): Promise<boolean> {
 }
 ```
 
-Migration 002 (FTS index) is marked `optional: true`. The migration runner checks `checkModuleAvailable('fts5')` and skips the migration entirely if FTS5 is unavailable, recording the skip in `schema_version` to avoid retries. Search falls back to `LIKE`-based queries:
+Migration 002 (FTS index) is marked `optional: true`. The migration runner checks `checkModuleAvailable('fts5')` and skips the migration entirely if FTS5 is unavailable, recording the skip in `schema_version` to avoid retries. Search falls back to `LIKE`-based queries.
 
-```typescript
-// node-queries.ts
-export async function searchNodes(queryText: string, limit = 50) {
-  if (isFTS5Available()) {
-    // FTS5 MATCH query
-  }
-  // Fallback
-  const pattern = `%${queryText}%`;
-  return executeQuery('SELECT * FROM nodes WHERE label LIKE ? ...', [pattern, ...]);
-}
-```
+**FTS5 query sanitization:** User input is sanitized before being passed to FTS5 `MATCH`. Special characters (`"*()-+^:{}~|`) are stripped, empty tokens are discarded, and each surviving token is wrapped as `"token"*` (quoted literal + prefix wildcard). If sanitization yields no tokens, FTS5 is skipped entirely. FTS5 `MATCH` is also wrapped in try/catch — any failure falls through to the LIKE fallback. The LIKE fallback searches `label` and `type` only (not `properties` JSON blobs).
+
+**UI debounce:** `SearchPanel` debounces DB queries by 300ms and uses a monotonic `searchIdRef` to discard stale responses. Single-character queries are skipped (`MIN_QUERY_LENGTH = 2`). The component does not subscribe to `graph-store.nodes`, avoiding callback recreation on graph mutations.
+
+See [`docs/search.md`](docs/search.md) for full details.
 
 ---
 

@@ -108,3 +108,5 @@ CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects
 - **Constants**: `src/shared/constants.ts` — Color palette, timeouts, LLM model IDs, layout options
 - **Path alias**: `@/` maps to `src/` in both TypeScript and Vite configs
 - **Detailed docs**: `ARCHITECTURE.md` for full system design, SQLite schema, and 13 documented pitfalls
+- **Search**: [`docs/search.md`](docs/search.md) — FTS5 sanitization, LIKE fallback, UI debounce/stale-cancellation
+- **Pitfalls**: `docs/pitfalls/` — Detailed writeups of specific Chrome extension pitfalls

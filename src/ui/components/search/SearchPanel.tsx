@@ -1,9 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { nodes as dbNodes } from '../../../db/client/db-client';
 import type { DbNode } from '../../../shared/types';
+
+const MIN_QUERY_LENGTH = 2;
 
 export function SearchPanel() {
   const [query, setQuery] = useState('');
@@ -11,48 +13,44 @@ export function SearchPanel() {
   const [searching, setSearching] = useState(false);
   const selectNode = useGraphStore((s) => s.selectNode);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const allNodes = useGraphStore((s) => s.nodes);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
-  const handleSearch = useCallback(async (q: string) => {
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchIdRef = useRef(0);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value;
     setQuery(q);
-    if (q.length === 0) {
+
+    clearTimeout(debounceTimerRef.current);
+
+    if (q.length < MIN_QUERY_LENGTH) {
       setResults([]);
+      setSearching(false);
       return;
     }
 
     setSearching(true);
-    try {
-      // Try FTS search first
-      let found: DbNode[];
+    const id = ++searchIdRef.current;
+
+    debounceTimerRef.current = setTimeout(async () => {
       try {
-        found = await dbNodes.search(q);
-      } catch {
-        // FTS may fail if table empty or query invalid; fall back to local filter
-        found = allNodes
-          .filter((n) => n.label.toLowerCase().includes(q.toLowerCase()))
-          .map((n) => ({
-            id: n.id,
-            label: n.label,
-            type: n.type,
-            properties: JSON.stringify(n.properties),
-            x: n.x ?? null,
-            y: n.y ?? null,
-            z: n.z ?? null,
-            color: n.color ?? null,
-            size: n.size,
-            source_url: n.sourceUrl ?? null,
-            created_at: n.createdAt,
-            updated_at: n.updatedAt,
-          })) as DbNode[];
+        const found = await dbNodes.search(q);
+        if (searchIdRef.current === id) {
+          setResults(found);
+        }
+      } catch (err) {
+        console.error('Search failed:', err);
+        if (searchIdRef.current === id) {
+          setResults([]);
+        }
+      } finally {
+        if (searchIdRef.current === id) {
+          setSearching(false);
+        }
       }
-      setResults(found);
-    } catch (e) {
-      console.error('Search failed:', e);
-    } finally {
-      setSearching(false);
-    }
-  }, [allNodes]);
+    }, 300);
+  }, []);
 
   const handleSelect = (id: string) => {
     selectNode(id);
@@ -64,7 +62,7 @@ export function SearchPanel() {
       <div>
         <input
           value={query}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={handleInputChange}
           placeholder="Search nodes..."
           className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
           autoFocus
@@ -97,7 +95,7 @@ export function SearchPanel() {
         </div>
       )}
 
-      {query.length > 0 && !searching && results.length === 0 && (
+      {query.length >= MIN_QUERY_LENGTH && !searching && results.length === 0 && (
         <p className="text-xs text-zinc-500 text-center py-4">No results found</p>
       )}
     </div>
