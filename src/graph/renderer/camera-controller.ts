@@ -59,10 +59,13 @@ export class CameraController {
     const halfH = 1 / this.zoom;
     const halfW = halfH * aspect;
 
-    this.camera.left = this.camera.position.x - halfW;
-    this.camera.right = this.camera.position.x + halfW;
-    this.camera.top = this.camera.position.y + halfH;
-    this.camera.bottom = this.camera.position.y - halfH;
+    // Symmetric frustum — camera.position handles panning via the view matrix.
+    // Baking position into left/right/top/bottom double-counts the offset
+    // (view matrix + projection matrix), causing label ↔ 3D desync.
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
     this.camera.updateProjectionMatrix();
   }
 
@@ -204,10 +207,10 @@ export class CameraController {
 
   getFrustumBounds(): FrustumBounds {
     return {
-      minX: this.camera.left,
-      maxX: this.camera.right,
-      minY: this.camera.bottom,
-      maxY: this.camera.top,
+      minX: this.camera.position.x + this.camera.left,
+      maxX: this.camera.position.x + this.camera.right,
+      minY: this.camera.position.y + this.camera.bottom,
+      maxY: this.camera.position.y + this.camera.top,
     };
   }
 

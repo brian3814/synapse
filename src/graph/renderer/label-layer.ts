@@ -16,11 +16,11 @@ export class LabelLayer {
   private dpr: number;
   private zoomLevel: ZoomLevel = 'close';
 
-  // Dirty tracking: skip redraw if camera and node count haven't changed
-  private lastCamLeft = NaN;
-  private lastCamRight = NaN;
-  private lastCamTop = NaN;
-  private lastCamBottom = NaN;
+  // Dirty tracking: skip redraw if world-space view bounds and node count haven't changed
+  private lastWorldLeft = NaN;
+  private lastWorldRight = NaN;
+  private lastWorldTop = NaN;
+  private lastWorldBottom = NaN;
   private lastNodeCount = -1;
   dirty = true;
 
@@ -59,21 +59,28 @@ export class LabelLayer {
     const ctx = this.ctx;
     const dpr = this.dpr;
 
-    // Skip if camera and data haven't changed
+    // Compute world-space view bounds (camera frustum is symmetric;
+    // camera.position provides the pan offset).
+    const worldLeft = camera.position.x + camera.left;
+    const worldRight = camera.position.x + camera.right;
+    const worldTop = camera.position.y + camera.top;
+    const worldBottom = camera.position.y + camera.bottom;
+
+    // Skip if world bounds and data haven't changed
     if (
       !this.dirty &&
-      camera.left === this.lastCamLeft &&
-      camera.right === this.lastCamRight &&
-      camera.top === this.lastCamTop &&
-      camera.bottom === this.lastCamBottom &&
+      worldLeft === this.lastWorldLeft &&
+      worldRight === this.lastWorldRight &&
+      worldTop === this.lastWorldTop &&
+      worldBottom === this.lastWorldBottom &&
       nodes.length === this.lastNodeCount
     ) {
       return;
     }
-    this.lastCamLeft = camera.left;
-    this.lastCamRight = camera.right;
-    this.lastCamTop = camera.top;
-    this.lastCamBottom = camera.bottom;
+    this.lastWorldLeft = worldLeft;
+    this.lastWorldRight = worldRight;
+    this.lastWorldTop = worldTop;
+    this.lastWorldBottom = worldBottom;
     this.lastNodeCount = nodes.length;
     this.dirty = false;
 
@@ -89,9 +96,8 @@ export class LabelLayer {
     ctx.textBaseline = 'top';
     ctx.fillStyle = theme.labelColor;
 
-    // Compute view bounds for frustum culling
-    const viewWidth = camera.right - camera.left;
-    const viewHeight = camera.top - camera.bottom;
+    const viewWidth = worldRight - worldLeft;
+    const viewHeight = worldTop - worldBottom;
 
     // Only show labels when zoomed in enough (skip when too many visible)
     // At wide zoom, labels become unreadable noise
@@ -102,8 +108,8 @@ export class LabelLayer {
       if (rendered >= maxLabelsToRender) break;
 
       // Project world position to screen
-      const screenX = ((node.x - camera.left) / viewWidth) * canvasWidth;
-      const screenY = ((camera.top - node.y) / viewHeight) * canvasHeight;
+      const screenX = ((node.x - worldLeft) / viewWidth) * canvasWidth;
+      const screenY = ((worldTop - node.y) / viewHeight) * canvasHeight;
 
       // Frustum cull
       if (screenX < -50 || screenX > canvasWidth + 50 ||
