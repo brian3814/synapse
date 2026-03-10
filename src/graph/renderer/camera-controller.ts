@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { RenderNode, FrustumBounds } from './types';
 
 const ZOOM_FACTOR = 1.2;
-const MIN_ZOOM = 0.01;
+const MIN_ZOOM = 0.001;
 const MAX_ZOOM = 1000;
 const FIT_PADDING = 1.2;
 
