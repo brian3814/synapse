@@ -236,6 +236,10 @@ export class GraphRenderer implements GraphRendererInstance {
 
   private applySelection() {
     this.nodeMesh.setSelection(this.selectedNodeId, this.theme);
+    // Highlight selected node with active color
+    if (this.selectedNodeId) {
+      this.nodeMesh.setHover(this.selectedNodeId, this.theme);
+    }
     this.edgeMesh.setSelection(
       this.selectedEdgeId,
       this.selectedNodeId,
@@ -247,11 +251,16 @@ export class GraphRenderer implements GraphRendererInstance {
   setHover(nodeId: string | null) {
     if (nodeId === this.hoveredNodeId) return;
 
-    // Restore previous hover
+    // Restore previous hover — but keep selected node highlighted
     if (this.hoveredNodeId) {
-      const prev = this.nodeMap.get(this.hoveredNodeId);
-      if (prev) {
-        this.nodeMesh.restoreColor(this.hoveredNodeId, prev.color);
+      if (this.hoveredNodeId === this.selectedNodeId) {
+        // Selected node stays at active color
+        this.nodeMesh.setHover(this.hoveredNodeId, this.theme);
+      } else {
+        const prev = this.nodeMap.get(this.hoveredNodeId);
+        if (prev) {
+          this.nodeMesh.restoreColor(this.hoveredNodeId, prev.color);
+        }
       }
     }
 
