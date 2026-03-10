@@ -45,6 +45,11 @@ export interface GraphCanvasHandle {
 
 export interface GraphRendererInstance {
   setGraphData(nodes: RenderNode[], edges: RenderEdge[]): void;
+  addNodes(nodes: RenderNode[]): void;
+  removeNodes(ids: string[]): void;
+  addEdges(edges: RenderEdge[]): void;
+  removeEdges(ids: string[]): void;
+  setZoomLevel(level: ZoomLevel): void;
   setSelection(nodeId: string | null, edgeId: string | null): void;
   setHover(nodeId: string | null): void;
   fitToView(nodeIds?: string[]): void;
@@ -53,6 +58,15 @@ export interface GraphRendererInstance {
   resize(): void;
   dispose(): void;
 }
+
+export interface FrustumBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+export type ZoomLevel = 'far' | 'medium' | 'close';
 
 export type GraphEventType = 'nodeClick' | 'edgeClick' | 'canvasClick' | 'nodeHover' | 'nodeDragEnd';
 

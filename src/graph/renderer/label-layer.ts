@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RenderNode, RenderTheme } from './types';
+import type { RenderNode, RenderTheme, ZoomLevel } from './types';
 
 const FONT_SIZE = 11;
 const FONT = `${FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
@@ -14,6 +14,15 @@ export class LabelLayer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
+  private zoomLevel: ZoomLevel = 'close';
+
+  // Dirty tracking: skip redraw if camera and node count haven't changed
+  private lastCamLeft = NaN;
+  private lastCamRight = NaN;
+  private lastCamTop = NaN;
+  private lastCamBottom = NaN;
+  private lastNodeCount = -1;
+  dirty = true;
 
   constructor(container: HTMLElement) {
     this.dpr = window.devicePixelRatio || 1;
@@ -28,6 +37,10 @@ export class LabelLayer {
     container.appendChild(this.canvas);
 
     this.ctx = this.canvas.getContext('2d')!;
+  }
+
+  setZoomLevel(level: ZoomLevel) {
+    this.zoomLevel = level;
   }
 
   resize(width: number, height: number) {
@@ -45,7 +58,29 @@ export class LabelLayer {
   ) {
     const ctx = this.ctx;
     const dpr = this.dpr;
+
+    // Skip if camera and data haven't changed
+    if (
+      !this.dirty &&
+      camera.left === this.lastCamLeft &&
+      camera.right === this.lastCamRight &&
+      camera.top === this.lastCamTop &&
+      camera.bottom === this.lastCamBottom &&
+      nodes.length === this.lastNodeCount
+    ) {
+      return;
+    }
+    this.lastCamLeft = camera.left;
+    this.lastCamRight = camera.right;
+    this.lastCamTop = camera.top;
+    this.lastCamBottom = camera.bottom;
+    this.lastNodeCount = nodes.length;
+    this.dirty = false;
+
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Skip labels at far/medium zoom — they become unreadable noise
+    if (this.zoomLevel === 'far' || this.zoomLevel === 'medium') return;
 
     if (nodes.length === 0) return;
 

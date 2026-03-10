@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RenderNode } from './types';
+import type { RenderNode, FrustumBounds } from './types';
 
 const ZOOM_FACTOR = 1.2;
 const MIN_ZOOM = 0.01;
@@ -32,6 +32,8 @@ export class CameraController {
   onDragMove?: (worldX: number, worldY: number) => void;
   onPointerMoveWorld?: (screenX: number, screenY: number) => void;
   onClick?: (screenX: number, screenY: number) => void;
+  onFrustumChange?: (bounds: FrustumBounds, zoom: number) => void;
+  onFrustumChangeInternal?: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -85,6 +87,7 @@ export class CameraController {
     this.camera.position.x += worldBefore.x - worldAfter.x;
     this.camera.position.y += worldBefore.y - worldAfter.y;
     this.updateFrustum();
+    this.fireFrustumChange();
   }
 
   private clickStartScreen = { x: 0, y: 0 };
@@ -124,6 +127,7 @@ export class CameraController {
       this.camera.position.x = this.cameraStartX - (e.clientX - this.panStartX) * pixelToWorld;
       this.camera.position.y = this.cameraStartY + (e.clientY - this.panStartY) * pixelToWorld;
       this.updateFrustum();
+      this.fireFrustumChange();
       return;
     }
 
@@ -157,11 +161,13 @@ export class CameraController {
   zoomIn() {
     this.zoom = Math.min(MAX_ZOOM, this.zoom * ZOOM_FACTOR);
     this.updateFrustum();
+    this.fireFrustumChange();
   }
 
   zoomOut() {
     this.zoom = Math.max(MIN_ZOOM, this.zoom / ZOOM_FACTOR);
     this.updateFrustum();
+    this.fireFrustumChange();
   }
 
   fitToView(nodes: RenderNode[], targetIds?: string[]) {
@@ -193,10 +199,46 @@ export class CameraController {
     this.camera.position.x = cx;
     this.camera.position.y = cy;
     this.updateFrustum();
+    this.fireFrustumChange();
+  }
+
+  getFrustumBounds(): FrustumBounds {
+    return {
+      minX: this.camera.left,
+      maxX: this.camera.right,
+      minY: this.camera.bottom,
+      maxY: this.camera.top,
+    };
+  }
+
+  getZoom(): number {
+    return this.zoom;
+  }
+
+  private fireFrustumChange() {
+    this.onFrustumChangeInternal?.();
+    this.onFrustumChange?.(this.getFrustumBounds(), this.zoom);
+  }
+
+  fitToRegion(minX: number, minY: number, maxX: number, maxY: number) {
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const width = (maxX - minX) * FIT_PADDING;
+    const height = (maxY - minY) * FIT_PADDING;
+
+    const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    const viewW = Math.max(width, height * aspect);
+    this.zoom = Math.max(MIN_ZOOM, 2 / viewW);
+
+    this.camera.position.x = cx;
+    this.camera.position.y = cy;
+    this.updateFrustum();
+    this.fireFrustumChange();
   }
 
   resize() {
     this.updateFrustum();
+    this.fireFrustumChange();
   }
 
   dispose() {

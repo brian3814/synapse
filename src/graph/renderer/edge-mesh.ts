@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RenderNode, RenderEdge, RenderTheme } from './types';
+import type { RenderNode, RenderEdge, RenderTheme, ZoomLevel } from './types';
 
 const ARROW_RADIUS = 0.15;
 const ARROW_HEIGHT = 0.3;
@@ -11,6 +11,8 @@ export class EdgeMesh {
 
   private edgeIds: string[] = [];
   private edgeIndexMap = new Map<string, number>();
+  private freeSlots: number[] = [];
+  private edgeCount = 0;
   private directedCount = 0;
   private directedEdgeIndices: number[] = []; // maps arrow instance → edge index
 
@@ -62,8 +64,10 @@ export class EdgeMesh {
     theme: RenderTheme
   ) {
     const edgeCount = edges.length;
+    this.edgeCount = edgeCount;
     this.edgeIds = [];
     this.edgeIndexMap.clear();
+    this.freeSlots = [];
     this.directedEdgeIndices = [];
     this.directedCount = 0;
 
@@ -129,6 +133,112 @@ export class EdgeMesh {
 
     // Update arrow instances
     this.updateArrows(edges, nodeMap, theme);
+  }
+
+  addEdges(
+    edges: RenderEdge[],
+    nodeMap: Map<string, RenderNode>,
+    theme: RenderTheme
+  ) {
+    const needed = this.edgeCount + edges.length - this.freeSlots.length;
+    // Grow line buffers if needed
+    if (needed * 2 * 3 > this.positionAttr.array.length) {
+      const newSize = Math.max(needed * 2, (this.positionAttr.array.length / 6) * 2);
+      const newPos = new THREE.Float32BufferAttribute(new Float32Array(newSize * 2 * 3), 3);
+      (newPos.array as Float32Array).set(this.positionAttr.array);
+      const newColor = new THREE.Float32BufferAttribute(new Float32Array(newSize * 2 * 3), 3);
+      (newColor.array as Float32Array).set(this.lineColorAttr.array);
+      this.positionAttr = newPos;
+      this.lineColorAttr = newColor;
+      this.linesMesh.geometry.setAttribute('position', this.positionAttr);
+      this.linesMesh.geometry.setAttribute('color', this.lineColorAttr);
+    }
+
+    const defaultColor = new THREE.Color(theme.edgeColor);
+
+    for (const edge of edges) {
+      let idx: number;
+      if (this.freeSlots.length > 0) {
+        idx = this.freeSlots.pop()!;
+        this.edgeIds[idx] = edge.id;
+      } else {
+        idx = this.edgeCount;
+        this.edgeCount++;
+        this.edgeIds[idx] = edge.id;
+      }
+      this.edgeIndexMap.set(edge.id, idx);
+
+      const src = nodeMap.get(edge.sourceId);
+      const tgt = nodeMap.get(edge.targetId);
+      if (src && tgt) {
+        const dx = tgt.x - src.x;
+        const dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const radiiSum = src.size + tgt.size;
+        if (dist > radiiSum && dist > 0.001) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          this.positionAttr.setXYZ(idx * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
+          this.positionAttr.setXYZ(idx * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
+        } else {
+          this.positionAttr.setXYZ(idx * 2, src.x, src.y, 0);
+          this.positionAttr.setXYZ(idx * 2 + 1, src.x, src.y, 0);
+        }
+      } else {
+        this.positionAttr.setXYZ(idx * 2, 0, 0, 0);
+        this.positionAttr.setXYZ(idx * 2 + 1, 0, 0, 0);
+      }
+
+      const c = edge.color ? this._color.set(edge.color) : defaultColor;
+      this.lineColorAttr.setXYZ(idx * 2, c.r, c.g, c.b);
+      this.lineColorAttr.setXYZ(idx * 2 + 1, c.r, c.g, c.b);
+    }
+
+    this.linesMesh.geometry.setDrawRange(0, this.edgeCount * 2);
+    this.positionAttr.needsUpdate = true;
+    this.lineColorAttr.needsUpdate = true;
+  }
+
+  removeEdges(ids: string[]) {
+    for (const id of ids) {
+      const idx = this.edgeIndexMap.get(id);
+      if (idx === undefined) continue;
+      // Zero both vertices to hide
+      this.positionAttr.setXYZ(idx * 2, 0, 0, 0);
+      this.positionAttr.setXYZ(idx * 2 + 1, 0, 0, 0);
+      this.edgeIndexMap.delete(id);
+      this.edgeIds[idx] = '';
+      this.freeSlots.push(idx);
+    }
+    // Trim trailing free slots to prevent unbounded edgeCount growth
+    while (this.edgeCount > 0 && this.edgeIds[this.edgeCount - 1] === '') {
+      this.edgeCount--;
+      const freeIdx = this.freeSlots.indexOf(this.edgeCount);
+      if (freeIdx !== -1) this.freeSlots.splice(freeIdx, 1);
+    }
+    this.linesMesh.geometry.setDrawRange(0, this.edgeCount * 2);
+    this.positionAttr.needsUpdate = true;
+  }
+
+  /** Rebuild arrow tracking from the current set of active edges (call after addEdges/removeEdges). */
+  rebuildArrows(
+    allEdges: RenderEdge[],
+    nodeMap: Map<string, RenderNode>,
+    theme: RenderTheme
+  ) {
+    this.directedEdgeIndices = [];
+    this.directedCount = 0;
+    for (const edge of allEdges) {
+      if (!edge.directed) continue;
+      const idx = this.edgeIndexMap.get(edge.id);
+      if (idx === undefined) continue;
+      const src = nodeMap.get(edge.sourceId);
+      const tgt = nodeMap.get(edge.targetId);
+      if (!src || !tgt) continue;
+      this.directedEdgeIndices.push(idx);
+      this.directedCount++;
+    }
+    this.updateArrows(allEdges, nodeMap, theme);
   }
 
   private updateArrows(
@@ -208,8 +318,9 @@ export class EdgeMesh {
     nodeMap: Map<string, RenderNode>,
     theme: RenderTheme
   ) {
-    for (let i = 0; i < edges.length; i++) {
-      const edge = edges[i];
+    for (const edge of edges) {
+      const idx = this.edgeIndexMap.get(edge.id);
+      if (idx === undefined) continue;
       const src = nodeMap.get(edge.sourceId);
       const tgt = nodeMap.get(edge.targetId);
       if (!src || !tgt) continue;
@@ -221,11 +332,11 @@ export class EdgeMesh {
       if (dist > radiiSum && dist > 0.001) {
         const nx = dx / dist;
         const ny = dy / dist;
-        this.positionAttr.setXYZ(i * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
-        this.positionAttr.setXYZ(i * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
+        this.positionAttr.setXYZ(idx * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
+        this.positionAttr.setXYZ(idx * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
       } else {
-        this.positionAttr.setXYZ(i * 2, src.x, src.y, 0);
-        this.positionAttr.setXYZ(i * 2 + 1, src.x, src.y, 0);
+        this.positionAttr.setXYZ(idx * 2, src.x, src.y, 0);
+        this.positionAttr.setXYZ(idx * 2 + 1, src.x, src.y, 0);
       }
     }
     this.positionAttr.needsUpdate = true;
@@ -241,8 +352,10 @@ export class EdgeMesh {
     const defaultColor = new THREE.Color(theme.edgeColor);
     const activeColor = new THREE.Color(theme.edgeActiveColor);
 
-    for (let i = 0; i < edges.length; i++) {
-      const edge = edges[i];
+    for (const edge of edges) {
+      const idx = this.edgeIndexMap.get(edge.id);
+      if (idx === undefined) continue;
+
       const isSelectedEdge = edgeId && edge.id === edgeId;
       const isConnectedToNode = selectedNodeId && (
         edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId
@@ -267,10 +380,15 @@ export class EdgeMesh {
       const r = c.r * opacity;
       const g = c.g * opacity;
       const b = c.b * opacity;
-      this.lineColorAttr.setXYZ(i * 2, r, g, b);
-      this.lineColorAttr.setXYZ(i * 2 + 1, r, g, b);
+      this.lineColorAttr.setXYZ(idx * 2, r, g, b);
+      this.lineColorAttr.setXYZ(idx * 2 + 1, r, g, b);
     }
     this.lineColorAttr.needsUpdate = true;
+  }
+
+  setZoomLevel(level: ZoomLevel) {
+    // Hide arrows at far/medium zoom for performance
+    this.arrowMesh.visible = level === 'close';
   }
 
   getEdgeIdAt(index: number): string | undefined {

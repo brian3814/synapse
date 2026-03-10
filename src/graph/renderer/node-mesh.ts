@@ -13,6 +13,7 @@ export class NodeMesh {
   private opacityAttr: THREE.InstancedBufferAttribute;
   private nodeIds: string[] = [];
   private nodeIndexMap = new Map<string, number>();
+  private freeSlots: number[] = [];
 
   // Reusable temporaries
   private readonly _mat = new THREE.Matrix4();
@@ -104,6 +105,7 @@ export class NodeMesh {
     this.mesh.count = nodes.length;
     this.nodeIds = [];
     this.nodeIndexMap.clear();
+    this.freeSlots = [];
 
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
@@ -128,11 +130,63 @@ export class NodeMesh {
     this.opacityAttr.needsUpdate = true;
   }
 
-  updatePositions(positions: Map<string, { x: number; y: number }>, nodes: RenderNode[]) {
+  addNodes(nodes: RenderNode[]) {
+    const needed = this.count + nodes.length - this.freeSlots.length;
+    if (needed > this.capacity) this.grow(needed);
+
+    for (const node of nodes) {
+      let idx: number;
+      if (this.freeSlots.length > 0) {
+        idx = this.freeSlots.pop()!;
+        this.nodeIds[idx] = node.id;
+      } else {
+        idx = this.count;
+        this.count++;
+        this.nodeIds[idx] = node.id;
+      }
+      this.nodeIndexMap.set(node.id, idx);
+
+      this._mat.makeScale(node.size, node.size, 1);
+      this._mat.setPosition(node.x, node.y, 0);
+      this.mesh.setMatrixAt(idx, this._mat);
+
+      this._color.set(node.color);
+      this.colorAttr.setXYZ(idx, this._color.r, this._color.g, this._color.b);
+      this.opacityAttr.setX(idx, 1.0);
+    }
+
+    this.mesh.count = this.count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.colorAttr.needsUpdate = true;
+    this.opacityAttr.needsUpdate = true;
+  }
+
+  removeNodes(ids: string[]) {
+    const zeroMat = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const id of ids) {
+      const idx = this.nodeIndexMap.get(id);
+      if (idx === undefined) continue;
+      this.mesh.setMatrixAt(idx, zeroMat);
+      this.nodeIndexMap.delete(id);
+      this.nodeIds[idx] = '';
+      this.freeSlots.push(idx);
+    }
+    // Trim trailing free slots to prevent unbounded count growth
+    while (this.count > 0 && this.nodeIds[this.count - 1] === '') {
+      this.count--;
+      // Remove this index from freeSlots
+      const freeIdx = this.freeSlots.indexOf(this.count);
+      if (freeIdx !== -1) this.freeSlots.splice(freeIdx, 1);
+    }
+    this.mesh.count = this.count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  updatePositions(positions: Map<string, { x: number; y: number }>, nodeMap: Map<string, RenderNode>) {
     for (const [id, pos] of positions) {
       const idx = this.nodeIndexMap.get(id);
       if (idx === undefined) continue;
-      const size = nodes[idx]?.size ?? 1;
+      const size = nodeMap.get(id)?.size ?? 1;
       this._mat.makeScale(size, size, 1);
       this._mat.setPosition(pos.x, pos.y, 0);
       this.mesh.setMatrixAt(idx, this._mat);
@@ -144,7 +198,7 @@ export class NodeMesh {
     if (!nodeId) {
       this.ringMesh.count = 0;
       // Reset all opacities to 1
-      for (let i = 0; i < this.count; i++) {
+      for (const [, i] of this.nodeIndexMap) {
         this.opacityAttr.setX(i, 1.0);
       }
       this.opacityAttr.needsUpdate = true;
@@ -174,7 +228,7 @@ export class NodeMesh {
     this.ringMesh.instanceColor.needsUpdate = true;
 
     // Dim non-selected nodes
-    for (let i = 0; i < this.count; i++) {
+    for (const [, i] of this.nodeIndexMap) {
       this.opacityAttr.setX(i, i === idx ? 1.0 : theme.nodeInactiveOpacity);
     }
     this.opacityAttr.needsUpdate = true;

@@ -69,6 +69,29 @@ export interface DbIndexedFile {
   indexed_at: string;
 }
 
+// Slim projections for bulk graph loading (skip properties, timestamps)
+export interface DbNodeSlim {
+  id: string;
+  identifier: string | null;
+  label: string;
+  type: string;
+  color: string | null;
+  size: number;
+  source_url: string | null;
+  x: number | null;
+  y: number | null;
+}
+
+export interface DbEdgeSlim {
+  id: string;
+  source_id: string;
+  target_id: string;
+  label: string;
+  type: string;
+  weight: number;
+  directed: number;
+}
+
 // Application types (parsed from DB rows)
 export interface GraphNode {
   id: string;

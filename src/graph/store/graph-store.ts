@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll } from '../../db/client/db-client';
-import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge } from '../../shared/types';
+import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph } from '../../db/client/db-client';
+import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
 
@@ -35,6 +35,39 @@ function dbEdgeToGraphEdge(row: DbEdge): GraphEdge {
     sourceUrl: row.source_url ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+/** Fast transform for bulk load — slim rows have no properties/timestamps */
+function slimNodeToGraphNode(row: DbNodeSlim): GraphNode {
+  return {
+    id: row.id,
+    identifier: row.identifier,
+    label: row.label,
+    type: row.type,
+    properties: {},
+    x: row.x ?? undefined,
+    y: row.y ?? undefined,
+    color: row.color ?? undefined,
+    size: row.size,
+    sourceUrl: row.source_url ?? undefined,
+    createdAt: '',
+    updatedAt: '',
+  };
+}
+
+function slimEdgeToGraphEdge(row: DbEdgeSlim): GraphEdge {
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    targetId: row.target_id,
+    label: row.label,
+    type: row.type,
+    properties: {},
+    weight: row.weight,
+    directed: row.directed === 1,
+    createdAt: '',
+    updatedAt: '',
   };
 }
 
@@ -74,13 +107,10 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   loadAll: async () => {
     set({ loading: true, error: null });
     try {
-      const [nodeRows, edgeRows] = await Promise.all([
-        dbNodes.getAll(),
-        dbEdges.getAll(),
-      ]);
-      const edges = edgeRows.map(dbEdgeToGraphEdge);
+      const { nodes: nodeRows, edges: edgeRows } = await loadGraph();
+      const edges = edgeRows.map(slimEdgeToGraphEdge);
       set({
-        nodes: nodeRows.map(dbNodeToGraphNode),
+        nodes: nodeRows.map(slimNodeToGraphNode),
         edges,
         adjacency: buildAdjacencyMap(edges),
         loading: false,

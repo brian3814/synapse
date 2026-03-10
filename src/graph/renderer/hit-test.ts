@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { RenderNode, RenderEdge } from './types';
+import type { SpatialHash } from './spatial-hash';
 
 export interface HitResult {
   type: 'node' | 'edge' | 'none';
@@ -15,7 +16,8 @@ export function hitTest(
   edges: RenderEdge[],
   nodeMap: Map<string, RenderNode>,
   camera: THREE.OrthographicCamera,
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  spatialHash?: SpatialHash
 ): HitResult {
   // Convert screen coords to world coords
   const rect = canvas.getBoundingClientRect();
@@ -32,7 +34,11 @@ export function hitTest(
   let closestNode: string | undefined;
   let closestNodeDist = Infinity;
 
-  for (const node of nodes) {
+  // Use spatial hash for fast candidate lookup if available
+  const maxNodeSize = 5; // conservative upper bound for query radius
+  const candidates = spatialHash ? spatialHash.query(wx, wy, maxNodeSize) : nodes;
+
+  for (const node of candidates) {
     const dx = wx - node.x;
     const dy = wy - node.y;
     const dist = Math.sqrt(dx * dx + dy * dy);

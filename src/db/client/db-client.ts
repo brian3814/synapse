@@ -132,6 +132,11 @@ export async function dbExec(sql: string, params?: unknown[]): Promise<number> {
   return result.changes;
 }
 
+// Bulk graph load — single round-trip with slim columns
+export function loadGraph(): Promise<{ nodes: any[]; edges: any[] }> {
+  return sendRequest('loadGraph') as Promise<{ nodes: any[]; edges: any[] }>;
+}
+
 // Typed node operations
 export const nodes = {
   getAll: () => sendRequest('nodes.getAll') as Promise<any[]>,
@@ -210,6 +215,24 @@ export const indexedFiles = {
     sendRequest('indexedFiles.deleteByNodeId', nodeId) as Promise<boolean>,
   getByNodeId: (nodeId: string) =>
     sendRequest('indexedFiles.getByNodeId', nodeId) as Promise<any>,
+};
+
+// Spatial queries
+export const spatial = {
+  nodesInBounds: (minX: number, minY: number, maxX: number, maxY: number, limit?: number) =>
+    sendRequest('spatial.nodesInBounds', { minX, minY, maxX, maxY, limit }) as Promise<any[]>,
+  edgesForNodes: (nodeIds: string[]) =>
+    sendRequest('spatial.edgesForNodes', nodeIds) as Promise<any[]>,
+  clusterSummary: () =>
+    sendRequest('spatial.clusterSummary') as Promise<any[]>,
+  interClusterEdges: () =>
+    sendRequest('spatial.interClusterEdges') as Promise<any[]>,
+  batchUpdatePositions: (updates: Array<{ id: string; x: number; y: number }>) =>
+    sendRequest('spatial.batchUpdatePositions', updates, 60_000) as Promise<{ success: boolean }>,
+  nodeCountInBounds: (minX: number, minY: number, maxX: number, maxY: number) =>
+    sendRequest('spatial.nodeCountInBounds', { minX, minY, maxX, maxY }) as Promise<number>,
+  totalNodeCount: () =>
+    sendRequest('spatial.totalNodeCount') as Promise<number>,
 };
 
 // Query engine operations

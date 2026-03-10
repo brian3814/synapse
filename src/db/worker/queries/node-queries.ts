@@ -1,9 +1,17 @@
 import { executeQuery, executeExec } from '../query-executor';
 import { isFTS5Available } from '../migrations';
-import type { DbNode } from '../../../shared/types';
+import type { DbNode, DbNodeSlim } from '../../../shared/types';
 
 export async function getAllNodes(): Promise<DbNode[]> {
   const { rows } = await executeQuery<DbNode>('SELECT * FROM nodes ORDER BY updated_at DESC;');
+  return rows;
+}
+
+/** Slim projection for bulk graph loading — skips properties, timestamps */
+export async function getAllNodesSlim(): Promise<DbNodeSlim[]> {
+  const { rows } = await executeQuery<DbNodeSlim>(
+    'SELECT id, identifier, label, type, color, size, source_url, x, y FROM nodes;'
+  );
   return rows;
 }
 

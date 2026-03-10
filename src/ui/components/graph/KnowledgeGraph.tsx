@@ -1,10 +1,13 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
 import { GraphCanvas } from './GraphCanvas';
 import type { GraphCanvasHandle } from '../../../graph/renderer/types';
 import { useGraphData } from '../../hooks/useGraphData';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useGraphStore } from '../../../graph/store/graph-store';
+import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { GraphControls } from './GraphControls';
+import { spatial } from '../../../db/client/db-client';
+import { SMALL_GRAPH_THRESHOLD } from '../../../shared/constants';
 
 interface KnowledgeGraphProps {
   compact?: boolean;
@@ -18,6 +21,24 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const selectNode = useGraphStore((s) => s.selectNode);
   const selectEdge = useGraphStore((s) => s.selectEdge);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const types = useNodeTypeStore((s) => s.types);
+
+  const [windowed, setWindowed] = useState(false);
+
+  // Check total node count to determine windowed mode
+  useEffect(() => {
+    spatial.totalNodeCount().then((count) => {
+      setWindowed(count > SMALL_GRAPH_THRESHOLD);
+    });
+  }, [nodes.length]); // re-check when nodes change
+
+  const typeColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of types) {
+      if (t.color) map.set(t.type, t.color);
+    }
+    return map;
+  }, [types]);
 
   const handleNodeClick = useCallback(
     (nodeId: string) => {
@@ -39,7 +60,7 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     useGraphStore.getState().clearSelection();
   }, []);
 
-  if (nodes.length === 0) {
+  if (!windowed && nodes.length === 0) {
     return (
       <div className="absolute inset-0 flex items-center justify-center text-zinc-500 text-sm">
         <div className="text-center p-4">
@@ -60,6 +81,8 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
         edges={edges}
         selectedNodeId={selectedNodeId}
         selectedEdgeId={selectedEdgeId}
+        windowed={windowed}
+        typeColorMap={typeColorMap}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onCanvasClick={handleCanvasClick}

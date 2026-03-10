@@ -1,8 +1,16 @@
 import { executeQuery, executeExec } from '../query-executor';
-import type { DbEdge } from '../../../shared/types';
+import type { DbEdge, DbEdgeSlim } from '../../../shared/types';
 
 export async function getAllEdges(): Promise<DbEdge[]> {
   const { rows } = await executeQuery<DbEdge>('SELECT * FROM edges ORDER BY updated_at DESC;');
+  return rows;
+}
+
+/** Slim projection for bulk graph loading — skips properties, source_url, timestamps */
+export async function getAllEdgesSlim(): Promise<DbEdgeSlim[]> {
+  const { rows } = await executeQuery<DbEdgeSlim>(
+    'SELECT id, source_id, target_id, label, type, weight, directed FROM edges;'
+  );
   return rows;
 }
 

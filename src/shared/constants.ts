@@ -43,6 +43,14 @@ export const OFFSCREEN_KEEPALIVE_INTERVAL_MS = 20_000;
 export const DISPLAY_MODE_STORAGE_KEY = 'displayMode';
 export const LLM_CONFIG_STORAGE_KEY = 'llmConfig';
 
+// Viewport windowing constants
+export const ZOOM_THRESHOLD_FAR = 0.15;
+export const ZOOM_THRESHOLD_CLOSE = 1.5;
+export const VIEWPORT_QUERY_DEBOUNCE_MS = 100;
+export const VIEWPORT_PADDING = 0.3;
+export const MAX_VIEWPORT_NODES = 5000;
+export const SMALL_GRAPH_THRESHOLD = 10000;
+
 export const LAYOUT_OPTIONS = [
   { id: 'forceDirected2d', label: 'Force Directed 2D' },
 ] as const;
