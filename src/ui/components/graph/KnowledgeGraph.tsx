@@ -23,7 +23,19 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const types = useNodeTypeStore((s) => s.types);
 
+  const setFocusNodeCallback = useUIStore((s) => s.setFocusNodeCallback);
+
   const [windowed, setWindowed] = useState(false);
+
+  // Register focus-node callback for chat node links
+  useEffect(() => {
+    setFocusNodeCallback((nodeId: string) => {
+      selectNode(nodeId);
+      setActivePanel('nodeDetail');
+      graphRef.current?.fitToView([nodeId]);
+    });
+    return () => setFocusNodeCallback(null);
+  }, [selectNode, setActivePanel, setFocusNodeCallback]);
 
   // Check total node count to determine windowed mode
   useEffect(() => {

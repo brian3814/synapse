@@ -189,7 +189,7 @@ export function formatRAGPrompt(context: RAGContext): string {
           props = ' | ' + entries.map(([k, v]) => `${k}: ${v}`).join(', ');
         }
       } catch {}
-      parts.push(`- [${node.type}] ${node.label}${props}${node.source_url ? ` (source: ${node.source_url})` : ''}`);
+      parts.push(`- [${node.type}] ${node.label} (id:${node.id})${props}${node.source_url ? ` (source: ${node.source_url})` : ''}`);
     }
     parts.push('');
   }
@@ -228,6 +228,6 @@ Rules:
 - Use inline citations: [Source: url] when referencing specific source material.
 - Structure your answer with clear paragraphs. Use markdown formatting (bold, lists, headers) when helpful.
 - If multiple sources provide relevant information, synthesize them into a coherent answer.
-- Mention specific entities and relationships from the graph when relevant.
+- When mentioning entities from the knowledge graph, use the format [Entity Name](node:entity-id) so users can click to navigate to that entity. The entity-id is the id shown in parentheses after each entity listing.
 - Keep answers concise but thorough. Aim for 2-5 paragraphs depending on complexity.
 - If the question asks about connections or relationships, trace the graph paths explicitly.`;

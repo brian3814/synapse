@@ -16,6 +16,7 @@ interface UIStore {
   chatDisplayMode: ChatDisplayMode;
   panelWidth: number;
   chatSidebarWidth: number;
+  focusNodeCallback: ((nodeId: string) => void) | null;
 
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
@@ -28,6 +29,7 @@ interface UIStore {
   setChatDisplayMode: (mode: ChatDisplayMode) => void;
   setPanelWidth: (width: number) => void;
   setChatSidebarWidth: (width: number) => void;
+  setFocusNodeCallback: (cb: ((nodeId: string) => void) | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -41,6 +43,7 @@ export const useUIStore = create<UIStore>((set) => ({
   chatDisplayMode: 'float',
   panelWidth: 400,
   chatSidebarWidth: 400,
+  focusNodeCallback: null,
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setActivePanel: (panel) =>
@@ -66,4 +69,5 @@ export const useUIStore = create<UIStore>((set) => ({
   setChatDisplayMode: (mode) => set({ chatDisplayMode: mode }),
   setPanelWidth: (width) => set({ panelWidth: Math.min(800, Math.max(200, width)) }),
   setChatSidebarWidth: (width) => set({ chatSidebarWidth: Math.min(800, Math.max(200, width)) }),
+  setFocusNodeCallback: (cb) => set({ focusNodeCallback: cb }),
 }));
