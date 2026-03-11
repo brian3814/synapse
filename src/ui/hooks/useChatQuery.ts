@@ -59,21 +59,17 @@ export function useChatQuery() {
     updateMessage(assistantId, { content: 'Searching knowledge graph...', status: 'executing' });
 
     const ragContext = await retrieveRAGContext(input);
+    const hasContext = ragContext.relevantNodes.length > 0;
 
-    if (ragContext.relevantNodes.length === 0) {
-      updateMessage(assistantId, {
-        content: 'No relevant information found in your knowledge graph for this question.',
-        status: 'complete',
-        ragContext,
-      });
-      return;
-    }
-
-    // Step 2: Generate answer via LLM
-    updateMessage(assistantId, { content: '', status: 'streaming', ragContext });
+    // Step 2: Generate answer via LLM (with or without KG context)
+    updateMessage(assistantId, {
+      content: '',
+      status: 'streaming',
+      ragContext: hasContext ? ragContext : null,
+    });
 
     const { config } = await fetchLLMConfigAndTypes();
-    const ragPrompt = formatRAGPrompt(ragContext);
+    const prompt = hasContext ? formatRAGPrompt(ragContext) : input;
     const requestId = crypto.randomUUID();
 
     chrome.runtime.sendMessage({
@@ -82,7 +78,7 @@ export function useChatQuery() {
       payload: {
         provider: config.provider,
         model: config.model,
-        prompt: ragPrompt,
+        prompt,
         systemPrompt: RAG_SYSTEM_PROMPT,
       },
     });
