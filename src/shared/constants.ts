@@ -27,11 +27,6 @@ export const SEARCH_RESULT_LIMIT = 50;
 export const DB_REQUEST_TIMEOUT_MS = 10_000;
 
 export const LLM_MODELS = {
-  openai: [
-    { id: 'gpt-4o', label: 'GPT-4o' },
-    { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { id: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  ],
   anthropic: [
     { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
     { id: 'claude-haiku-4-20250414', label: 'Claude Haiku 4' },

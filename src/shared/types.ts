@@ -187,7 +187,7 @@ export interface EntityMatch {
 }
 
 // LLM types
-export type LLMProvider = 'openai' | 'anthropic';
+export type LLMProvider = 'anthropic';
 
 export interface LLMConfig {
   provider: LLMProvider;

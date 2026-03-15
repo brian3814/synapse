@@ -7,8 +7,8 @@ import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
 
 export function SettingsPanel() {
-  const [provider, setProvider] = useState<LLMProvider>('openai');
-  const [model, setModel] = useState('gpt-4o');
+  const [provider, setProvider] = useState<LLMProvider>('anthropic');
+  const [model, setModel] = useState<string>(LLM_MODELS.anthropic[0].id);
   const [apiKey, setApiKey] = useState('');
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -64,7 +64,6 @@ export function SettingsPanel() {
             }}
             className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
           >
-            <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
           </select>
         </div>

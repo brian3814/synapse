@@ -1,11 +1,23 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
+import { getAccessToken, isAuthenticated } from './oauth';
 import type { ReadingListItem } from '../shared/types';
 
-// Read API key from storage (same pattern as message-router.ts)
-async function getApiKeyFromStorage(): Promise<string> {
+// Reads auth token — tries OAuth first, falls back to API key in storage
+async function getAuthToken(): Promise<string> {
+  // Try OAuth token first
+  try {
+    const authenticated = await isAuthenticated();
+    if (authenticated) {
+      return await getAccessToken();
+    }
+  } catch {
+    // OAuth not set up, fall through to API key
+  }
+
+  // Fall back to API key in storage (for backward compat during migration)
   const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
   const key = result.llmConfig?.apiKey;
-  if (!key) throw new Error('No API key configured');
+  if (!key) throw new Error('Not authenticated. Sign in with Anthropic in Settings, or configure an API key.');
   return key;
 }
 
@@ -48,7 +60,7 @@ export async function triggerExtraction(url: string, title: string): Promise<voi
     }
 
     await ensureOffscreenDocument();
-    const apiKey = await getApiKeyFromStorage();
+    const apiKey = await getAuthToken();
     const model = await getModelFromStorage();
 
     await chrome.runtime.sendMessage({

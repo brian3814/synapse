@@ -243,6 +243,27 @@ export interface ReadingListRetryMessage extends ExtensionMessage {
   };
 }
 
+// OAuth messages
+export interface OAuthStartMessage extends ExtensionMessage {
+  type: 'OAUTH_START';
+}
+
+export interface OAuthRevokeMessage extends ExtensionMessage {
+  type: 'OAUTH_REVOKE';
+}
+
+export interface OAuthCheckMessage extends ExtensionMessage {
+  type: 'OAUTH_CHECK';
+}
+
+export interface OAuthStatusMessage extends ExtensionMessage {
+  type: 'OAUTH_STATUS';
+  payload: {
+    authenticated: boolean;
+    error?: string;
+  };
+}
+
 // Union of all chrome.runtime messages
 export type RuntimeMessage =
   | PageContentMessage
@@ -269,7 +290,11 @@ export type RuntimeMessage =
   | ReadingListExtractMessage
   | ReadingListExtractionResultMessage
   | ReadingListRemoveMessage
-  | ReadingListRetryMessage;
+  | ReadingListRetryMessage
+  | OAuthStartMessage
+  | OAuthRevokeMessage
+  | OAuthCheckMessage
+  | OAuthStatusMessage;
 
 // Helper to create messages
 export function createMessage<T extends ExtensionMessage>(

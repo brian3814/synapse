@@ -72,7 +72,7 @@ export const updateEdgeInputSchema = z.object({
 
 // LLM config validation
 export const llmConfigSchema = z.object({
-  provider: z.enum(['openai', 'anthropic']),
+  provider: z.enum(['anthropic']),
   model: z.string().min(1),
   apiKey: z.string().min(1),
 });

@@ -1,4 +1,5 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
+import { getAccessToken, startOAuthFlow, revokeTokens, isAuthenticated } from './oauth';
 import { handleExtractionResult, removeFromReadingList, triggerExtraction } from './reading-list-handler';
 import { openSidePanel } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
@@ -13,6 +14,7 @@ export function handleMessage(
   if (message.type === 'LLM_STREAM_CHUNK') return false;
   if (message.type === 'AGENT_PROGRESS') return false;
   if (message.type === 'PAGE_TERMS') return false; // Let UI pick up directly
+  if (message.type === 'OAUTH_STATUS') return false;
   if (message.type === 'READING_LIST_EXTRACTION_RESULT') {
     handleExtractionResult((message as any).payload);
     return false; // Let UI also receive the broadcast
@@ -50,7 +52,7 @@ async function handleMessageAsync(
       // The SW reads the API key from storage and injects it into the payload before forwarding.
       // UI messages intentionally omit the key to prevent leakage via runtime broadcast.
       await ensureOffscreenDocument();
-      const apiKey = await getApiKeyFromStorage();
+      const apiKey = await getAuthToken();
       const withKey = { type: 'LLM_REQUEST_WITH_KEY', requestId: (message as any).requestId, payload: { ...(message as any).payload, apiKey } };
       const response = await chrome.runtime.sendMessage(withKey);
       return response;
@@ -74,7 +76,7 @@ async function handleMessageAsync(
     case 'AGENT_RUN_START': {
       // Same pattern as LLM_REQUEST — SW injects apiKey (Pitfall #13: offscreen lacks chrome.storage)
       await ensureOffscreenDocument();
-      const agentApiKey = await getApiKeyFromStorage();
+      const agentApiKey = await getAuthToken();
       const agentWithKey = { type: 'AGENT_RUN_START_WITH_KEY', payload: { ...(message as any).payload, apiKey: agentApiKey } };
       const response = await chrome.runtime.sendMessage(agentWithKey);
       return response;
@@ -119,18 +121,60 @@ async function handleMessageAsync(
       return { success: true };
     }
 
+    case 'OAUTH_START': {
+      try {
+        await startOAuthFlow();
+        // Broadcast success to UI
+        chrome.runtime.sendMessage({
+          type: 'OAUTH_STATUS',
+          payload: { authenticated: true },
+        }).catch(() => {});
+        return { success: true };
+      } catch (e: any) {
+        chrome.runtime.sendMessage({
+          type: 'OAUTH_STATUS',
+          payload: { authenticated: false, error: e.message },
+        }).catch(() => {});
+        return { error: e.message };
+      }
+    }
+
+    case 'OAUTH_REVOKE': {
+      await revokeTokens();
+      chrome.runtime.sendMessage({
+        type: 'OAUTH_STATUS',
+        payload: { authenticated: false },
+      }).catch(() => {});
+      return { success: true };
+    }
+
+    case 'OAUTH_CHECK': {
+      const authed = await isAuthenticated();
+      return { authenticated: authed };
+    }
+
     default:
       console.warn('[SW] Unknown message type:', message.type);
       return { error: 'Unknown message type' };
   }
 }
 
-// Reads API key from chrome.storage.local. Only the service worker has access to
-// chrome.storage — offscreen documents do not (Pitfall #13).
-async function getApiKeyFromStorage(): Promise<string> {
+// Reads auth token — tries OAuth first, falls back to API key in storage
+async function getAuthToken(): Promise<string> {
+  // Try OAuth token first
+  try {
+    const authenticated = await isAuthenticated();
+    if (authenticated) {
+      return await getAccessToken();
+    }
+  } catch {
+    // OAuth not set up, fall through to API key
+  }
+
+  // Fall back to API key in storage (for backward compat during migration)
   const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
   const key = result.llmConfig?.apiKey;
-  if (!key) throw new Error('No API key configured. Go to Settings to add one.');
+  if (!key) throw new Error('Not authenticated. Sign in with Anthropic in Settings, or configure an API key.');
   return key;
 }
 
