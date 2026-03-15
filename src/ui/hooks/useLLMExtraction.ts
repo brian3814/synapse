@@ -35,7 +35,7 @@ function streamFromOffscreen(
   });
 }
 
-async function buildDiffItems(
+export async function buildDiffItems(
   validated: { nodes: Array<{ label: string; type: string; properties?: Record<string, unknown> }>; edges: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }> }
 ): Promise<DiffItem[]> {
   const graph = useGraphStore.getState();
