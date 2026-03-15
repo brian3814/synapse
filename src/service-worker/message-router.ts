@@ -1,6 +1,7 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
-import { openExtensionTab } from './tab-manager';
+import { handleExtractionResult, removeFromReadingList, triggerExtraction } from './reading-list-handler';
 import { openSidePanel } from './sidepanel-manager';
+import { openExtensionTab } from './tab-manager';
 import type { RuntimeMessage } from '../shared/messages';
 
 export function handleMessage(
@@ -12,6 +13,10 @@ export function handleMessage(
   if (message.type === 'LLM_STREAM_CHUNK') return false;
   if (message.type === 'AGENT_PROGRESS') return false;
   if (message.type === 'PAGE_TERMS') return false; // Let UI pick up directly
+  if (message.type === 'READING_LIST_EXTRACTION_RESULT') {
+    handleExtractionResult((message as any).payload);
+    return false; // Let UI also receive the broadcast
+  }
 
   // Handle async responses
   handleMessageAsync(message, sender).then(sendResponse).catch((e) => {
@@ -99,6 +104,19 @@ async function handleMessageAsync(
       // the UI's query-message-handler listener will pick it up and respond.
       const response = await chrome.runtime.sendMessage(message);
       return response;
+    }
+
+    case 'READING_LIST_REMOVE':
+      await removeFromReadingList((message as any).payload.url);
+      return { success: true };
+
+    case 'READING_LIST_RETRY': {
+      const { url } = (message as any).payload;
+      const result = await chrome.storage.local.get('readingListItems') as Record<string, any>;
+      const items = result.readingListItems ?? {};
+      const item = items[url];
+      if (item) await triggerExtraction(url, item.title);
+      return { success: true };
     }
 
     default:
