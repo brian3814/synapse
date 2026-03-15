@@ -11,7 +11,8 @@
     "scripting",
     "contextMenus",
     "offscreen",
-    "readingList"
+    "readingList",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
