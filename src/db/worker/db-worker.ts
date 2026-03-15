@@ -10,6 +10,8 @@ import * as sourceContentQueries from './queries/source-content-queries';
 import * as entityResolutionQueries from './queries/entity-resolution-queries';
 import * as indexedFileQueries from './queries/indexed-file-queries';
 import * as stressTestQueries from './queries/stress-test-queries';
+import * as spatialQueries from './queries/spatial-queries';
+import * as readingListQueries from './queries/reading-list-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -72,6 +74,16 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       const p = params as { sql: string; params?: unknown[] };
       const { rows } = await executeQuery(p.sql, p.params);
       return { result: { rows } };
+    }
+
+    // Bulk graph load — single round-trip, slim columns
+    case 'loadGraph': {
+      ensureInit();
+      const [nodes, edges] = await Promise.all([
+        nodeQueries.getAllNodesSlim(),
+        edgeQueries.getAllEdgesSlim(),
+      ]);
+      return { result: { nodes, edges } };
     }
 
     // Node operations
@@ -281,6 +293,66 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'indexedFiles.getByNodeId': {
       ensureInit();
       return { result: await indexedFileQueries.getByNodeId(params as string) };
+    }
+
+    // Spatial queries
+    case 'spatial.nodesInBounds': {
+      ensureInit();
+      const p = params as { minX: number; minY: number; maxX: number; maxY: number; limit?: number };
+      return { result: await spatialQueries.getNodesInBounds(p.minX, p.minY, p.maxX, p.maxY, p.limit) };
+    }
+
+    case 'spatial.edgesForNodes': {
+      ensureInit();
+      return { result: await spatialQueries.getEdgesForVisibleNodes(params as string[]) };
+    }
+
+    case 'spatial.clusterSummary': {
+      ensureInit();
+      return { result: await spatialQueries.getClusterSummary() };
+    }
+
+    case 'spatial.interClusterEdges': {
+      ensureInit();
+      return { result: await spatialQueries.getInterClusterEdges() };
+    }
+
+    case 'spatial.batchUpdatePositions': {
+      ensureInit();
+      await spatialQueries.batchUpdatePositions(params as Array<{ id: string; x: number; y: number }>);
+      return { result: { success: true } };
+    }
+
+    case 'spatial.nodeCountInBounds': {
+      ensureInit();
+      const p = params as { minX: number; minY: number; maxX: number; maxY: number };
+      return { result: await spatialQueries.getNodeCountInBounds(p.minX, p.minY, p.maxX, p.maxY) };
+    }
+
+    case 'spatial.totalNodeCount': {
+      ensureInit();
+      return { result: await spatialQueries.getTotalNodeCount() };
+    }
+
+    // Reading list history operations
+    case 'readingList.save': {
+      ensureInit();
+      return { result: await readingListQueries.saveHistory(params as any) };
+    }
+
+    case 'readingList.getAll': {
+      ensureInit();
+      return { result: await readingListQueries.getAll() };
+    }
+
+    case 'readingList.getByUrl': {
+      ensureInit();
+      return { result: await readingListQueries.getByUrl(params as string) };
+    }
+
+    case 'readingList.getRecent': {
+      ensureInit();
+      return { result: await readingListQueries.getRecent(params as number) };
     }
 
     // Stress test

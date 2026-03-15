@@ -1,5 +1,6 @@
 import { executeLLMRequestStreaming } from './llm-executor';
 import { runAgentLoop } from './agent-loop';
+import { extractReadingListItem } from './reading-list-extractor';
 
 // Chunk buffer to reduce IPC overhead
 class ChunkBuffer {
@@ -116,6 +117,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       },
     });
 
+    return false;
+  }
+
+  if (message.type === 'READING_LIST_EXTRACT') {
+    sendResponse({ acknowledged: true });
+    extractReadingListItem(message.payload)
+      .then(result => chrome.runtime.sendMessage({
+        type: 'READING_LIST_EXTRACTION_RESULT',
+        payload: result,
+      }).catch(() => {}))
+      .catch(e => chrome.runtime.sendMessage({
+        type: 'READING_LIST_EXTRACTION_RESULT',
+        payload: { url: message.payload.url, success: false, error: e.message },
+      }).catch(() => {}));
     return false;
   }
 

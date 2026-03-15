@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chrome Manifest V3 extension providing a local-first knowledge graph with SQLite persistence (wa-sqlite + OPFS), 2D/3D graph visualization (Reagraph), and LLM-powered entity extraction. The UI runs in the Chrome Side Panel (default) or a full tab.
+Chrome Manifest V3 extension providing a local-first knowledge graph with SQLite persistence (wa-sqlite + OPFS), 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. The UI runs in the Chrome Side Panel (default) or a full tab.
 
 ## Build Commands
 
@@ -64,20 +64,21 @@ Two extraction modes, both ending in the same review→apply flow:
 
 **Review flow** (`ExtractionReview` replaces old `DiffView`):
 - Converts diff items → `ReviewNode[]`/`ReviewEdge[]` with merge recommendations (fuzzy matching via entity resolution)
-- Mini graph preview (Reagraph) or overlay on main graph
+- Mini graph preview (Three.js ReviewGraphCanvas) or overlay on main graph
 - Inline editing, add/remove nodes/edges, undo/redo
 - Convert-to-property: async LLM call suggests inverse property keys, user confirms
 - `applyReview()` commits to DB, resolving temp IDs → real IDs
 
 ## Build System
 
-Vite config (`vite.config.ts`) produces 6 outputs via custom plugins:
+Vite config (`vite.config.ts`) produces 7 outputs via custom plugins:
 
 | Output | Plugin | Format |
 |---|---|---|
 | React SPA + service worker + offscreen | Main build (multi-entry) | ES modules |
 | `db-worker.js` + `wa-sqlite-async.wasm` | `dbWorkerPlugin` | ES module (no content hash on WASM) |
 | `db-shared-worker.js` | `dbSharedWorkerPlugin` | ES module |
+| `layout-worker.js` | `layoutWorkerPlugin` | ES module |
 | `content-script.js` | `contentScriptPlugin` | IIFE |
 
 Key config: `base: ''` (chrome-extension:// relative paths), `modulePreload: false` (prevents DOM polyfill in SW).
@@ -87,7 +88,7 @@ Key config: `base: ''` (chrome-extension:// relative paths), `modulePreload: fal
 CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects:
 
 - **DB Worker** — Built as separate entry, loaded via `new URL('/db-worker.js', location.origin)`.
-- **Reagraph text rendering** — Troika creates blob workers. Shim at `src/lib/troika-worker-utils-shim.ts` runs everything on main thread. Vite alias: `'troika-worker-utils' → shim`.
+- **Layout Worker** — Built as separate entry, loaded via `new URL('/layout-worker.js', location.origin)`. Runs Barnes-Hut force-directed layout off the main thread.
 
 ## Database Layer
 
@@ -95,11 +96,25 @@ CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects
 - `src/db/worker/migrations/` — Versioned, FTS5 detected at runtime. Migration 002 (FTS) is optional; search falls back to LIKE.
 - `src/db/client/db-client.ts` — UI-thread client with requestId-based response matching and 10s timeouts.
 
-## Reagraph Integration
+## Graph Renderer (Three.js)
 
-- `clusterAttribute` must only be passed for `forceDirected*` layouts (others throw)
-- `sizingType="default"` reads node `size` directly; `"attribute"` requires `sizingAttribute`
-- Graph container must use `absolute inset-0` positioning with `min-h-0` on flex parents
+Custom renderer in `src/graph/renderer/` — zero React dependency. Uses InstancedMesh (1-2 draw calls) for nodes/edges instead of Reagraph's per-element meshes.
+
+- **`graph-renderer.ts`** — Core class: Scene, Camera, WebGLRenderer, animation loop, event emitter
+- **`node-mesh.ts`** — InstancedMesh with CircleGeometry for nodes, RingGeometry for selection ring
+- **`edge-mesh.ts`** — LineSegments for edges + InstancedMesh ConeGeometry for directed arrows
+- **`label-layer.ts`** — Canvas2D texture atlas + InstancedMesh quads with frustum culling
+- **`camera-controller.ts`** — OrthographicCamera pan/zoom/fit with mouse/wheel handlers
+- **`hit-test.ts`** — CPU distance-based node/edge picking (linear scan, sufficient for 10k+)
+- **`types.ts`** — RenderNode, RenderEdge, RenderTheme, GraphCanvasHandle
+
+Layout runs in a Web Worker (`src/graph/layout/`):
+- **`force-layout.ts`** — Velocity Verlet + Barnes-Hut quadtree O(n log n) repulsion
+- **`layout-worker.ts`** — Worker entry; sends Float32Array positions via Transferable
+- **`layout-runner.ts`** — Main-thread API; creates worker and handles tick/done messages
+- Pin/unpin support for node dragging during live simulation
+
+React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.subscribe()` pushes data imperatively — no React re-renders during interactions. Graph container must use `absolute inset-0` positioning with `min-h-0` on flex parents.
 
 ## Key References
 

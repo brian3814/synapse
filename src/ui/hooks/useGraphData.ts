@@ -2,10 +2,10 @@ import { useMemo } from 'react';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../graph/store/node-type-store';
 import { useExtractionReviewStore } from '../../graph/store/extraction-review-store';
-import { graphDataToReagraph } from '../../graph/transforms/db-to-reagraph';
-import { reviewNodesToOverlayReagraph, reviewEdgesToOverlayReagraph } from '../../graph/transforms/review-to-reagraph';
+import { graphDataToRender } from '../../graph/transforms/db-to-render';
+import { reviewNodesToOverlayRender, reviewEdgesToOverlayRender } from '../../graph/transforms/review-to-render';
 
-const GREYED_OUT_FILL = '#3f3f46'; // zinc-700
+const GREYED_OUT_COLOR = '#3f3f46'; // zinc-700
 
 export function useGraphData() {
   const nodes = useGraphStore((s) => s.nodes);
@@ -25,24 +25,24 @@ export function useGraphData() {
     return map;
   }, [types]);
 
-  const reagraphData = useMemo(() => {
-    const base = graphDataToReagraph(nodes, edges, typeColorMap);
+  const renderData = useMemo(() => {
+    const base = graphDataToRender(nodes, edges, typeColorMap);
 
     // Only merge review data in overlay mode
     if (!reviewActive || reviewViewMode !== 'overlay') {
       return base;
     }
 
-    // Grey out existing nodes and tag them as 'existing' cluster
+    // Grey out existing nodes
     const greyedNodes = base.nodes.map((n) => ({
       ...n,
-      fill: GREYED_OUT_FILL,
+      color: GREYED_OUT_COLOR,
       data: { ...n.data, cluster: 'existing' },
     }));
 
-    const overlayNodes = reviewNodesToOverlayReagraph(reviewNodes, typeColorMap);
+    const overlayNodes = reviewNodesToOverlayRender(reviewNodes, typeColorMap);
     const activeNodeIds = new Set(reviewNodes.filter((n) => !n.removed).map((n) => n.tempId));
-    const overlayEdges = reviewEdgesToOverlayReagraph(reviewEdges, reviewNodes, activeNodeIds);
+    const overlayEdges = reviewEdgesToOverlayRender(reviewEdges, reviewNodes, activeNodeIds);
 
     return {
       nodes: [...greyedNodes, ...overlayNodes],
@@ -50,5 +50,5 @@ export function useGraphData() {
     };
   }, [nodes, edges, typeColorMap, reviewActive, reviewViewMode, reviewNodes, reviewEdges]);
 
-  return reagraphData;
+  return renderData;
 }

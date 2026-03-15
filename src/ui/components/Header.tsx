@@ -2,12 +2,15 @@ import React from 'react';
 import { useDisplayMode } from '../hooks/useDisplayMode';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useGraphStore } from '../../graph/store/graph-store';
+import { useReadingListStore } from '../../graph/store/reading-list-store';
 
 export function Header() {
   const { displayMode, toggleMode } = useDisplayMode();
   const { activePanel, setActivePanel, is3D, toggle3D, clusteringEnabled, toggleClustering, chatOpen, toggleChat } = useUIStore();
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const edgeCount = useGraphStore((s) => s.edges.length);
+  const readingListItems = useReadingListStore((s) => s.items);
+  const readyCount = Object.values(readingListItems).filter(i => i.status === 'extracted').length;
   const isSidePanel = displayMode === 'sidePanel';
 
   return (
@@ -20,6 +23,21 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-1">
+        <ToolbarButton
+          active={activePanel === 'readingList'}
+          onClick={() => setActivePanel('readingList')}
+          title="Reading List"
+        >
+          <span className="relative">
+            <BookmarkListIcon />
+            {readyCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-bold bg-emerald-500 text-white rounded-full leading-none">
+                {readyCount}
+              </span>
+            )}
+          </span>
+        </ToolbarButton>
+
         <ToolbarButton
           active={activePanel === 'search'}
           onClick={() => setActivePanel('search')}
@@ -141,6 +159,14 @@ function ToolbarButton({
 }
 
 // Simple SVG icons (16x16)
+const BookmarkListIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+    <line x1="9" y1="10" x2="15" y2="10"/>
+    <line x1="9" y1="14" x2="15" y2="14"/>
+  </svg>
+);
+
 const SearchIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>

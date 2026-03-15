@@ -25,85 +25,7 @@ export async function executeLLMRequestStreaming(
   payload: LLMRequestWithKeyMessage['payload'],
   onChunk: (text: string, done: boolean) => void
 ): Promise<{ content: string }> {
-  const { provider, model, apiKey, prompt, systemPrompt } = payload;
-
-  if (provider === 'openai') {
-    return await streamOpenAI(apiKey, model, prompt, onChunk, systemPrompt);
-  } else if (provider === 'anthropic') {
-    return await streamAnthropic(apiKey, model, prompt, onChunk, systemPrompt);
-  } else {
-    throw new Error(`Unknown provider: ${provider}`);
-  }
-}
-
-async function streamOpenAI(
-  apiKey: string,
-  model: string,
-  userPrompt: string,
-  onChunk: (text: string, done: boolean) => void,
-  customSystemPrompt?: string
-): Promise<{ content: string }> {
-  const systemPrompt = customSystemPrompt ?? EXTRACTION_SYSTEM_PROMPT;
-  const userContent = customSystemPrompt
-    ? userPrompt
-    : `Extract entities and relationships from the following text:\n\n${userPrompt}`;
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error (${response.status}): ${error}`);
-  }
-
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let accumulated = '';
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop()!; // keep incomplete line in buffer
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith('data: ')) continue;
-      const data = trimmed.slice(6);
-      if (data === '[DONE]') continue;
-
-      try {
-        const parsed = JSON.parse(data);
-        const delta = parsed.choices?.[0]?.delta?.content;
-        if (delta) {
-          accumulated += delta;
-          onChunk(delta, false);
-        }
-      } catch {
-        // skip malformed JSON lines
-      }
-    }
-  }
-
-  onChunk('', true);
-  return { content: accumulated };
+  return await streamAnthropic(payload.apiKey, payload.model, payload.prompt, onChunk, payload.systemPrompt);
 }
 
 async function streamAnthropic(
@@ -121,9 +43,10 @@ async function streamAnthropic(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
+      ...(apiKey.startsWith('sk-ant-')
+        ? { 'x-api-key': apiKey, 'anthropic-dangerous-direct-browser-access': 'true' }
+        : { 'Authorization': `Bearer ${apiKey}` }),
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model,
@@ -203,9 +126,10 @@ export async function streamAnthropicWithTools(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
+      ...(apiKey.startsWith('sk-ant-')
+        ? { 'x-api-key': apiKey, 'anthropic-dangerous-direct-browser-access': 'true' }
+        : { 'Authorization': `Bearer ${apiKey}` }),
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model,

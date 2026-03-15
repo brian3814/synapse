@@ -1,5 +1,6 @@
 import { registerContextMenus, handleContextMenuClick } from './context-menu';
 import { handleMessage } from './message-router';
+import { initReadingListSync } from './reading-list-handler';
 import { getDisplayMode } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
 
@@ -29,6 +30,9 @@ async function syncPanelBehavior(): Promise<void> {
 
 // Set initial behavior on startup
 syncPanelBehavior();
+
+// Sync Chrome reading list → background extraction
+initReadingListSync();
 
 // Update behavior when display mode preference changes
 chrome.storage.onChanged.addListener((changes, areaName) => {

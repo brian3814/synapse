@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { QueryResults } from '../query/QueryResults';
 import type { ChatMessage as ChatMessageType } from '../../hooks/useChatQuery';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onNodeClick?: (nodeId: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] bg-indigo-600/20 border border-indigo-500/30 text-zinc-200 text-sm px-3 py-2 rounded-lg">
+        <div className="group relative max-w-[85%] bg-indigo-600/20 border border-indigo-500/30 text-zinc-200 text-sm px-3 py-2 rounded-lg">
           {message.content}
+          <CopyButton text={message.content} position="bottom-1 right-1" />
         </div>
       </div>
     );
@@ -21,49 +22,30 @@ export function ChatMessage({ message }: ChatMessageProps) {
     <div className="flex justify-start">
       <div className="max-w-[95%] space-y-2">
         {message.status === 'streaming' && (
-          <div className="bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
-            {message.mode === 'smart' ? (
-              <MarkdownContent content={message.content || '...'} />
-            ) : (
-              <pre className="whitespace-pre-wrap text-zinc-300 font-mono text-xs">
-                {message.content || '...'}
-              </pre>
-            )}
+          <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
+            <MarkdownContent content={message.content || '...'} onNodeClick={onNodeClick} />
             <span className="inline-block w-1.5 h-3.5 bg-indigo-400 animate-pulse ml-0.5" />
+            <CopyButton text={message.content} position="bottom-1 left-1" />
           </div>
         )}
 
         {message.status === 'executing' && (
           <div className="bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
-            <p className="text-zinc-400 text-xs">
-              {message.mode === 'smart' ? 'Searching knowledge graph...' : 'Running query...'}
-            </p>
+            <p className="text-zinc-400 text-xs">Searching knowledge graph...</p>
           </div>
         )}
 
         {message.status === 'complete' && (
-          <div className="bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg space-y-2">
-            {message.mode === 'smart' ? (
-              <>
-                <MarkdownContent content={message.content} />
-                {message.ragContext && <RAGContextDetails context={message.ragContext} />}
-              </>
-            ) : (
-              <>
-                {message.generatedJson && <GeneratedDSL json={message.generatedJson} />}
-                {message.results && <QueryResults results={message.results} />}
-                {!message.results && !message.generatedJson && (
-                  <p className="text-zinc-300 text-xs">{message.content}</p>
-                )}
-              </>
-            )}
+          <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg space-y-2">
+            <MarkdownContent content={message.content} onNodeClick={onNodeClick} />
+            {message.ragContext && <RAGContextDetails context={message.ragContext} />}
+            <CopyButton text={message.content} position="bottom-1 left-1" />
           </div>
         )}
 
         {message.status === 'error' && (
-          <div className="bg-zinc-800 border border-red-500/30 text-sm px-3 py-2 rounded-lg space-y-2">
+          <div className="bg-zinc-800 border border-red-500/30 text-sm px-3 py-2 rounded-lg">
             <p className="text-red-400 text-xs">{message.error}</p>
-            {message.generatedJson && <GeneratedDSL json={message.generatedJson} />}
           </div>
         )}
       </div>
@@ -71,8 +53,37 @@ export function ChatMessage({ message }: ChatMessageProps) {
   );
 }
 
+function CopyButton({ text, position }: { text: string; position: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`absolute ${position} opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-zinc-700/80 hover:bg-zinc-600 text-zinc-400 hover:text-zinc-200`}
+      title="Copy"
+    >
+      {copied ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 /** Simple markdown renderer (bold, links, lists, headers) */
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({ content, onNodeClick }: { content: string; onNodeClick?: (nodeId: string) => void }) {
   const lines = content.split('\n');
 
   return (
@@ -80,33 +91,33 @@ function MarkdownContent({ content }: { content: string }) {
       {lines.map((line, i) => {
         // Headers
         if (line.startsWith('### ')) {
-          return <h4 key={i} className="text-zinc-200 font-semibold text-xs mt-2">{processInline(line.slice(4))}</h4>;
+          return <h4 key={i} className="text-zinc-200 font-semibold text-xs mt-2">{processInline(line.slice(4), onNodeClick)}</h4>;
         }
         if (line.startsWith('## ')) {
-          return <h3 key={i} className="text-zinc-200 font-semibold text-sm mt-2">{processInline(line.slice(3))}</h3>;
+          return <h3 key={i} className="text-zinc-200 font-semibold text-sm mt-2">{processInline(line.slice(3), onNodeClick)}</h3>;
         }
         if (line.startsWith('# ')) {
-          return <h2 key={i} className="text-zinc-100 font-bold text-sm mt-2">{processInline(line.slice(2))}</h2>;
+          return <h2 key={i} className="text-zinc-100 font-bold text-sm mt-2">{processInline(line.slice(2), onNodeClick)}</h2>;
         }
         // List items
         if (line.match(/^[-*]\s/)) {
-          return <p key={i} className="pl-3">• {processInline(line.slice(2))}</p>;
+          return <p key={i} className="pl-3">• {processInline(line.slice(2), onNodeClick)}</p>;
         }
         if (line.match(/^\d+\.\s/)) {
           const num = line.match(/^(\d+)\.\s/)![1];
-          return <p key={i} className="pl-3">{num}. {processInline(line.replace(/^\d+\.\s/, ''))}</p>;
+          return <p key={i} className="pl-3">{num}. {processInline(line.replace(/^\d+\.\s/, ''), onNodeClick)}</p>;
         }
         // Empty lines
         if (!line.trim()) return <br key={i} />;
         // Regular text
-        return <p key={i}>{processInline(line)}</p>;
+        return <p key={i}>{processInline(line, onNodeClick)}</p>;
       })}
     </div>
   );
 }
 
-/** Process inline markdown (bold, links, inline code, source citations) */
-function processInline(text: string): React.ReactNode {
+/** Process inline markdown (bold, links, inline code, source citations, node links) */
+function processInline(text: string, onNodeClick?: (nodeId: string) => void): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -172,20 +183,40 @@ function processInline(text: string): React.ReactNode {
         );
         remaining = remaining.slice(idx + earliest.match[0].length);
         break;
-      case 'link':
-        parts.push(
-          <a
-            key={key++}
-            href={earliest.match[2]}
-            target="_blank"
-            rel="noopener"
-            className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
-          >
-            {earliest.match[1]}
-          </a>
-        );
+      case 'link': {
+        const linkText = earliest.match[1];
+        const url = earliest.match[2];
+        if (url.startsWith('node:') && onNodeClick) {
+          const nodeId = url.slice(5);
+          parts.push(
+            <button
+              key={key++}
+              onClick={() => onNodeClick(nodeId)}
+              className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 cursor-pointer inline-flex items-center gap-0.5"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="inline shrink-0">
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="12" cy="12" r="9" opacity="0.3" />
+              </svg>
+              {linkText}
+            </button>
+          );
+        } else {
+          parts.push(
+            <a
+              key={key++}
+              href={url}
+              target="_blank"
+              rel="noopener"
+              className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+            >
+              {linkText}
+            </a>
+          );
+        }
         remaining = remaining.slice(idx + earliest.match[0].length);
         break;
+      }
     }
   }
 
@@ -221,28 +252,6 @@ function RAGContextDetails({ context }: { context: NonNullable<ChatMessageType['
           </div>
         )}
       </div>
-    </details>
-  );
-}
-
-function GeneratedDSL({ json }: { json: string }) {
-  const [open, setOpen] = useState(false);
-
-  let formatted: string;
-  try {
-    formatted = JSON.stringify(JSON.parse(json), null, 2);
-  } catch {
-    formatted = json;
-  }
-
-  return (
-    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="text-zinc-500 text-xs cursor-pointer hover:text-zinc-400">
-        Generated DSL
-      </summary>
-      <pre className="mt-1 p-2 bg-zinc-900 rounded text-zinc-400 overflow-auto max-h-32 font-mono text-[11px]">
-        {formatted}
-      </pre>
     </details>
   );
 }

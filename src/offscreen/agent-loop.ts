@@ -5,6 +5,7 @@ import {
   type AnthropicMessage,
   type AnthropicContentBlock,
 } from './llm-executor';
+import { isBlockedUrl, fetchAndCleanContent } from './url-utils';
 
 const SYSTEM_PROMPT = `You are a knowledge graph extraction agent. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and relationships (edges) into a structured knowledge graph.
 
@@ -178,56 +179,7 @@ async function executeRemoteTool(
   });
 }
 
-function isBlockedUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname;
-
-    // Block non-HTTP protocols
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true;
-
-    // Block loopback
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '0.0.0.0') return true;
-
-    // Block private/internal IP ranges
-    if (hostname.startsWith('10.')) return true;
-    if (hostname.startsWith('192.168.')) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
-
-    // Block link-local and cloud metadata endpoints
-    if (hostname.startsWith('169.254.')) return true;
-    if (hostname === 'metadata.google.internal') return true;
-
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 async function executeFetchUrl(url: string): Promise<{ result: string; error?: string }> {
-  if (isBlockedUrl(url)) {
-    return { result: '', error: 'Blocked: requests to private/internal network addresses are not allowed' };
-  }
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      return { result: '', error: `Fetch failed: ${response.status} ${response.statusText}` };
-    }
-    const text = await response.text();
-    // Basic HTML cleaning
-    const cleaned = text
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const truncated =
-      cleaned.length > FETCH_MAX_BYTES
-        ? cleaned.substring(0, FETCH_MAX_BYTES) + '...[truncated]'
-        : cleaned;
-    return { result: truncated };
-  } catch (e: any) {
-    return { result: '', error: e.message };
-  }
+  const { content, error } = await fetchAndCleanContent(url, FETCH_MAX_BYTES);
+  return { result: content, error };
 }

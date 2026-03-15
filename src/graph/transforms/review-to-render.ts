@@ -1,30 +1,32 @@
 import type { ReviewNode, ReviewEdge } from '../store/extraction-review-store';
 import type { GraphNode } from '../../shared/types';
-import type { ReagraphNode, ReagraphEdge } from './db-to-reagraph';
+import type { RenderNode, RenderEdge } from '../renderer/types';
 
-const REVIEW_NODE_FILL = '#059669'; // emerald
-const MERGE_PENDING_FILL = '#D97706'; // amber
-const MERGE_ACCEPTED_FILL = '#059669'; // emerald (accepted merge)
-const EXISTING_NODE_FILL = '#3f3f46'; // zinc-700 (greyed out)
+const REVIEW_NODE_COLOR = '#059669'; // emerald
+const MERGE_PENDING_COLOR = '#D97706'; // amber
+const MERGE_ACCEPTED_COLOR = '#059669'; // emerald (accepted merge)
+const EXISTING_NODE_COLOR = '#3f3f46'; // zinc-700 (greyed out)
 
-export function reviewNodesToReagraph(
+export function reviewNodesToRender(
   nodes: ReviewNode[],
   typeColorMap?: Map<string, string>
-): ReagraphNode[] {
+): RenderNode[] {
   return nodes
     .filter((n) => !n.removed)
     .map((node) => {
-      let fill = typeColorMap?.get(node.type) ?? REVIEW_NODE_FILL;
+      let color = typeColorMap?.get(node.type) ?? REVIEW_NODE_COLOR;
       if (node.mergeRecommendation?.status === 'pending') {
-        fill = MERGE_PENDING_FILL;
+        color = MERGE_PENDING_COLOR;
       } else if (node.mergeRecommendation?.status === 'accepted') {
-        fill = MERGE_ACCEPTED_FILL;
+        color = MERGE_ACCEPTED_COLOR;
       }
 
       return {
         id: node.tempId,
         label: node.label,
-        fill,
+        x: 0,
+        y: 0,
+        color,
         size: 1,
         data: {
           type: node.type,
@@ -37,17 +39,15 @@ export function reviewNodesToReagraph(
     });
 }
 
-/**
- * Creates greyed-out reagraph nodes for existing graph nodes that are
- * referenced by review edges (so edges can render in the mini graph).
- */
-export function existingNodesToReagraph(
+export function existingNodesToRender(
   existingNodes: GraphNode[]
-): ReagraphNode[] {
+): RenderNode[] {
   return existingNodes.map((node) => ({
     id: node.id,
     label: node.label,
-    fill: EXISTING_NODE_FILL,
+    x: node.x ?? 0,
+    y: node.y ?? 0,
+    color: EXISTING_NODE_COLOR,
     size: node.size,
     data: {
       type: node.type,
@@ -57,10 +57,10 @@ export function existingNodesToReagraph(
   }));
 }
 
-export function reviewEdgesToReagraph(
+export function reviewEdgesToRender(
   edges: ReviewEdge[],
   validNodeIds: Set<string>
-): ReagraphEdge[] {
+): RenderEdge[] {
   return edges
     .filter(
       (e) =>
@@ -70,10 +70,10 @@ export function reviewEdgesToReagraph(
     )
     .map((edge) => ({
       id: edge.tempId,
-      source: edge.sourceTempId,
-      target: edge.targetTempId,
+      sourceId: edge.sourceTempId,
+      targetId: edge.targetTempId,
       label: edge.label,
-      size: 1,
+      directed: true,
       data: {
         type: edge.type,
         isReviewEdge: true,
@@ -81,25 +81,23 @@ export function reviewEdgesToReagraph(
     }));
 }
 
-/**
- * For overlay mode: builds reagraph data where merged nodes use existing node IDs
- * so edges connect to the real graph nodes.
- */
-export function reviewNodesToOverlayReagraph(
+export function reviewNodesToOverlayRender(
   nodes: ReviewNode[],
   typeColorMap?: Map<string, string>
-): ReagraphNode[] {
+): RenderNode[] {
   return nodes
     .filter((n) => !n.removed && n.mergeRecommendation?.status !== 'accepted')
     .map((node) => {
-      const fill = node.mergeRecommendation?.status === 'pending'
-        ? MERGE_PENDING_FILL
-        : typeColorMap?.get(node.type) ?? REVIEW_NODE_FILL;
+      const color = node.mergeRecommendation?.status === 'pending'
+        ? MERGE_PENDING_COLOR
+        : typeColorMap?.get(node.type) ?? REVIEW_NODE_COLOR;
 
       return {
         id: node.tempId,
         label: node.label,
-        fill,
+        x: 0,
+        y: 0,
+        color,
         size: 1,
         data: {
           type: node.type,
@@ -112,16 +110,11 @@ export function reviewNodesToOverlayReagraph(
     });
 }
 
-/**
- * For overlay mode: resolves edge endpoints — merged nodes point to existing graph node IDs.
- * Endpoints that are already real node IDs (existing graph nodes) pass through as-is.
- */
-export function reviewEdgesToOverlayReagraph(
+export function reviewEdgesToOverlayRender(
   edges: ReviewEdge[],
   nodes: ReviewNode[],
   activeReviewIds: Set<string>
-): ReagraphEdge[] {
-  // Build a mapping: tempId → resolved ID (existing node ID for accepted merges, else tempId)
+): RenderEdge[] {
   const resolvedIds = new Map<string, string>();
   const allReviewIds = new Set<string>();
   for (const node of nodes) {
@@ -137,17 +130,16 @@ export function reviewEdgesToOverlayReagraph(
   return edges
     .filter((e) => {
       if (e.removed) return false;
-      // Each endpoint is valid if it's an active review node, or not a review node (existing graph node)
       const sourceOk = activeReviewIds.has(e.sourceTempId) || !allReviewIds.has(e.sourceTempId);
       const targetOk = activeReviewIds.has(e.targetTempId) || !allReviewIds.has(e.targetTempId);
       return sourceOk && targetOk;
     })
     .map((edge) => ({
       id: edge.tempId,
-      source: resolvedIds.get(edge.sourceTempId) ?? edge.sourceTempId,
-      target: resolvedIds.get(edge.targetTempId) ?? edge.targetTempId,
+      sourceId: resolvedIds.get(edge.sourceTempId) ?? edge.sourceTempId,
+      targetId: resolvedIds.get(edge.targetTempId) ?? edge.targetTempId,
       label: edge.label,
-      size: 1,
+      directed: true,
       data: {
         type: edge.type,
         isReviewEdge: true,

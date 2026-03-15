@@ -3,6 +3,8 @@ import { useDbInit } from '../db/client/db-hooks';
 import { useGraphStore } from '../graph/store/graph-store';
 import { useNodeTypeStore } from '../graph/store/node-type-store';
 import { useUIStore } from '../graph/store/ui-store';
+import { useReadingListStore } from '../graph/store/reading-list-store';
+import { useAuthStore } from '../graph/store/auth-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
@@ -19,6 +21,20 @@ export default function App() {
   useEffect(() => {
     setDisplayMode(displayMode);
   }, [displayMode, setDisplayMode]);
+
+  // Initialize reading list store (loads from chrome.storage.local, independent of DB)
+  useEffect(() => {
+    useReadingListStore.getState().loadFromStorage();
+    const cleanup = useReadingListStore.getState().startSyncListener();
+    return cleanup;
+  }, []);
+
+  // Initialize auth store (check OAuth status, listen for changes)
+  useEffect(() => {
+    useAuthStore.getState().checkAuth();
+    const cleanupAuth = useAuthStore.getState().startAuthListener();
+    return cleanupAuth;
+  }, []);
 
   useEffect(() => {
     if (ready) {

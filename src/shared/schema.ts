@@ -19,6 +19,15 @@ export const extractionResultSchema = z.object({
   edges: z.array(extractedEdgeSchema),
 });
 
+export const readingListExtractionSchema = z.object({
+  summary: z.string().min(1),
+  keyTopics: z.array(z.string()).min(1),
+  nodes: z.array(extractedNodeSchema),
+  edges: z.array(extractedEdgeSchema),
+});
+
+export type ReadingListExtractionResult = z.infer<typeof readingListExtractionSchema>;
+
 // Node input validation
 export const createNodeInputSchema = z.object({
   label: z.string().min(1, 'Label is required'),
@@ -63,7 +72,7 @@ export const updateEdgeInputSchema = z.object({
 
 // LLM config validation
 export const llmConfigSchema = z.object({
-  provider: z.enum(['openai', 'anthropic']),
+  provider: z.enum(['anthropic']),
   model: z.string().min(1),
   apiKey: z.string().min(1),
 });

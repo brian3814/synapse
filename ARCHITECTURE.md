@@ -2,7 +2,7 @@
 
 ## Overview
 
-A Chrome Manifest V3 extension that provides a local-first knowledge graph with persistent SQLite storage, 2D/3D graph visualization, full CRUD operations, and LLM-powered entity extraction. The UI renders in the Chrome Side Panel (default) or a full tab, with a toggle to switch between modes.
+A Chrome Manifest V3 extension that provides a local-first knowledge graph with persistent SQLite storage, 2D graph visualization (custom Three.js InstancedMesh renderer), full CRUD operations, and LLM-powered entity extraction. The UI renders in the Chrome Side Panel (default) or a full tab, with a toggle to switch between modes.
 
 ---
 
@@ -35,7 +35,7 @@ A Chrome Manifest V3 extension that provides a local-first knowledge graph with 
 |  |  chrome-extension://id/index.html         |  |                |  |
 |  |                                           |  | - LLM fetch    |  |
 |  |  +------+ +----------+ +--------------+   |  |   w/ streaming |  |
-|  |  |Zustand| |React UI  | |Reagraph      |  |  | - Agent loop   |  |
+|  |  |Zustand| |React UI  | |Three.js      |  |  | - Agent loop   |  |
 |  |  |Stores | |Panels    | |GraphCanvas   |  |  |   (tool-use)   |  |
 |  |  +---|---+ +----------+ +--------------+   |  | - Keepalive    |  |
 |  |      |                                     |  +----------------+  |
@@ -77,10 +77,11 @@ A Chrome Manifest V3 extension that provides a local-first knowledge graph with 
 | Layer | Choice | Rationale |
 |---|---|---|
 | Bundler | Vite 7 | Multi-entry support, WASM handling, custom plugins for extension output |
-| Framework | React 19 + TypeScript (strict) | Rich ecosystem, Reagraph bindings |
+| Framework | React 19 + TypeScript (strict) | Rich ecosystem |
 | State | Zustand 5 | Minimal boilerplate, works outside React (message handlers) |
 | Database | wa-sqlite + OPFS VFS | Only mature WASM SQLite with true filesystem persistence |
-| Graph Viz | Reagraph 4 | Unified 2D/3D via `GraphCanvas`, built-in clustering, 15+ layouts |
+| Graph Viz | Three.js (custom renderer) | InstancedMesh batches to 1-2 draw calls; viewport windowing for 100k+ nodes |
+| Graph Layout | Custom Web Worker | Barnes-Hut force-directed layout off main thread via Transferable Float32Array |
 | CSS | Tailwind CSS 4 | Utility-first, small purged bundle |
 | LLM | Direct HTTP fetch | No SDK — avoids 200KB+ bundles with Node.js deps |
 | Validation | Zod 4 | Runtime validation of LLM responses and forms |
@@ -109,21 +110,34 @@ kg_extension/
 │   │   │   ├── db-worker.ts        # Dedicated Worker: SQLite engine, accepts coordinator port
 │   │   │   ├── db-shared-worker.ts # SharedWorker: pure coordinator/router, receives worker port from UI
 │   │   │   ├── query-executor.ts   # SQL execution with retry (SQLITE_BUSY)
-│   │   │   ├── migrations/         # Versioned schema migrations with FTS5 detection
-│   │   │   └── queries/            # Typed CRUD + neighborhood traversal (recursive CTEs)
+│   │   │   ├── migrations/         # Versioned schema migrations (FTS5 detection, spatial index)
+│   │   │   └── queries/            # Typed CRUD, neighborhood traversal, spatial viewport queries
 │   │   └── client/
 │   │       ├── db-client.ts        # Promisified postMessage wrapper with timeouts
 │   │       └── db-hooks.ts         # React hooks: useDbInit
 │   ├── graph/
+│   │   ├── renderer/                    # Custom Three.js graph renderer
+│   │   │   ├── graph-renderer.ts        # Core: Scene, Camera, WebGLRenderer, animation loop, events
+│   │   │   ├── node-mesh.ts             # InstancedMesh CircleGeometry nodes + RingGeometry selection
+│   │   │   ├── edge-mesh.ts             # LineSegments edges + InstancedMesh ConeGeometry arrows
+│   │   │   ├── label-layer.ts           # Canvas2D overlay for labels with frustum culling
+│   │   │   ├── camera-controller.ts     # OrthographicCamera pan/zoom/fit, frustum change events
+│   │   │   ├── hit-test.ts              # CPU distance-based node/edge picking
+│   │   │   ├── spatial-hash.ts          # Grid-based spatial index for O(1) hit-test candidates
+│   │   │   └── types.ts                 # RenderNode, RenderEdge, RenderTheme, FrustumBounds
+│   │   ├── layout/
+│   │   │   ├── force-layout.ts          # Velocity Verlet + Barnes-Hut quadtree O(n log n)
+│   │   │   ├── layout-worker.ts         # Worker entry: sends Float32Array via Transferable
+│   │   │   └── layout-runner.ts         # Main-thread API: creates worker, handles tick/done
 │   │   ├── store/
-│   │   │   ├── graph-store.ts      # Zustand: nodes/edges CRUD, DB sync
-│   │   │   ├── ui-store.ts         # Zustand: display mode, layout, panels, clustering
-│   │   │   └── llm-store.ts        # Zustand: extraction pipeline state machine
+│   │   │   ├── graph-store.ts           # Zustand: nodes/edges CRUD, DB sync
+│   │   │   ├── ui-store.ts              # Zustand: display mode, layout, panels, chat, focusNodeCallback
+│   │   │   ├── llm-store.ts             # Zustand: extraction pipeline state machine
+│   │   │   ├── node-type-store.ts       # Node type definitions + auto-assigned colors
+│   │   │   ├── viewport-store.ts        # Viewport windowing: zoom level, visible/cluster data
+│   │   │   └── extraction-review-store.ts # Ephemeral review session with undo/redo
 │   │   └── transforms/
-│   │       ├── db-to-reagraph.ts   # DB rows -> Reagraph node/edge format
-│   │       └── reagraph-to-db.ts   # Layout positions -> DB persistence
-│   ├── lib/
-│   │   └── troika-worker-utils-shim.ts  # Main-thread shim (see Pitfall #1)
+│   │       └── cluster-to-render.ts     # Cluster summaries → RenderNode/RenderEdge for far zoom
 │   ├── llm/                        # (planned) Provider abstraction
 │   ├── content-script/
 │   │   ├── index.ts                # Entry: listens for extraction + TOOL_EXECUTE requests
@@ -150,9 +164,9 @@ kg_extension/
 │       │   └── TabLayout.tsx        # Full-width with side-by-side panels
 │       ├── components/
 │       │   ├── graph/
-│       │   │   ├── KnowledgeGraph.tsx    # Reagraph wrapper with theme, clustering, sizing
-│       │   │   ├── GraphControls.tsx     # Layout selector, zoom, fit-to-view
-│       │   │   └── NodeTooltip.tsx
+│       │   │   ├── KnowledgeGraph.tsx    # Graph wrapper: windowed mode, event wiring, focusNodeCallback registration
+│       │   │   ├── GraphCanvas.tsx       # Thin forwardRef wrapper over GraphRenderer
+│       │   │   └── GraphControls.tsx     # Zoom, fit-to-view controls
 │       │   ├── panels/                   # Node/edge detail, create, property editor
 │       │   ├── search/SearchPanel.tsx    # FTS5 or LIKE fallback search
 │       │   ├── llm/                      # Extraction UI, diff view, streaming output
@@ -163,10 +177,17 @@ kg_extension/
 │       │   │   ├── DiffView.tsx          # Entity diff review before merge
 │       │   │   ├── ExtractionSummary.tsx # Summary of extracted entities
 │       │   │   └── StreamingOutput.tsx   # Streaming LLM output display
+│       │   ├── chat/
+│       │   │   ├── ChatBot.tsx            # Chat container: float/sidebar, input history, node link click handler
+│       │   │   └── ChatMessage.tsx        # Message bubble: markdown, copy button, node: link rendering
 │       │   └── settings/SettingsPanel.tsx
 │       └── hooks/
 │           ├── useDisplayMode.ts    # Side panel vs tab detection + toggle
-│           ├── useGraphData.ts      # Store -> Reagraph data transform
+│           ├── useGraphData.ts      # Store -> RenderNode/RenderEdge transform
+│           ├── useViewportSync.ts   # Camera frustum → DB query → incremental renderer updates
+│           ├── useChatQuery.ts      # RAG-augmented chat: retrieve context → LLM stream → display
+│           ├── useInputHistory.ts   # ArrowUp/Down input recall (max 50, ref-based, no re-renders)
+│           ├── rag-pipeline.ts      # Search → expand subgraph → fetch sources → format prompt with node IDs
 │           └── useLLMExtraction.ts
 ```
 
@@ -174,19 +195,20 @@ kg_extension/
 
 ## Build System
 
-The Vite config uses **five custom plugins** to handle Chrome extension requirements:
+The Vite config uses **six custom plugins** to handle Chrome extension requirements:
 
 ```
 vite.config.ts
 ├── react()                  # @vitejs/plugin-react
 ├── tailwindcss()            # @tailwindcss/vite
 ├── fixHtmlPlugin()          # Moves HTML to dist root, fixes asset paths
-├── dbWorkerPlugin()         # Separate ES module build for db-worker.js
+├── dbWorkerPlugin()         # Separate ES module build for db-worker.js + wa-sqlite WASM
 ├── dbSharedWorkerPlugin()   # Separate ES module build for db-shared-worker.js
+├── layoutWorkerPlugin()     # Separate ES module build for layout-worker.js
 └── contentScriptPlugin()    # Separate IIFE build for content-script.js
 ```
 
-**Multi-entry build:** The main Vite build produces three entries — the React SPA (`index.html`), the service worker (`service-worker.js`), and the offscreen document (`offscreen.js`). Three additional `closeBundle` plugins run separate Vite builds for the DB dedicated worker, DB shared worker (both ES modules), and content script (IIFE).
+**Multi-entry build:** The main Vite build produces three entries — the React SPA (`index.html`), the service worker (`service-worker.js`), and the offscreen document (`offscreen.js`). Four additional `closeBundle` plugins run separate Vite builds for the DB dedicated worker, DB shared worker, layout worker (all ES modules), and content script (IIFE).
 
 **Key config decisions:**
 - `base: ''` — relative asset paths (Chrome extension URLs are `chrome-extension://id/...`)
@@ -195,7 +217,6 @@ vite.config.ts
 
 **Resolve aliases:**
 - `@` → `src/` for clean imports
-- `troika-worker-utils` → `src/lib/troika-worker-utils-shim.ts` (see Pitfall #1)
 
 ---
 
@@ -273,7 +294,7 @@ Side Panel (default, ~400px)          Tab (full viewport)
 ├──────────────────────┤             ├──────────────────┬─────────────┤
 │                      │             │                  │ Detail      │
 │   Graph Canvas       │             │   Graph Canvas   │ Panel       │
-│   (compact, 2D only) │             │   (full, 2D/3D)  │ (400px)     │
+│   (compact)          │             │   (full)          │ (400px)     │
 │                      │             │                  │             │
 ├──────────────────────┤             │                  │             │
 │ Detail Panel         │             │                  │             │
@@ -288,6 +309,107 @@ Side Panel (default, ~400px)          Tab (full viewport)
 - **Tab → Side panel:** Service worker calls `sidePanel.open({ windowId })` using `sender.tab.windowId`, UI calls `window.close()` to close the tab.
 
 The service worker uses `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick })` to control what happens when the user clicks the extension icon. A `chrome.storage.onChanged` listener keeps this in sync with the stored preference (see Pitfall #5).
+
+---
+
+## Graph Renderer (Three.js)
+
+Custom renderer in `src/graph/renderer/` with zero React dependency. Replaces Reagraph, which used per-element Three.js meshes and troika-three-text (blocked by extension CSP — see Pitfall #1). The custom renderer uses InstancedMesh to batch all nodes into 1-2 draw calls.
+
+### Rendering Architecture
+
+```
+GraphRenderer (graph-renderer.ts)
+├── THREE.WebGLRenderer + Scene + OrthographicCamera
+├── NodeMesh (node-mesh.ts)
+│   ├── InstancedMesh<CircleGeometry>     # All nodes in 1 draw call
+│   ├── InstancedMesh<RingGeometry>       # Selection ring (0-1 instances)
+│   ├── Per-instance: color, opacity via InstancedBufferAttribute
+│   └── Slot pool: freeSlots[] for incremental add/remove
+├── EdgeMesh (edge-mesh.ts)
+│   ├── LineSegments<BufferGeometry>      # All edges in 1 draw call
+│   ├── InstancedMesh<ConeGeometry>       # Directed arrows
+│   ├── Per-vertex color via BufferAttribute
+│   └── Slot pool: same free-list pattern as NodeMesh
+├── LabelLayer (label-layer.ts)
+│   ├── Separate Canvas2D overlay (not a Three.js object)
+│   ├── Projects world coords to screen via camera frustum
+│   ├── Frustum culling + max 200 labels + zoom gating
+│   └── Independent dirty tracking (world bounds + node count)
+├── CameraController (camera-controller.ts)
+│   ├── Symmetric OrthographicCamera frustum (position via view matrix only)
+│   ├── Pan, zoom-to-cursor, fit-to-view, fit-to-region
+│   └── onFrustumChange callback for viewport windowing
+├── SpatialHash (spatial-hash.ts)
+│   └── Grid-based O(1) candidate lookup for hit-testing
+└── Animation loop
+    ├── 3D render gated by needsRender dirty flag
+    └── Labels called every frame (internal dirty tracking)
+```
+
+**React integration:** `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.subscribe()` pushes data imperatively — no React re-renders during interactions. Graph container uses `absolute inset-0` positioning with `min-h-0` on flex parents.
+
+### Layout
+
+Layout runs in a Web Worker (`src/graph/layout/`):
+- **`force-layout.ts`** — Velocity Verlet integration + Barnes-Hut quadtree for O(n log n) repulsion
+- **`layout-worker.ts`** — Worker entry; sends Float32Array positions via Transferable (zero-copy)
+- **`layout-runner.ts`** — Main-thread API; creates worker, handles tick/done messages
+
+Pin/unpin support for node dragging during live simulation. Positions are persisted to SQLite after layout completes and after each drag-end (fire-and-forget).
+
+---
+
+## Viewport-Windowed Rendering
+
+For graphs with 10k+ nodes, the renderer uses viewport windowing — only nodes visible in the camera frustum are loaded from SQLite and rendered. Small graphs (<10k nodes) bypass windowing entirely.
+
+### Semantic Zoom Levels
+
+| Zoom Level | Threshold | What's Shown |
+|---|---|---|
+| `far` | zoom < 0.15 | Cluster summaries (one node per type, sized by count) |
+| `medium` | 0.15 ≤ zoom < 1.5 | Individual nodes, no labels, no arrows |
+| `close` | zoom ≥ 1.5 | Full detail: nodes + labels + directed arrows |
+
+### Data Flow
+
+```
+Camera frustum change (debounced 100ms)
+  → useViewportSync hook determines zoom level
+  → far:    query cluster summaries from DB (cached)
+  → medium/close: spatial viewport query (nodes in bounds + padding)
+  → diff against current visible set
+  → small diff: incremental addNodes/removeNodes/addEdges/removeEdges
+  → large diff: full setGraphData swap
+```
+
+### Spatial Queries
+
+`src/db/worker/queries/spatial-queries.ts` provides:
+
+| Function | Purpose |
+|---|---|
+| `getNodesInBounds(minX,minY,maxX,maxY,limit)` | Viewport query with `idx_nodes_xy` index |
+| `getEdgesForVisibleNodes(nodeIds[])` | Edges where both endpoints are visible |
+| `getClusterSummary()` | `GROUP BY type` with centroid + count |
+| `getInterClusterEdges()` | Edge counts between type pairs |
+| `batchUpdatePositions(updates[])` | Persist layout positions (500/batch) |
+| `getTotalNodeCount()` | Small-graph bypass check |
+
+### Incremental InstancedMesh Updates
+
+Both `NodeMesh` and `EdgeMesh` use a slot-pool pattern for O(1) add/remove without full rebuild:
+- **Add:** pop from `freeSlots[]` stack or append to end
+- **Remove:** zero-scale the transform matrix, push index to `freeSlots[]`
+- **Compact:** trim trailing free slots to prevent unbounded GPU instance count
+- **Grow:** double capacity when full, copy existing transforms/attributes to new InstancedMesh
+
+### Viewport Store
+
+`viewport-store.ts` (Zustand) tracks: `zoomLevel`, `frustumBounds`, `rawZoom`, `visibleNodes`, `visibleEdges`, `clusterNodes`, `clusterEdges`, `totalNodeCount`, `windowed`, `queryInFlight`.
+
+The `windowed` flag gates the entire viewport pipeline. When false, all data is loaded at once via the existing `setGraphData` path.
 
 ---
 
@@ -359,9 +481,45 @@ Both flows share the same diff review → merge pipeline after extraction comple
 
 ---
 
+## Chat Interface (RAG Q&A)
+
+A floating or sidebar chat for querying the knowledge graph via RAG-augmented LLM responses.
+
+### Data Flow
+
+```
+User question
+  → extractSearchTerms (stop-word filter + quoted phrases)
+  → FTS5/LIKE search for matching nodes
+  → expandSubgraph (1-hop connected edges + neighbors)
+  → getSourceExcerpts (stored page content, 1000 char limit)
+  → formatRAGPrompt (entities with node IDs, relationships, sources)
+  → LLM streaming response
+  → markdown rendering with clickable node links
+```
+
+### Node Links
+
+The RAG prompt includes node IDs in entity listings (`(id:abc-123)`) and instructs the LLM to reference entities as `[Entity Name](node:entity-id)`. The markdown renderer detects `node:` URLs and renders them as emerald-colored buttons. Clicking triggers `focusNodeCallback` (registered by `KnowledgeGraph.tsx`) which calls `selectNode` + `fitToView([nodeId])` to navigate the graph canvas.
+
+### Key Components
+
+| Component | Purpose |
+|---|---|
+| `ChatBot.tsx` | Container: float/sidebar modes, input history (ArrowUp/Down), node link click handler |
+| `ChatMessage.tsx` | Message bubbles: markdown renderer, hover-to-reveal copy button, `node:` link rendering |
+| `useChatQuery.ts` | Hook: orchestrates RAG retrieval → LLM stream → message state |
+| `useInputHistory.ts` | Ref-based input history (max 50), no re-renders |
+| `rag-pipeline.ts` | Search → expand → fetch sources → format prompt |
+| `ui-store.focusNodeCallback` | Bridge: chat node clicks → graph canvas select + zoom |
+
+---
+
 ## Pitfalls Encountered and Solutions
 
 ### Pitfall #1: Troika Blob URL Workers Blocked by Chrome Extension CSP
+
+> **Historical:** This pitfall applied to Reagraph, which has been replaced by a custom Three.js renderer that does not depend on troika.
 
 **Problem:** Reagraph depends on `troika-three-text` for WebGL text rendering. Troika uses `troika-worker-utils` which creates inline web workers via `URL.createObjectURL(new Blob([code]))`. Chrome MV3 CSP restricts `script-src` and `worker-src` to `'self'` only — `blob:` URLs are not allowed.
 
@@ -519,52 +677,13 @@ For the tab-to-side-panel toggle, the service worker calls `sidePanel.open({ win
 
 ---
 
-### Pitfall #8: Reagraph Clustering Only Works with Force-Directed Layouts
+### Pitfalls #8–#10: Reagraph-Specific Issues (Historical)
 
-**Problem:** Reagraph throws `Error: Clustering is only supported for the force directed layouts` when `clusterAttribute` is passed with non-force-directed layouts (tree, radial, hierarchical).
+> These pitfalls applied to Reagraph, which has been replaced by a custom Three.js renderer. Retained for reference.
 
-**Solution:** Conditionally pass `clusterAttribute` based on the active layout:
-
-```tsx
-clusterAttribute={
-  clusteringEnabled && layoutType.startsWith('forceDirected')
-    ? 'type'
-    : undefined
-}
-```
-
----
-
-### Pitfall #9: WebGL Canvas Gets Zero Height in Flexbox Layout
-
-**Problem:** Reagraph's `GraphCanvas` uses `position: absolute; inset: 0` internally (via react-three-fiber). This requires the parent container to have explicit pixel dimensions. In a flexbox column layout, a child with `flex: 1` gets its height from flexbox, but a grandchild with `height: 100%` may not resolve correctly because CSS percentage heights require an explicit `height` property on the parent (not just flex-derived height).
-
-Result: the WebGL canvas renders at 0x0 pixels — the graph exists in memory but nothing is visible.
-
-**Solution:** Three CSS changes:
-1. Added `min-h-0` to flex containers (overrides `min-height: auto` default which prevents shrinking)
-2. Added `relative` to the graph container div (positioning context for absolute children)
-3. Changed the `KnowledgeGraph` wrapper from `w-full h-full` to `absolute inset-0` (directly fills the positioned parent)
-
-```tsx
-{/* Layout */}
-<div className="flex-1 min-h-0 relative">
-  <KnowledgeGraph />
-</div>
-
-{/* KnowledgeGraph wrapper */}
-<div className="absolute inset-0">
-  <GraphCanvas ... />
-</div>
-```
-
----
-
-### Pitfall #10: `sizingType="attribute"` Without `sizingAttribute`
-
-**Problem:** Reagraph's `sizingType="attribute"` mode requires a `sizingAttribute` prop specifying which `node.data` field to read for sizing. Without it, Reagraph logs a warning and node sizes resolve to 0 or the default fallback, making nodes appear at unexpected sizes.
-
-**Solution:** Changed to `sizingType="default"` which reads the `size` property directly from each node object — the value we set during the DB-to-Reagraph transform.
+- **#8: Clustering only works with force-directed layouts** — Reagraph threw if `clusterAttribute` was passed with non-force layouts. Fixed by conditionally passing the prop.
+- **#9: WebGL canvas zero height in flexbox** — Reagraph's internal `position: absolute; inset: 0` needed explicit parent dimensions. Fixed with `min-h-0` + `absolute inset-0` wrapper. (The CSS pattern still applies to the custom renderer.)
+- **#10: `sizingType="attribute"` without `sizingAttribute`** — Caused unexpected node sizes. Fixed by using `sizingType="default"`.
 
 ---
 

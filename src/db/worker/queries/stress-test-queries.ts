@@ -50,6 +50,26 @@ export async function generateStressTestData(
   const nodeIds: string[] = [];
   const statements: Array<{ sql: string; params?: unknown[] }> = [];
 
+  // Compute cluster centroids: each NODE_TYPE gets a position on a circle
+  const clusterRadius = Math.sqrt(nodeCount) * 5;
+  const centroids = new Map<string, { cx: number; cy: number }>();
+  for (let i = 0; i < NODE_TYPES.length; i++) {
+    const angle = (2 * Math.PI * i) / NODE_TYPES.length;
+    centroids.set(NODE_TYPES[i], {
+      cx: Math.cos(angle) * clusterRadius,
+      cy: Math.sin(angle) * clusterRadius,
+    });
+  }
+
+  // Box-Muller for Gaussian jitter
+  function gaussianRandom(): number {
+    const u1 = Math.random();
+    const u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1 || 1e-10)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  const jitterSpread = clusterRadius * 0.25;
+
   // Generate nodes
   for (let i = 0; i < nodeCount; i++) {
     const id = generateId();
@@ -63,9 +83,13 @@ export async function generateStressTestData(
       score: Math.round(Math.random() * 100),
     });
 
+    const centroid = centroids.get(type)!;
+    const x = centroid.cx + gaussianRandom() * jitterSpread;
+    const y = centroid.cy + gaussianRandom() * jitterSpread;
+
     statements.push({
-      sql: `INSERT INTO nodes (id, identifier, label, type, properties, size) VALUES (?, ?, ?, ?, ?, ?);`,
-      params: [id, identifier, label, type, properties, 0.5 + Math.random() * 2],
+      sql: `INSERT INTO nodes (id, identifier, label, type, properties, size, x, y) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      params: [id, identifier, label, type, properties, 0.5 + Math.random() * 2, x, y],
     });
   }
 

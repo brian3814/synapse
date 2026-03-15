@@ -69,6 +69,29 @@ export interface DbIndexedFile {
   indexed_at: string;
 }
 
+// Slim projections for bulk graph loading (skip properties, timestamps)
+export interface DbNodeSlim {
+  id: string;
+  identifier: string | null;
+  label: string;
+  type: string;
+  color: string | null;
+  size: number;
+  source_url: string | null;
+  x: number | null;
+  y: number | null;
+}
+
+export interface DbEdgeSlim {
+  id: string;
+  source_id: string;
+  target_id: string;
+  label: string;
+  type: string;
+  weight: number;
+  directed: number;
+}
+
 // Application types (parsed from DB rows)
 export interface GraphNode {
   id: string;
@@ -164,7 +187,7 @@ export interface EntityMatch {
 }
 
 // LLM types
-export type LLMProvider = 'openai' | 'anthropic';
+export type LLMProvider = 'anthropic';
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -271,4 +294,23 @@ export interface AppSettings {
   llmConfig?: LLMConfig;
   clusteringEnabled: boolean;
   defaultLayout: string;
+}
+
+// Reading list types
+export type ReadingListItemStatus = 'pending' | 'fetching' | 'extracting' | 'extracted' | 'failed';
+
+// Stored in chrome.storage.local by the SW
+export interface ReadingListItem {
+  url: string;
+  title: string;
+  addedAt: number; // ms timestamp
+  status: ReadingListItemStatus;
+  error?: string;
+  summary?: string;
+  keyTopics?: string[];
+  extractedNodes?: Array<{ label: string; type: string; properties?: Record<string, unknown> }>;
+  extractedEdges?: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }>;
+  pageContent?: string;  // cleaned HTML text for source_content saving on merge
+  pageTitle?: string;
+  extractedAt?: number;
 }

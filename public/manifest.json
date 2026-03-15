@@ -3,7 +3,7 @@
   "name": "Knowledge Graph",
   "version": "0.1.0",
   "description": "A knowledge graph extension with LLM-powered entity extraction",
-  "minimum_chrome_version": "109",
+  "minimum_chrome_version": "124",
   "permissions": [
     "sidePanel",
     "storage",
@@ -11,7 +11,8 @@
     "scripting",
     "contextMenus",
     "offscreen",
-    "readingList"
+    "readingList",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
