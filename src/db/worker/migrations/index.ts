@@ -5,6 +5,7 @@ import * as migration003 from './003-source-content';
 import * as migration004 from './004-indexed-files';
 import * as migration005 from './005-note-node-type';
 import * as migration006 from './006-spatial-index';
+import * as migration007 from './007-reading-list-history';
 
 interface Migration {
   version: number;
@@ -13,7 +14,7 @@ interface Migration {
   optional?: boolean;
 }
 
-const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006];
+const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007];
 
 // Track whether FTS5 is available for search queries
 let fts5Available = false;

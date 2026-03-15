@@ -11,6 +11,7 @@ import * as entityResolutionQueries from './queries/entity-resolution-queries';
 import * as indexedFileQueries from './queries/indexed-file-queries';
 import * as stressTestQueries from './queries/stress-test-queries';
 import * as spatialQueries from './queries/spatial-queries';
+import * as readingListQueries from './queries/reading-list-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -331,6 +332,27 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'spatial.totalNodeCount': {
       ensureInit();
       return { result: await spatialQueries.getTotalNodeCount() };
+    }
+
+    // Reading list history operations
+    case 'readingList.save': {
+      ensureInit();
+      return { result: await readingListQueries.saveHistory(params as any) };
+    }
+
+    case 'readingList.getAll': {
+      ensureInit();
+      return { result: await readingListQueries.getAll() };
+    }
+
+    case 'readingList.getByUrl': {
+      ensureInit();
+      return { result: await readingListQueries.getByUrl(params as string) };
+    }
+
+    case 'readingList.getRecent': {
+      ensureInit();
+      return { result: await readingListQueries.getRecent(params as number) };
     }
 
     // Stress test

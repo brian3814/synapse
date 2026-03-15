@@ -235,6 +235,18 @@ export const spatial = {
     sendRequest('spatial.totalNodeCount') as Promise<number>,
 };
 
+// Reading list history operations
+export const readingList = {
+  save: (input: { url: string; title: string; summary: string; keyTopics: string[]; nodeIds: string[] }) =>
+    sendRequest('readingList.save', input) as Promise<any>,
+  getAll: () =>
+    sendRequest('readingList.getAll') as Promise<any[]>,
+  getByUrl: (url: string) =>
+    sendRequest('readingList.getByUrl', url) as Promise<any>,
+  getRecent: (limit: number) =>
+    sendRequest('readingList.getRecent', limit) as Promise<any[]>,
+};
+
 // Query engine operations
 export const graph = {
   query: (graphQuery: unknown) => sendRequest('query.execute', graphQuery),
