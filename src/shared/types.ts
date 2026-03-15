@@ -295,3 +295,22 @@ export interface AppSettings {
   clusteringEnabled: boolean;
   defaultLayout: string;
 }
+
+// Reading list types
+export type ReadingListItemStatus = 'pending' | 'fetching' | 'extracting' | 'extracted' | 'failed';
+
+// Stored in chrome.storage.local by the SW
+export interface ReadingListItem {
+  url: string;
+  title: string;
+  addedAt: number; // ms timestamp
+  status: ReadingListItemStatus;
+  error?: string;
+  summary?: string;
+  keyTopics?: string[];
+  extractedNodes?: Array<{ label: string; type: string; properties?: Record<string, unknown> }>;
+  extractedEdges?: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }>;
+  pageContent?: string;  // cleaned HTML text for source_content saving on merge
+  pageTitle?: string;
+  extractedAt?: number;
+}

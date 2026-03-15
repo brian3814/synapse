@@ -199,6 +199,50 @@ export interface PageTermsMessage extends ExtensionMessage {
   };
 }
 
+// Reading list messages
+// SW -> Offscreen (with API key injected by SW)
+export interface ReadingListExtractMessage extends ExtensionMessage {
+  type: 'READING_LIST_EXTRACT';
+  payload: {
+    url: string;
+    title: string;
+    apiKey: string; // injected by SW
+    model: string;
+  };
+}
+
+// Offscreen -> broadcast (SW + UI both pick up)
+export interface ReadingListExtractionResultMessage extends ExtensionMessage {
+  type: 'READING_LIST_EXTRACTION_RESULT';
+  payload: {
+    url: string;
+    success: boolean;
+    summary?: string;
+    keyTopics?: string[];
+    nodes?: Array<{ label: string; type: string; properties?: Record<string, unknown> }>;
+    edges?: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }>;
+    pageContent?: string;
+    pageTitle?: string;
+    error?: string;
+  };
+}
+
+// UI -> SW: after merge, remove from Chrome reading list
+export interface ReadingListRemoveMessage extends ExtensionMessage {
+  type: 'READING_LIST_REMOVE';
+  payload: {
+    url: string;
+  };
+}
+
+// UI -> SW: re-trigger extraction for a failed item
+export interface ReadingListRetryMessage extends ExtensionMessage {
+  type: 'READING_LIST_RETRY';
+  payload: {
+    url: string;
+  };
+}
+
 // Union of all chrome.runtime messages
 export type RuntimeMessage =
   | PageContentMessage
@@ -221,7 +265,11 @@ export type RuntimeMessage =
   | ToolResultMessage
   | AgentProgressMessage
   | ExtractPageTermsMessage
-  | PageTermsMessage;
+  | PageTermsMessage
+  | ReadingListExtractMessage
+  | ReadingListExtractionResultMessage
+  | ReadingListRemoveMessage
+  | ReadingListRetryMessage;
 
 // Helper to create messages
 export function createMessage<T extends ExtensionMessage>(
