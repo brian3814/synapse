@@ -58,6 +58,24 @@ export class EdgeMesh {
     this.arrowMesh.renderOrder = 2;
   }
 
+  private setEdgeEndpoints(idx: number, src: RenderNode, tgt: RenderNode) {
+    const dx = tgt.x - src.x;
+    const dy = tgt.y - src.y;
+    const dz = (tgt.z ?? 0) - (src.z ?? 0);
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const radiiSum = src.size + tgt.size;
+    if (dist > radiiSum && dist > 0.001) {
+      const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+      this.positionAttr.setXYZ(idx * 2,
+        src.x + nx * src.size, src.y + ny * src.size, (src.z ?? 0) + nz * src.size);
+      this.positionAttr.setXYZ(idx * 2 + 1,
+        tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, (tgt.z ?? 0) - nz * tgt.size);
+    } else {
+      this.positionAttr.setXYZ(idx * 2, src.x, src.y, src.z ?? 0);
+      this.positionAttr.setXYZ(idx * 2 + 1, src.x, src.y, src.z ?? 0);
+    }
+  }
+
   update(
     edges: RenderEdge[],
     nodeMap: Map<string, RenderNode>,
@@ -94,25 +112,10 @@ export class EdgeMesh {
       const src = nodeMap.get(edge.sourceId);
       const tgt = nodeMap.get(edge.targetId);
       if (!src || !tgt) {
-        // Missing endpoint - place at origin
         this.positionAttr.setXYZ(i * 2, 0, 0, 0);
         this.positionAttr.setXYZ(i * 2 + 1, 0, 0, 0);
       } else {
-        // Clip line endpoints to node surfaces so edges don't pass through nodes
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const radiiSum = src.size + tgt.size;
-        if (dist > radiiSum && dist > 0.001) {
-          const nx = dx / dist;
-          const ny = dy / dist;
-          this.positionAttr.setXYZ(i * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
-          this.positionAttr.setXYZ(i * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
-        } else {
-          // Nodes overlap — collapse to zero-length line
-          this.positionAttr.setXYZ(i * 2, src.x, src.y, 0);
-          this.positionAttr.setXYZ(i * 2 + 1, src.x, src.y, 0);
-        }
+        this.setEdgeEndpoints(i, src, tgt);
       }
 
       // Color
@@ -171,19 +174,7 @@ export class EdgeMesh {
       const src = nodeMap.get(edge.sourceId);
       const tgt = nodeMap.get(edge.targetId);
       if (src && tgt) {
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const radiiSum = src.size + tgt.size;
-        if (dist > radiiSum && dist > 0.001) {
-          const nx = dx / dist;
-          const ny = dy / dist;
-          this.positionAttr.setXYZ(idx * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
-          this.positionAttr.setXYZ(idx * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
-        } else {
-          this.positionAttr.setXYZ(idx * 2, src.x, src.y, 0);
-          this.positionAttr.setXYZ(idx * 2 + 1, src.x, src.y, 0);
-        }
+        this.setEdgeEndpoints(idx, src, tgt);
       } else {
         this.positionAttr.setXYZ(idx * 2, 0, 0, 0);
         this.positionAttr.setXYZ(idx * 2 + 1, 0, 0, 0);
@@ -281,8 +272,10 @@ export class EdgeMesh {
       const tgt = nodeMap.get(edge.targetId);
       if (!src || !tgt) continue;
 
-      // Arrow direction: from source to target
-      this._dir.set(tgt.x - src.x, tgt.y - src.y, 0);
+      // Arrow direction: from source to target (3D-aware)
+      const sz = src.z ?? 0;
+      const tz = tgt.z ?? 0;
+      this._dir.set(tgt.x - src.x, tgt.y - src.y, tz - sz);
       const len = this._dir.length();
       if (len < 0.001) continue;
       this._dir.normalize();
@@ -291,12 +284,13 @@ export class EdgeMesh {
       const offset = tgt.size + ARROW_HEIGHT * 0.5;
       const ax = tgt.x - this._dir.x * offset;
       const ay = tgt.y - this._dir.y * offset;
+      const az = tz - this._dir.z * offset;
 
       // Quaternion to rotate from +Y to edge direction
       this._quat.setFromUnitVectors(this._up, this._dir);
 
       this._mat.compose(
-        new THREE.Vector3(ax, ay, 0),
+        new THREE.Vector3(ax, ay, az),
         this._quat,
         new THREE.Vector3(1, 1, 1)
       );
@@ -324,20 +318,7 @@ export class EdgeMesh {
       const src = nodeMap.get(edge.sourceId);
       const tgt = nodeMap.get(edge.targetId);
       if (!src || !tgt) continue;
-      // Clip line endpoints to node surfaces
-      const dx = tgt.x - src.x;
-      const dy = tgt.y - src.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const radiiSum = src.size + tgt.size;
-      if (dist > radiiSum && dist > 0.001) {
-        const nx = dx / dist;
-        const ny = dy / dist;
-        this.positionAttr.setXYZ(idx * 2, src.x + nx * src.size, src.y + ny * src.size, 0);
-        this.positionAttr.setXYZ(idx * 2 + 1, tgt.x - nx * tgt.size, tgt.y - ny * tgt.size, 0);
-      } else {
-        this.positionAttr.setXYZ(idx * 2, src.x, src.y, 0);
-        this.positionAttr.setXYZ(idx * 2 + 1, src.x, src.y, 0);
-      }
+      this.setEdgeEndpoints(idx, src, tgt);
     }
     this.positionAttr.needsUpdate = true;
     this.updateArrows(edges, nodeMap, theme);

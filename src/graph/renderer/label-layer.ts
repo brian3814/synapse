@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RenderNode, RenderTheme, ZoomLevel } from './types';
+import type { RenderNode, RenderTheme, ZoomLevel, ViewMode } from './types';
 
 const FONT_SIZE = 11;
 const FONT = `${FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
@@ -15,6 +15,8 @@ export class LabelLayer {
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
   private zoomLevel: ZoomLevel = 'close';
+  private viewMode: ViewMode = '2d';
+  private readonly _v3 = new THREE.Vector3();
 
   // Dirty tracking: skip redraw if world-space view bounds and node count haven't changed
   private lastWorldLeft = NaN;
@@ -43,6 +45,11 @@ export class LabelLayer {
     this.zoomLevel = level;
   }
 
+  setViewMode(mode: ViewMode) {
+    this.viewMode = mode;
+    this.dirty = true;
+  }
+
   resize(width: number, height: number) {
     this.dpr = window.devicePixelRatio || 1;
     this.canvas.width = width * this.dpr;
@@ -52,19 +59,28 @@ export class LabelLayer {
   update(
     nodes: RenderNode[],
     theme: RenderTheme,
-    camera: THREE.OrthographicCamera,
+    camera: THREE.Camera,
     canvasWidth: number,
     canvasHeight: number
   ) {
     const ctx = this.ctx;
     const dpr = this.dpr;
 
-    // Compute world-space view bounds (camera frustum is symmetric;
-    // camera.position provides the pan offset).
-    const worldLeft = camera.position.x + camera.left;
-    const worldRight = camera.position.x + camera.right;
-    const worldTop = camera.position.y + camera.top;
-    const worldBottom = camera.position.y + camera.bottom;
+    // Compute world-space view bounds for dirty check
+    let worldLeft: number, worldRight: number, worldTop: number, worldBottom: number;
+    if (camera instanceof THREE.OrthographicCamera) {
+      worldLeft = camera.position.x + camera.left;
+      worldRight = camera.position.x + camera.right;
+      worldTop = camera.position.y + camera.top;
+      worldBottom = camera.position.y + camera.bottom;
+    } else {
+      // For perspective camera, use matrixWorld elements as a robust proxy
+      const m = camera.matrixWorldInverse.elements;
+      worldLeft = m[0] + m[4];
+      worldRight = m[1] + m[5];
+      worldTop = m[2] + m[6];
+      worldBottom = m[12] + m[13];
+    }
 
     // Skip if world bounds and data haven't changed
     if (
@@ -96,8 +112,12 @@ export class LabelLayer {
     ctx.textBaseline = 'top';
     ctx.fillStyle = theme.labelColor;
 
-    const viewWidth = worldRight - worldLeft;
-    const viewHeight = worldTop - worldBottom;
+    // View bounds for 2D projection
+    let viewWidth = 0, viewHeight = 0;
+    if (camera instanceof THREE.OrthographicCamera) {
+      viewWidth = (camera.position.x + camera.right) - (camera.position.x + camera.left);
+      viewHeight = (camera.position.y + camera.top) - (camera.position.y + camera.bottom);
+    }
 
     // Only show labels when zoomed in enough (skip when too many visible)
     // At wide zoom, labels become unreadable noise
@@ -107,9 +127,21 @@ export class LabelLayer {
     for (const node of nodes) {
       if (rendered >= maxLabelsToRender) break;
 
-      // Project world position to screen
-      const screenX = ((node.x - worldLeft) / viewWidth) * canvasWidth;
-      const screenY = ((worldTop - node.y) / viewHeight) * canvasHeight;
+      let screenX: number, screenY: number;
+
+      if (this.viewMode === '3d') {
+        this._v3.set(node.x, node.y, node.z ?? 0);
+        this._v3.project(camera);
+        if (this._v3.z > 1) continue; // behind camera
+        screenX = (this._v3.x * 0.5 + 0.5) * canvasWidth;
+        screenY = (-this._v3.y * 0.5 + 0.5) * canvasHeight;
+      } else {
+        const ortho = camera as THREE.OrthographicCamera;
+        const wLeft = ortho.position.x + ortho.left;
+        const wTop = ortho.position.y + ortho.top;
+        screenX = ((node.x - wLeft) / viewWidth) * canvasWidth;
+        screenY = ((wTop - node.y) / viewHeight) * canvasHeight;
+      }
 
       // Frustum cull
       if (screenX < -50 || screenX > canvasWidth + 50 ||

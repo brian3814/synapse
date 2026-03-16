@@ -11,6 +11,7 @@ export function graphNodesToRender(
     label: node.label,
     x: node.x ?? 0,
     y: node.y ?? 0,
+    z: node.z ?? 0,
     color: node.color || typeColorMap?.get(node.type) || FALLBACK_TYPE_COLOR,
     size: node.size,
     data: {

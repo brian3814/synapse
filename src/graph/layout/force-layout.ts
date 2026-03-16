@@ -1,6 +1,6 @@
 import type { LayoutNodeInput, LayoutEdgeInput, LayoutOptions } from './layout-protocol';
 
-const DEFAULTS: Required<LayoutOptions> = {
+const DEFAULTS: Required<Omit<LayoutOptions, 'dimensions'>> = {
   iterations: 300,
   alphaDecay: 0.01,
   repulsionStrength: 100,
@@ -33,7 +33,7 @@ export class ForceLayout {
   private edges: { srcIdx: number; tgtIdx: number }[];
   private pinnedNodes = new Set<number>();
   private alpha = 1.0;
-  private opts: Required<LayoutOptions>;
+  private opts: Required<Omit<LayoutOptions, 'dimensions'>>;
   private stopped = false;
 
   constructor(
@@ -41,7 +41,8 @@ export class ForceLayout {
     edges: LayoutEdgeInput[],
     options?: LayoutOptions
   ) {
-    this.opts = { ...DEFAULTS, ...options };
+    const { dimensions: _, ...rest } = options ?? {};
+    this.opts = { ...DEFAULTS, ...rest };
     this.nodeCount = nodes.length;
     this.nodeIds = nodes.map((n) => n.id);
     this.nodeIdToIndex = new Map();

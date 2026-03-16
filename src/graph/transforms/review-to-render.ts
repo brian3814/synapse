@@ -26,6 +26,7 @@ export function reviewNodesToRender(
         label: node.label,
         x: 0,
         y: 0,
+        z: 0,
         color,
         size: 1,
         data: {
@@ -47,6 +48,7 @@ export function existingNodesToRender(
     label: node.label,
     x: node.x ?? 0,
     y: node.y ?? 0,
+    z: node.z ?? 0,
     color: EXISTING_NODE_COLOR,
     size: node.size,
     data: {
@@ -97,6 +99,7 @@ export function reviewNodesToOverlayRender(
         label: node.label,
         x: 0,
         y: 0,
+        z: 0,
         color,
         size: 1,
         data: {

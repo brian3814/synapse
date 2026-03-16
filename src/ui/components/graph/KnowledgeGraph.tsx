@@ -26,6 +26,7 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const addNodesToSelection = useGraphStore((s) => s.addNodesToSelection);
   const selectEdge = useGraphStore((s) => s.selectEdge);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const is3D = useUIStore((s) => s.is3D);
   const types = useNodeTypeStore((s) => s.types);
 
   const adjacency = useGraphStore((s) => s.adjacency);
@@ -153,6 +154,7 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
         onCanvasClick={handleCanvasClick}
         onLassoSelect={handleLassoSelect}
         compact={compact}
+        is3D={is3D}
       />
       {!compact && <GraphControls graphRef={graphRef} />}
     </div>

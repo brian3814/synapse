@@ -17,6 +17,7 @@ function slimToRenderNode(row: DbNodeSlim, typeColorMap: Map<string, string>): R
     label: row.label,
     x: row.x ?? 0,
     y: row.y ?? 0,
+    z: 0,
     color: row.color ?? typeColorMap.get(row.type) ?? '#6B7280',
     size: row.size,
     data: { type: row.type, identifier: row.identifier },

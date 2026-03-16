@@ -3,10 +3,13 @@ export interface RenderNode {
   label: string;
   x: number;
   y: number;
+  z: number;
   color: string; // hex
   size: number;
   data?: Record<string, unknown>;
 }
+
+export type ViewMode = '2d' | '3d';
 
 export interface RenderEdge {
   id: string;
@@ -53,6 +56,7 @@ export interface GraphRendererInstance {
   addEdges(edges: RenderEdge[]): void;
   removeEdges(ids: string[]): void;
   setZoomLevel(level: ZoomLevel): void;
+  setViewMode(mode: ViewMode): void;
   setSelection(nodeIds: Set<string>, edgeId: string | null): void;
   setHover(nodeId: string | null): void;
   setPathHighlight(nodeIds: Set<string>, edgeIds: Set<string>): void;

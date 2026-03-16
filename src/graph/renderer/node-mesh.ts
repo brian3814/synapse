@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import type { RenderNode, RenderTheme } from './types';
+import type { RenderNode, RenderTheme, ViewMode } from './types';
 
 const SEGMENTS = 32;
+const SPHERE_W_SEGMENTS = 16;
+const SPHERE_H_SEGMENTS = 12;
 
 export class NodeMesh {
   readonly mesh: THREE.InstancedMesh;
@@ -14,6 +16,7 @@ export class NodeMesh {
   private nodeIds: string[] = [];
   private nodeIndexMap = new Map<string, number>();
   private freeSlots: number[] = [];
+  private currentViewMode: ViewMode = '2d';
 
   // Reusable temporaries
   private readonly _mat = new THREE.Matrix4();
@@ -113,8 +116,9 @@ export class NodeMesh {
       this.nodeIndexMap.set(node.id, i);
 
       // Position + scale
-      this._mat.makeScale(node.size, node.size, 1);
-      this._mat.setPosition(node.x, node.y, 0);
+      const s = node.size;
+      this._mat.makeScale(s, s, s);
+      this._mat.setPosition(node.x, node.y, node.z);
       this.mesh.setMatrixAt(i, this._mat);
 
       // Color
@@ -146,8 +150,9 @@ export class NodeMesh {
       }
       this.nodeIndexMap.set(node.id, idx);
 
-      this._mat.makeScale(node.size, node.size, 1);
-      this._mat.setPosition(node.x, node.y, 0);
+      const s = node.size;
+      this._mat.makeScale(s, s, s);
+      this._mat.setPosition(node.x, node.y, node.z);
       this.mesh.setMatrixAt(idx, this._mat);
 
       this._color.set(node.color);
@@ -182,13 +187,13 @@ export class NodeMesh {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  updatePositions(positions: Map<string, { x: number; y: number }>, nodeMap: Map<string, RenderNode>) {
+  updatePositions(positions: Map<string, { x: number; y: number; z?: number }>, nodeMap: Map<string, RenderNode>) {
     for (const [id, pos] of positions) {
       const idx = this.nodeIndexMap.get(id);
       if (idx === undefined) continue;
       const size = nodeMap.get(id)?.size ?? 1;
-      this._mat.makeScale(size, size, 1);
-      this._mat.setPosition(pos.x, pos.y, 0);
+      this._mat.makeScale(size, size, size);
+      this._mat.setPosition(pos.x, pos.y, pos.z ?? 0);
       this.mesh.setMatrixAt(idx, this._mat);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -302,6 +307,52 @@ export class NodeMesh {
 
   getCount(): number {
     return this.count;
+  }
+
+  setViewMode(mode: ViewMode) {
+    if (mode === this.currentViewMode) return;
+    this.currentViewMode = mode;
+
+    const parent = this.mesh.parent;
+    const oldCount = this.mesh.count;
+
+    // Create new geometry and material
+    const geo = mode === '3d'
+      ? new THREE.SphereGeometry(1, SPHERE_W_SEGMENTS, SPHERE_H_SEGMENTS)
+      : new THREE.CircleGeometry(1, SEGMENTS);
+    const mat = mode === '3d'
+      ? new THREE.MeshLambertMaterial({ transparent: true })
+      : new THREE.MeshBasicMaterial({ transparent: true, depthTest: false });
+
+    const newMesh = new THREE.InstancedMesh(geo, mat, this.capacity);
+    newMesh.renderOrder = this.mesh.renderOrder;
+
+    // Copy transforms, colors, opacity
+    for (let i = 0; i < this.count; i++) {
+      this.mesh.getMatrixAt(i, this._mat);
+      newMesh.setMatrixAt(i, this._mat);
+    }
+    const newColors = new Float32Array(this.capacity * 3);
+    newColors.set(this.colorAttr.array.slice(0, this.count * 3));
+    const newColorAttr = new THREE.InstancedBufferAttribute(newColors, 3);
+    newMesh.instanceColor = newColorAttr;
+
+    const newOpacity = new Float32Array(this.capacity);
+    newOpacity.set(this.opacityAttr.array.slice(0, this.count));
+    const newOpacityAttr = new THREE.InstancedBufferAttribute(newOpacity, 1);
+    newMesh.geometry.setAttribute('instanceOpacity', newOpacityAttr);
+    newMesh.count = oldCount;
+
+    if (parent) {
+      parent.remove(this.mesh);
+      parent.add(newMesh);
+    }
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    this.mesh.dispose();
+    (this as any).mesh = newMesh;
+    this.colorAttr = newColorAttr;
+    this.opacityAttr = newOpacityAttr;
   }
 
   dispose() {

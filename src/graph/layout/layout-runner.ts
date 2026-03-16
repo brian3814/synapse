@@ -2,8 +2,8 @@ import type { LayoutRequest, LayoutResponse, LayoutNodeInput, LayoutEdgeInput, L
 
 export class LayoutRunner {
   private worker: Worker | null = null;
-  private onTick?: (positions: Float32Array, alpha: number) => void;
-  private onDone?: (positions: Float32Array) => void;
+  private onTick?: (positions: Float32Array, alpha: number, dimensions: number) => void;
+  private onDone?: (positions: Float32Array, dimensions: number) => void;
 
   constructor() {}
 
@@ -11,8 +11,8 @@ export class LayoutRunner {
     nodes: LayoutNodeInput[],
     edges: LayoutEdgeInput[],
     callbacks: {
-      onTick: (positions: Float32Array, alpha: number) => void;
-      onDone: (positions: Float32Array) => void;
+      onTick: (positions: Float32Array, alpha: number, dimensions: number) => void;
+      onDone: (positions: Float32Array, dimensions: number) => void;
     },
     options?: LayoutOptions
   ) {
@@ -52,10 +52,10 @@ export class LayoutRunner {
   private handleMessage(msg: LayoutResponse) {
     switch (msg.type) {
       case 'tick':
-        this.onTick?.(msg.positions, msg.alpha);
+        this.onTick?.(msg.positions, msg.alpha, msg.dimensions);
         break;
       case 'done':
-        this.onDone?.(msg.positions);
+        this.onDone?.(msg.positions, msg.dimensions);
         break;
     }
   }

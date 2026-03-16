@@ -21,11 +21,10 @@ export class LassoOverlay {
   update(
     startWorld: { x: number; y: number },
     endWorld: { x: number; y: number },
-    camera: THREE.OrthographicCamera,
+    camera: THREE.Camera,
     canvasW: number,
     canvasH: number
   ) {
-    // Project world coords to screen pixels
     const s = this.worldToScreen(startWorld, camera, canvasW, canvasH);
     const e = this.worldToScreen(endWorld, camera, canvasW, canvasH);
 
@@ -51,18 +50,27 @@ export class LassoOverlay {
 
   private worldToScreen(
     world: { x: number; y: number },
-    camera: THREE.OrthographicCamera,
+    camera: THREE.Camera,
     canvasW: number,
     canvasH: number
   ): { x: number; y: number } {
-    const viewWidth = camera.right - camera.left;
-    const viewHeight = camera.top - camera.bottom;
-    const worldLeft = camera.position.x + camera.left;
-    const worldTop = camera.position.y + camera.top;
+    if (camera instanceof THREE.OrthographicCamera) {
+      const viewWidth = camera.right - camera.left;
+      const viewHeight = camera.top - camera.bottom;
+      const worldLeft = camera.position.x + camera.left;
+      const worldTop = camera.position.y + camera.top;
+      return {
+        x: ((world.x - worldLeft) / viewWidth) * canvasW,
+        y: ((worldTop - world.y) / viewHeight) * canvasH,
+      };
+    }
 
+    // PerspectiveCamera: project 3D→screen via camera matrix
+    const v = new THREE.Vector3(world.x, world.y, 0);
+    v.project(camera);
     return {
-      x: ((world.x - worldLeft) / viewWidth) * canvasW,
-      y: ((worldTop - world.y) / viewHeight) * canvasH,
+      x: (v.x * 0.5 + 0.5) * canvasW,
+      y: (-v.y * 0.5 + 0.5) * canvasH,
     };
   }
 }

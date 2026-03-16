@@ -14,6 +14,7 @@ export function clusterSummaryToRenderNodes(
     label: `${c.type} (${c.count})`,
     x: c.avgX,
     y: c.avgY,
+    z: 0,
     color: typeColorMap.get(c.type) ?? FALLBACK_TYPE_COLOR,
     size: Math.max(MIN_CLUSTER_SIZE, Math.sqrt(c.count) * CLUSTER_SCALE),
     data: { isCluster: true, type: c.type, count: c.count },

@@ -48,4 +48,5 @@ export const SMALL_GRAPH_THRESHOLD = 10000;
 
 export const LAYOUT_OPTIONS = [
   { id: 'forceDirected2d', label: 'Force Directed 2D' },
+  { id: 'forceDirected3d', label: 'Force Directed 3D' },
 ] as const;

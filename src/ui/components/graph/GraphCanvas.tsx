@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { GraphRenderer } from '../../../graph/renderer/graph-renderer';
-import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers } from '../../../graph/renderer/types';
+import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers, ViewMode } from '../../../graph/renderer/types';
 import { LayoutRunner } from '../../../graph/layout/layout-runner';
 import { spatial } from '../../../db/client/db-client';
 import { useViewportSync } from '../../hooks/useViewportSync';
@@ -19,6 +19,7 @@ interface GraphCanvasProps {
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void;
   theme?: Partial<RenderTheme>;
   compact?: boolean;
+  is3D?: boolean;
 }
 
 export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
@@ -121,25 +122,27 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
           renderer.fitToView();
         } else {
           // Run force layout
+          const dim = propsRef.current.is3D ? 3 : 2;
           layout.start(
-            nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y })),
+            nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
             props.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
             {
-              onTick: (positions, _alpha) => {
+              onTick: (positions, _alpha, dimensions) => {
                 const r = rendererRef.current;
-                if (r) applyPositions(r, r.getNodes(), positions);
+                if (r) applyPositions(r, r.getNodes(), positions, dimensions);
               },
-              onDone: (positions) => {
+              onDone: (positions, dimensions) => {
                 const r = rendererRef.current;
                 if (r) {
-                  applyPositions(r, r.getNodes(), positions);
+                  applyPositions(r, r.getNodes(), positions, dimensions);
                   r.fitToView();
                   // Persist layout positions to DB (fire-and-forget)
                   const nodes = r.getNodes();
+                  const stride = dimensions;
                   const updates: Array<{ id: string; x: number; y: number }> = [];
                   for (let i = 0; i < nodes.length; i++) {
-                    const x = positions[i * 2];
-                    const y = positions[i * 2 + 1];
+                    const x = positions[i * stride];
+                    const y = positions[i * stride + 1];
                     if (!isNaN(x) && !isNaN(y)) {
                       updates.push({ id: nodes[i].id, x, y });
                     }
@@ -149,13 +152,48 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
                   }
                 }
               },
-            }
+            },
+            { dimensions: dim as 2 | 3 }
           );
         }
       }
 
       nodeIdsRef.current = newNodeIds;
     }, [props.nodes, props.edges, props.windowed]);
+
+    // Update view mode (2D/3D) and re-run layout
+    useEffect(() => {
+      const renderer = rendererRef.current;
+      const layout = layoutRef.current;
+      if (!renderer) return;
+      const mode = props.is3D ? '3d' : '2d';
+      renderer.setViewMode(mode);
+
+      // Re-run layout with correct dimensions when toggling modes
+      if (layout && renderer.getNodes().length > 0) {
+        const nodes = renderer.getNodes();
+        const dim = props.is3D ? 3 : 2;
+        layout.start(
+          nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
+          propsRef.current.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
+          {
+            onTick: (positions, _alpha, dimensions) => {
+              const r = rendererRef.current;
+              if (r) applyPositions(r, r.getNodes(), positions, dimensions);
+            },
+            onDone: (positions, dimensions) => {
+              const r = rendererRef.current;
+              if (r) {
+                applyPositions(r, r.getNodes(), positions, dimensions);
+                r.fitToView();
+              }
+            },
+          },
+          { dimensions: dim as 2 | 3 }
+        );
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.is3D]);
 
     // Update selection
     useEffect(() => {
@@ -191,14 +229,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
 function applyPositions(
   renderer: GraphRenderer,
   nodes: RenderNode[],
-  positions: Float32Array
+  positions: Float32Array,
+  dimensions: number = 2
 ) {
-  const posMap = new Map<string, { x: number; y: number }>();
+  const stride = dimensions;
+  const posMap = new Map<string, { x: number; y: number; z?: number }>();
   for (let i = 0; i < nodes.length; i++) {
-    const x = positions[i * 2];
-    const y = positions[i * 2 + 1];
+    const x = positions[i * stride];
+    const y = positions[i * stride + 1];
+    const z = stride === 3 ? positions[i * stride + 2] : undefined;
     if (!isNaN(x) && !isNaN(y)) {
-      posMap.set(nodes[i].id, { x, y });
+      posMap.set(nodes[i].id, { x, y, z });
     }
   }
   renderer.updatePositions(posMap);

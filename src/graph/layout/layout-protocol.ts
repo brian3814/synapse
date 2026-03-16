@@ -2,6 +2,7 @@ export interface LayoutNodeInput {
   id: string;
   x: number;
   y: number;
+  z?: number;
 }
 
 export interface LayoutEdgeInput {
@@ -15,6 +16,7 @@ export interface LayoutOptions {
   repulsionStrength?: number;
   attractionStrength?: number;
   centerStrength?: number;
+  dimensions?: 2 | 3;
 }
 
 export type LayoutRequest =
@@ -24,10 +26,10 @@ export type LayoutRequest =
       edges: LayoutEdgeInput[];
       options?: LayoutOptions;
     }
-  | { type: 'pin'; nodeId: string; x: number; y: number }
+  | { type: 'pin'; nodeId: string; x: number; y: number; z?: number }
   | { type: 'unpin'; nodeId: string }
   | { type: 'stop' };
 
 export type LayoutResponse =
-  | { type: 'tick'; positions: Float32Array; alpha: number }
-  | { type: 'done'; positions: Float32Array };
+  | { type: 'tick'; positions: Float32Array; alpha: number; dimensions: number }
+  | { type: 'done'; positions: Float32Array; dimensions: number };

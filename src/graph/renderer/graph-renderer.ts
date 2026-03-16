@@ -8,6 +8,7 @@ import type {
   GraphEventMap,
   GraphEventType,
   Modifiers,
+  ViewMode,
   ZoomLevel,
 } from './types';
 import { NodeMesh } from './node-mesh';
@@ -59,6 +60,9 @@ export class GraphRenderer implements GraphRendererInstance {
   private needsRender = true;
   private spatialHash = new SpatialHash();
   private lassoOverlay: LassoOverlay;
+  private currentViewMode: ViewMode = '2d';
+  private ambientLight: THREE.AmbientLight | null = null;
+  private directionalLight: THREE.DirectionalLight | null = null;
 
   // Event listeners
   private listeners = new Map<string, Set<EventCallback<any>>>();
@@ -243,13 +247,66 @@ export class GraphRenderer implements GraphRendererInstance {
     this.markDirty();
   }
 
-  updatePositions(positions: Map<string, { x: number; y: number }>) {
+  setViewMode(mode: ViewMode) {
+    if (mode === this.currentViewMode) return;
+    this.currentViewMode = mode;
+
+    // Switch camera
+    this.cameraController.setViewMode(mode);
+
+    // Switch node geometry
+    this.nodeMesh.setViewMode(mode);
+
+    // Update label layer
+    this.labelLayer.setViewMode(mode);
+
+    // Manage lighting for 3D
+    if (mode === '3d') {
+      if (!this.ambientLight) {
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.scene.add(this.ambientLight);
+      }
+      if (!this.directionalLight) {
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        this.directionalLight.position.set(50, 200, 100);
+        this.scene.add(this.directionalLight);
+      }
+      // Enable depth test on edges and arrows
+      (this.edgeMesh.linesMesh.material as THREE.Material).depthTest = true;
+      (this.edgeMesh.arrowMesh.material as THREE.Material).depthTest = true;
+    } else {
+      if (this.ambientLight) {
+        this.scene.remove(this.ambientLight);
+        this.ambientLight.dispose();
+        this.ambientLight = null;
+      }
+      if (this.directionalLight) {
+        this.scene.remove(this.directionalLight);
+        this.directionalLight.dispose();
+        this.directionalLight = null;
+      }
+      (this.edgeMesh.linesMesh.material as THREE.Material).depthTest = false;
+      (this.edgeMesh.arrowMesh.material as THREE.Material).depthTest = false;
+    }
+
+    // Re-apply data with current positions
+    if (this.nodes.length > 0) {
+      this.nodeMesh.update(this.nodes);
+      this.edgeMesh.update(this.edges, this.nodeMap, this.theme);
+      this.applySelection();
+    }
+
+    this.markDirty();
+  }
+
+  updatePositions(positions: Map<string, { x: number; y: number; z?: number }>) {
     // Update RenderNode positions
     for (const [id, pos] of positions) {
       const node = this.nodeMap.get(id);
       if (node) {
         node.x = pos.x;
         node.y = pos.y;
+        if (pos.z !== undefined) node.z = pos.z;
       }
     }
 
