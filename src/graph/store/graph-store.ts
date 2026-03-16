@@ -75,7 +75,7 @@ interface GraphStore {
   nodes: GraphNode[];
   edges: GraphEdge[];
   adjacency: AdjacencyMap;
-  selectedNodeId: string | null;
+  selectedNodeIds: Set<string>;
   selectedEdgeId: string | null;
   loading: boolean;
   error: string | null;
@@ -90,6 +90,9 @@ interface GraphStore {
   deleteEdge: (id: string) => Promise<boolean>;
   clearAll: () => Promise<boolean>;
   selectNode: (id: string | null) => void;
+  toggleNodeSelection: (id: string) => void;
+  selectNodes: (ids: Set<string>) => void;
+  addNodesToSelection: (ids: Set<string>) => void;
   selectEdge: (id: string | null) => void;
   clearSelection: () => void;
   startSyncListener: () => () => void;
@@ -99,7 +102,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   nodes: [],
   edges: [],
   adjacency: new Map(),
-  selectedNodeId: null,
+  selectedNodeIds: new Set<string>(),
   selectedEdgeId: null,
   loading: false,
   error: null,
@@ -173,12 +176,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
           const edges = state.edges.filter(
             (e) => e.sourceId !== id && e.targetId !== id
           );
+          const selectedNodeIds = new Set(state.selectedNodeIds);
+          selectedNodeIds.delete(id);
           return {
             nodes: state.nodes.filter((n) => n.id !== id),
             edges,
             adjacency: buildAdjacencyMap(edges),
-            selectedNodeId:
-              state.selectedNodeId === id ? null : state.selectedNodeId,
+            selectedNodeIds,
           };
         });
       }
@@ -264,7 +268,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
         nodes: [],
         edges: [],
         adjacency: new Map(),
-        selectedNodeId: null,
+        selectedNodeIds: new Set<string>(),
         selectedEdgeId: null,
       });
       return true;
@@ -274,9 +278,23 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     }
   },
 
-  selectNode: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
-  selectEdge: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
-  clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null }),
+  selectNode: (id) => set({
+    selectedNodeIds: id ? new Set([id]) : new Set<string>(),
+    selectedEdgeId: null,
+  }),
+  toggleNodeSelection: (id) => set((state) => {
+    const next = new Set(state.selectedNodeIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return { selectedNodeIds: next, selectedEdgeId: null };
+  }),
+  selectNodes: (ids) => set({ selectedNodeIds: ids, selectedEdgeId: null }),
+  addNodesToSelection: (ids) => set((state) => {
+    const next = new Set(state.selectedNodeIds);
+    for (const id of ids) next.add(id);
+    return { selectedNodeIds: next, selectedEdgeId: null };
+  }),
+  selectEdge: (id) => set({ selectedEdgeId: id, selectedNodeIds: new Set<string>() }),
+  clearSelection: () => set({ selectedNodeIds: new Set<string>(), selectedEdgeId: null }),
 
   startSyncListener: () => {
     const channel = new BroadcastChannel(SYNC_CHANNEL);
@@ -309,12 +327,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
             const edges = state.edges.filter(
               (e) => e.sourceId !== id && e.targetId !== id
             );
+            const selectedNodeIds = new Set(state.selectedNodeIds);
+            selectedNodeIds.delete(id);
             return {
               nodes: state.nodes.filter((n) => n.id !== id),
               edges,
               adjacency: buildAdjacencyMap(edges),
-              selectedNodeId:
-                state.selectedNodeId === id ? null : state.selectedNodeId,
+              selectedNodeIds,
             };
           });
           break;

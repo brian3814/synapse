@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RenderNode, FrustumBounds } from './types';
+import type { RenderNode, FrustumBounds, Modifiers } from './types';
 
 const ZOOM_FACTOR = 1.2;
 const MIN_ZOOM = 0.001;
@@ -22,6 +22,11 @@ export class CameraController {
   isDragging = false;
   dragNodeId: string | null = null;
 
+  // Lasso state
+  private isLassoing = false;
+  private lassoStart = { x: 0, y: 0 };
+  private lassoEnd = { x: 0, y: 0 };
+
   // Bound handlers for cleanup
   private onWheelBound: (e: WheelEvent) => void;
   private onPointerDownBound: (e: PointerEvent) => void;
@@ -31,7 +36,10 @@ export class CameraController {
   // External callbacks
   onDragMove?: (worldX: number, worldY: number) => void;
   onPointerMoveWorld?: (screenX: number, screenY: number) => void;
-  onClick?: (screenX: number, screenY: number) => void;
+  onClick?: (screenX: number, screenY: number, modifiers: Modifiers) => void;
+  onDragEnd?: (nodeId: string, worldX: number, worldY: number) => void;
+  onLassoUpdate?: (start: { x: number; y: number }, end: { x: number; y: number }) => void;
+  onLassoEnd?: (start: { x: number; y: number }, end: { x: number; y: number }, modifiers: Modifiers) => void;
   onFrustumChange?: (bounds: FrustumBounds, zoom: number) => void;
   onFrustumChangeInternal?: () => void;
 
@@ -102,6 +110,16 @@ export class CameraController {
     this.clickStartScreen = { x: e.clientX, y: e.clientY };
     this.pointerMoved = false;
 
+    if (e.shiftKey && !this.isDragging) {
+      // Start lasso selection
+      this.isLassoing = true;
+      const world = this.screenToWorld(e.clientX, e.clientY);
+      this.lassoStart = world;
+      this.lassoEnd = world;
+      this.canvas.style.cursor = 'crosshair';
+      return;
+    }
+
     if (!this.isDragging) {
       // Start pan
       this.isPanning = true;
@@ -118,6 +136,12 @@ export class CameraController {
     const dx = e.clientX - this.clickStartScreen.x;
     const dy = e.clientY - this.clickStartScreen.y;
     if (dx * dx + dy * dy > 9) this.pointerMoved = true;
+
+    if (this.isLassoing) {
+      this.lassoEnd = this.screenToWorld(e.clientX, e.clientY);
+      this.onLassoUpdate?.(this.lassoStart, this.lassoEnd);
+      return;
+    }
 
     if (this.isDragging) {
       const world = this.screenToWorld(e.clientX, e.clientY);
@@ -139,18 +163,38 @@ export class CameraController {
   }
 
   private onPointerUp(e: PointerEvent) {
+    if (this.isLassoing) {
+      this.isLassoing = false;
+      this.canvas.style.cursor = '';
+      if (this.pointerMoved) {
+        this.onLassoEnd?.(this.lassoStart, this.lassoEnd, {
+          ctrl: e.metaKey || e.ctrlKey,
+          shift: e.shiftKey,
+        });
+      }
+      return;
+    }
+
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = '';
     }
 
     if (!this.pointerMoved && !this.isDragging) {
-      this.onClick?.(e.clientX, e.clientY);
+      this.onClick?.(e.clientX, e.clientY, {
+        ctrl: e.metaKey || e.ctrlKey,
+        shift: e.shiftKey,
+      });
     }
 
     if (this.isDragging) {
+      const nodeId = this.dragNodeId;
       this.isDragging = false;
       this.dragNodeId = null;
+      if (nodeId) {
+        const world = this.screenToWorld(e.clientX, e.clientY);
+        this.onDragEnd?.(nodeId, world.x, world.y);
+      }
     }
   }
 

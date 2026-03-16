@@ -5,7 +5,7 @@ import { PropertyEditor } from './PropertyEditor';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 
 export function NodeDetailPanel() {
-  const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const updateNode = useGraphStore((s) => s.updateNode);
@@ -15,6 +15,7 @@ export function NodeDetailPanel() {
   const nodeTypesList = useNodeTypeStore((s) => s.types);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
+  const selectedNodeId = selectedNodeIds.size === 1 ? [...selectedNodeIds][0] : null;
   const node = nodes.find((n) => n.id === selectedNodeId);
   const connectedEdges = useMemo(
     () => edges.filter((e) => e.sourceId === selectedNodeId || e.targetId === selectedNodeId),
@@ -34,6 +35,45 @@ export function NodeDetailPanel() {
       setEditing(false);
     }
   }, [node]);
+
+  // Multi-select summary
+  if (selectedNodeIds.size > 1) {
+    const selectedNodes = nodes.filter((n) => selectedNodeIds.has(n.id));
+    const handleBulkDelete = async () => {
+      if (!confirm(`Delete ${selectedNodes.length} selected nodes? Connected edges will also be removed.`)) return;
+      for (const n of selectedNodes) {
+        await deleteNode(n.id);
+      }
+      setActivePanel('none');
+    };
+    return (
+      <div className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-zinc-100">
+            {selectedNodes.length} nodes selected
+          </h3>
+          <button
+            onClick={handleBulkDelete}
+            className="text-xs px-2 py-1 bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+          >
+            Delete All
+          </button>
+        </div>
+        <div className="space-y-1 max-h-60 overflow-y-auto">
+          {selectedNodes.map((n) => (
+            <div key={n.id} className="flex items-center gap-2 px-2 py-1 bg-zinc-800 rounded text-xs">
+              <div
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: n.color || getColorForType(n.type) }}
+              />
+              <span className="text-zinc-200 truncate">{n.label}</span>
+              <span className="text-zinc-500 capitalize ml-auto flex-shrink-0">{n.type}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!node) {
     return (

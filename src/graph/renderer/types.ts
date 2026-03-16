@@ -29,6 +29,8 @@ export interface RenderTheme {
   selectionRingColor: string;
   labelColor: string;
   labelActiveColor: string;
+  pathColor: string;
+  pathEdgeColor: string;
 }
 
 export interface GraphRendererOptions {
@@ -41,6 +43,7 @@ export interface GraphCanvasHandle {
   zoomOut(): void;
   fitToView(nodeIds?: string[]): void;
   getRenderer(): GraphRendererInstance | null;
+  captureScreenshot(): Promise<Blob | null>;
 }
 
 export interface GraphRendererInstance {
@@ -50,8 +53,11 @@ export interface GraphRendererInstance {
   addEdges(edges: RenderEdge[]): void;
   removeEdges(ids: string[]): void;
   setZoomLevel(level: ZoomLevel): void;
-  setSelection(nodeId: string | null, edgeId: string | null): void;
+  setSelection(nodeIds: Set<string>, edgeId: string | null): void;
   setHover(nodeId: string | null): void;
+  setPathHighlight(nodeIds: Set<string>, edgeIds: Set<string>): void;
+  clearPathHighlight(): void;
+  captureScreenshot(): Promise<Blob>;
   fitToView(nodeIds?: string[]): void;
   zoomIn(): void;
   zoomOut(): void;
@@ -68,12 +74,18 @@ export interface FrustumBounds {
 
 export type ZoomLevel = 'far' | 'medium' | 'close';
 
-export type GraphEventType = 'nodeClick' | 'edgeClick' | 'canvasClick' | 'nodeHover' | 'nodeDragEnd';
+export type GraphEventType = 'nodeClick' | 'edgeClick' | 'canvasClick' | 'nodeHover' | 'nodeDragEnd' | 'lassoSelect';
+
+export interface Modifiers {
+  ctrl: boolean;
+  shift: boolean;
+}
 
 export interface GraphEventMap {
-  nodeClick: { nodeId: string };
+  nodeClick: { nodeId: string; modifiers: Modifiers };
   edgeClick: { edgeId: string };
-  canvasClick: {};
+  canvasClick: { modifiers: Modifiers };
   nodeHover: { nodeId: string | null };
   nodeDragEnd: { nodeId: string; x: number; y: number };
+  lassoSelect: { nodeIds: Set<string>; additive: boolean };
 }

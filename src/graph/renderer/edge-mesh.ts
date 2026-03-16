@@ -345,21 +345,24 @@ export class EdgeMesh {
 
   setSelection(
     edgeId: string | null,
-    selectedNodeId: string | null,
+    selectedNodeIds: Set<string>,
+    pathEdgeIds: Set<string>,
     edges: RenderEdge[],
     theme: RenderTheme
   ) {
     const defaultColor = new THREE.Color(theme.edgeColor);
     const activeColor = new THREE.Color(theme.edgeActiveColor);
+    const pathColor = new THREE.Color(theme.pathEdgeColor);
+    const hasSelection = selectedNodeIds.size > 0 || edgeId;
+    const hasPath = pathEdgeIds.size > 0;
 
     for (const edge of edges) {
       const idx = this.edgeIndexMap.get(edge.id);
       if (idx === undefined) continue;
 
       const isSelectedEdge = edgeId && edge.id === edgeId;
-      const isConnectedToNode = selectedNodeId && (
-        edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId
-      );
+      const isConnectedToNode = selectedNodeIds.has(edge.sourceId) || selectedNodeIds.has(edge.targetId);
+      const isPathEdge = pathEdgeIds.has(edge.id);
 
       let c: THREE.Color;
       let opacity: number;
@@ -367,7 +370,10 @@ export class EdgeMesh {
       if (isSelectedEdge || isConnectedToNode) {
         c = activeColor;
         opacity = 1.0;
-      } else if (edgeId || selectedNodeId) {
+      } else if (isPathEdge) {
+        c = pathColor;
+        opacity = 1.0;
+      } else if (hasSelection || hasPath) {
         c = edge.color ? this._color.set(edge.color) : defaultColor;
         opacity = theme.edgeInactiveOpacity;
       } else {
@@ -375,8 +381,7 @@ export class EdgeMesh {
         opacity = 1.0;
       }
 
-      // Apply color with opacity baked in (since LineBasicMaterial doesn't support per-vertex opacity easily)
-      // We'll just tint toward black for inactive
+      // Apply color with opacity baked in
       const r = c.r * opacity;
       const g = c.g * opacity;
       const b = c.b * opacity;

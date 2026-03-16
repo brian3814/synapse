@@ -7,6 +7,7 @@ import type {
   GraphRendererInstance,
   GraphEventMap,
   GraphEventType,
+  Modifiers,
   ZoomLevel,
 } from './types';
 import { NodeMesh } from './node-mesh';
@@ -15,6 +16,7 @@ import { LabelLayer } from './label-layer';
 import { CameraController } from './camera-controller';
 import { hitTest } from './hit-test';
 import { SpatialHash } from './spatial-hash';
+import { LassoOverlay } from './lasso-overlay';
 
 const DEFAULT_THEME: RenderTheme = {
   canvasBackground: '#18181b',
@@ -27,6 +29,8 @@ const DEFAULT_THEME: RenderTheme = {
   selectionRingColor: '#818cf8',
   labelColor: '#e4e4e7',
   labelActiveColor: '#ffffff',
+  pathColor: '#f59e0b',
+  pathEdgeColor: '#fbbf24',
 };
 
 type EventCallback<T extends GraphEventType> = (event: GraphEventMap[T]) => void;
@@ -46,12 +50,15 @@ export class GraphRenderer implements GraphRendererInstance {
   private edges: RenderEdge[] = [];
   private nodeMap = new Map<string, RenderNode>();
 
-  private selectedNodeId: string | null = null;
+  private selectedNodeIds = new Set<string>();
   private selectedEdgeId: string | null = null;
+  private pathNodeIds = new Set<string>();
+  private pathEdgeIds = new Set<string>();
   private hoveredNodeId: string | null = null;
   private currentZoomLevel: ZoomLevel = 'close';
   private needsRender = true;
   private spatialHash = new SpatialHash();
+  private lassoOverlay: LassoOverlay;
 
   // Event listeners
   private listeners = new Map<string, Set<EventCallback<any>>>();
@@ -72,6 +79,7 @@ export class GraphRenderer implements GraphRendererInstance {
     this.renderer = new THREE.WebGLRenderer({
       antialias: options.antialias ?? true,
       alpha: false,
+      preserveDrawingBuffer: true,
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor(this.theme.canvasBackground);
@@ -97,11 +105,35 @@ export class GraphRenderer implements GraphRendererInstance {
     this.labelLayer = new LabelLayer(container);
     this.labelLayer.resize(container.clientWidth, container.clientHeight);
 
+    // Lasso overlay
+    this.lassoOverlay = new LassoOverlay(container);
+
     // Wire up camera controller events
-    this.cameraController.onClick = (sx, sy) => this.handleClick(sx, sy);
+    this.cameraController.onClick = (sx, sy, modifiers) => this.handleClick(sx, sy, modifiers);
     this.cameraController.onPointerMoveWorld = (sx, sy) => this.handleHover(sx, sy);
     this.cameraController.onDragMove = (wx, wy) => this.handleDragMove(wx, wy);
+    this.cameraController.onDragEnd = (nodeId, worldX, worldY) => {
+      const node = this.nodeMap.get(nodeId);
+      if (node) {
+        this.emit('nodeDragEnd', { nodeId, x: node.x, y: node.y });
+      }
+    };
     this.cameraController.onFrustumChangeInternal = () => { this.needsRender = true; };
+    this.cameraController.onLassoUpdate = (start, end) => {
+      this.lassoOverlay.update(
+        start, end,
+        this.cameraController.camera,
+        this.container.clientWidth,
+        this.container.clientHeight
+      );
+    };
+    this.cameraController.onLassoEnd = (start, end, modifiers) => {
+      this.lassoOverlay.hide();
+      const nodeIds = this.findNodesInRect(start, end);
+      if (nodeIds.size > 0) {
+        this.emit('lassoSelect', { nodeIds, additive: modifiers.ctrl });
+      }
+    };
 
     // Resize observer
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -227,22 +259,37 @@ export class GraphRenderer implements GraphRendererInstance {
     this.markDirty();
   }
 
-  setSelection(nodeId: string | null, edgeId: string | null) {
-    this.selectedNodeId = nodeId;
+  setSelection(nodeIds: Set<string>, edgeId: string | null) {
+    this.selectedNodeIds = nodeIds;
     this.selectedEdgeId = edgeId;
     this.applySelection();
     this.markDirty();
   }
 
+  setPathHighlight(nodeIds: Set<string>, edgeIds: Set<string>) {
+    this.pathNodeIds = nodeIds;
+    this.pathEdgeIds = edgeIds;
+    this.applySelection();
+    this.markDirty();
+  }
+
+  clearPathHighlight() {
+    this.pathNodeIds = new Set();
+    this.pathEdgeIds = new Set();
+    this.applySelection();
+    this.markDirty();
+  }
+
   private applySelection() {
-    this.nodeMesh.setSelection(this.selectedNodeId, this.theme);
-    // Highlight selected node with active color
-    if (this.selectedNodeId) {
-      this.nodeMesh.setHover(this.selectedNodeId, this.theme);
+    this.nodeMesh.setSelection(this.selectedNodeIds, this.pathNodeIds, this.theme);
+    // Highlight selected nodes with active color
+    for (const id of this.selectedNodeIds) {
+      this.nodeMesh.setHover(id, this.theme);
     }
     this.edgeMesh.setSelection(
       this.selectedEdgeId,
-      this.selectedNodeId,
+      this.selectedNodeIds,
+      this.pathEdgeIds,
       this.edges,
       this.theme
     );
@@ -253,7 +300,7 @@ export class GraphRenderer implements GraphRendererInstance {
 
     // Restore previous hover — but keep selected node highlighted
     if (this.hoveredNodeId) {
-      if (this.hoveredNodeId === this.selectedNodeId) {
+      if (this.selectedNodeIds.has(this.hoveredNodeId)) {
         // Selected node stays at active color
         this.nodeMesh.setHover(this.hoveredNodeId, this.theme);
       } else {
@@ -275,7 +322,7 @@ export class GraphRenderer implements GraphRendererInstance {
     this.markDirty();
   }
 
-  private handleClick(screenX: number, screenY: number) {
+  private handleClick(screenX: number, screenY: number, modifiers: Modifiers) {
     const result = hitTest(
       screenX, screenY,
       this.nodes, this.edges, this.nodeMap,
@@ -295,11 +342,11 @@ export class GraphRenderer implements GraphRendererInstance {
         );
         return;
       }
-      this.emit('nodeClick', { nodeId: result.id });
+      this.emit('nodeClick', { nodeId: result.id, modifiers });
     } else if (result.type === 'edge' && result.id) {
       this.emit('edgeClick', { edgeId: result.id });
     } else {
-      this.emit('canvasClick', {});
+      this.emit('canvasClick', { modifiers });
     }
   }
 
@@ -340,9 +387,55 @@ export class GraphRenderer implements GraphRendererInstance {
     this.markDirty();
   }
 
+  private findNodesInRect(
+    start: { x: number; y: number },
+    end: { x: number; y: number }
+  ): Set<string> {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    const result = new Set<string>();
+    for (const node of this.nodes) {
+      if (node.x >= minX && node.x <= maxX && node.y >= minY && node.y <= maxY) {
+        result.add(node.id);
+      }
+    }
+    return result;
+  }
+
   /** Start dragging a node (called from pointerdown hit test) */
   startNodeDrag(nodeId: string) {
     this.cameraController.startDrag(nodeId);
+  }
+
+  async captureScreenshot(): Promise<Blob> {
+    // Force a render to ensure the buffer is current
+    this.renderer.render(this.scene, this.cameraController.camera);
+
+    const dpr = this.renderer.getPixelRatio();
+    const w = this.container.clientWidth * dpr;
+    const h = this.container.clientHeight * dpr;
+
+    // Create compositing canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+
+    // Draw WebGL canvas
+    ctx.drawImage(this.renderer.domElement, 0, 0, w, h);
+
+    // Draw label layer on top
+    const labelCanvas = this.labelLayer.getCanvas();
+    ctx.drawImage(labelCanvas, 0, 0, w, h);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))),
+        'image/png'
+      );
+    });
   }
 
   fitToView(nodeIds?: string[]) {
@@ -405,6 +498,7 @@ export class GraphRenderer implements GraphRendererInstance {
     this.nodeMesh.dispose();
     this.edgeMesh.dispose();
     this.labelLayer.dispose();
+    this.lassoOverlay.dispose();
     // Force-release the WebGL context before disposing the renderer.
     // THREE.dispose() alone doesn't release the context on all platforms,
     // causing "context lost" blocks on Windows when contexts accumulate.

@@ -23,6 +23,22 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
     graphRef.current?.zoomOut();
   };
 
+  const handleScreenshot = async () => {
+    try {
+      const blob = await graphRef.current?.captureScreenshot();
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `knowledge-graph-${date}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      // Screenshot failed silently — renderer may not be ready
+    }
+  };
+
   const availableLayouts = isSidePanel
     ? LAYOUT_OPTIONS.filter((l) => !l.id.includes('3d'))
     : LAYOUT_OPTIONS;
@@ -64,6 +80,13 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
           title="Fit to view"
         >
           ⊞
+        </button>
+        <button
+          onClick={handleScreenshot}
+          className="bg-zinc-800 text-zinc-300 border border-zinc-600 rounded px-2 py-1 text-xs hover:bg-zinc-700"
+          title="Screenshot"
+        >
+          ⎙
         </button>
       </div>
     </div>

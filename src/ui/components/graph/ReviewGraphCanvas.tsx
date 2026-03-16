@@ -6,6 +6,8 @@ import { reviewNodesToRender, existingNodesToRender, reviewEdgesToRender } from 
 import { GraphCanvas } from './GraphCanvas';
 import type { GraphCanvasHandle } from '../../../graph/renderer/types';
 
+const EMPTY_SET = new Set<string>();
+
 export function ReviewGraphCanvas() {
   const graphRef = useRef<GraphCanvasHandle>(null);
   const reviewNodes = useExtractionReviewStore((s) => s.nodes);
@@ -68,7 +70,7 @@ export function ReviewGraphCanvas() {
         ref={graphRef}
         nodes={allNodes}
         edges={edges}
-        selectedNodeId={null}
+        selectedNodeIds={EMPTY_SET}
         selectedEdgeId={null}
         onNodeClick={(nodeId) => {
           // Only select review nodes, not existing ones

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { GraphRenderer } from '../../../graph/renderer/graph-renderer';
-import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme } from '../../../graph/renderer/types';
+import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers } from '../../../graph/renderer/types';
 import { LayoutRunner } from '../../../graph/layout/layout-runner';
 import { spatial } from '../../../db/client/db-client';
 import { useViewportSync } from '../../hooks/useViewportSync';
@@ -8,13 +8,14 @@ import { useViewportSync } from '../../hooks/useViewportSync';
 interface GraphCanvasProps {
   nodes: RenderNode[];
   edges: RenderEdge[];
-  selectedNodeId: string | null;
+  selectedNodeIds: Set<string>;
   selectedEdgeId: string | null;
   windowed?: boolean;
   typeColorMap?: Map<string, string>;
-  onNodeClick?: (nodeId: string) => void;
+  onNodeClick?: (nodeId: string, modifiers: Modifiers) => void;
   onEdgeClick?: (edgeId: string) => void;
-  onCanvasClick?: () => void;
+  onCanvasClick?: (modifiers: Modifiers) => void;
+  onLassoSelect?: (nodeIds: Set<string>, additive: boolean) => void;
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void;
   theme?: Partial<RenderTheme>;
   compact?: boolean;
@@ -48,14 +49,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       setRendererReady(renderer);
 
       // Event handlers
-      renderer.on('nodeClick', ({ nodeId }) => {
-        propsRef.current.onNodeClick?.(nodeId);
+      renderer.on('nodeClick', ({ nodeId, modifiers }) => {
+        propsRef.current.onNodeClick?.(nodeId, modifiers);
       });
       renderer.on('edgeClick', ({ edgeId }) => {
         propsRef.current.onEdgeClick?.(edgeId);
       });
-      renderer.on('canvasClick', () => {
-        propsRef.current.onCanvasClick?.();
+      renderer.on('canvasClick', ({ modifiers }) => {
+        propsRef.current.onCanvasClick?.(modifiers);
+      });
+      renderer.on('lassoSelect', ({ nodeIds, additive }) => {
+        propsRef.current.onLassoSelect?.(nodeIds, additive);
       });
       renderer.on('nodeDragEnd', ({ nodeId, x, y }) => {
         propsRef.current.onNodeDragEnd?.(nodeId, x, y);
@@ -156,10 +160,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
     // Update selection
     useEffect(() => {
       rendererRef.current?.setSelection(
-        props.selectedNodeId,
+        props.selectedNodeIds,
         props.selectedEdgeId
       );
-    }, [props.selectedNodeId, props.selectedEdgeId]);
+    }, [props.selectedNodeIds, props.selectedEdgeId]);
 
     // Imperative handle
     useImperativeHandle(ref, () => ({
@@ -174,6 +178,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       },
       getRenderer() {
         return rendererRef.current;
+      },
+      async captureScreenshot() {
+        return rendererRef.current?.captureScreenshot() ?? null;
       },
     }));
 

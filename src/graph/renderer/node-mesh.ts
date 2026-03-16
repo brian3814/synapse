@@ -194,10 +194,36 @@ export class NodeMesh {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  setSelection(nodeId: string | null, theme: RenderTheme) {
-    if (!nodeId) {
+  private ringCapacity = 1;
+
+  private ensureRingCapacity(needed: number) {
+    if (needed <= this.ringCapacity) return;
+    this.ringCapacity = Math.max(needed, this.ringCapacity * 2);
+
+    const parent = this.ringMesh.parent;
+    const oldGeo = this.ringMesh.geometry;
+    const oldMat = this.ringMesh.material;
+
+    const newRing = new THREE.InstancedMesh(oldGeo, oldMat as THREE.Material, this.ringCapacity);
+    newRing.renderOrder = this.ringMesh.renderOrder;
+    newRing.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(this.ringCapacity * 3), 3
+    );
+
+    if (parent) {
+      parent.remove(this.ringMesh);
+      parent.add(newRing);
+    }
+    this.ringMesh.dispose();
+    (this as any).ringMesh = newRing;
+  }
+
+  setSelection(nodeIds: Set<string>, pathNodeIds: Set<string>, theme: RenderTheme) {
+    const hasSelection = nodeIds.size > 0;
+    const hasPath = pathNodeIds.size > 0;
+
+    if (!hasSelection && !hasPath) {
       this.ringMesh.count = 0;
-      // Reset all opacities to 1
       for (const [, i] of this.nodeIndexMap) {
         this.opacityAttr.setX(i, 1.0);
       }
@@ -205,33 +231,45 @@ export class NodeMesh {
       return;
     }
 
-    const idx = this.nodeIndexMap.get(nodeId);
-    if (idx === undefined) {
-      this.ringMesh.count = 0;
-      return;
-    }
-
-    // Show selection ring
-    this.mesh.getMatrixAt(idx, this._mat);
-    this.ringMesh.setMatrixAt(0, this._mat);
-    this.ringMesh.count = 1;
-    this.ringMesh.instanceMatrix.needsUpdate = true;
-
-    // Set ring color
+    // Show rings for all selected nodes
+    this.ensureRingCapacity(nodeIds.size);
     this._color.set(theme.selectionRingColor);
-    if (!this.ringMesh.instanceColor) {
-      this.ringMesh.instanceColor = new THREE.InstancedBufferAttribute(
-        new Float32Array(3), 3
-      );
+    let ringIdx = 0;
+    for (const id of nodeIds) {
+      const idx = this.nodeIndexMap.get(id);
+      if (idx === undefined) continue;
+      this.mesh.getMatrixAt(idx, this._mat);
+      this.ringMesh.setMatrixAt(ringIdx, this._mat);
+      this.ringMesh.instanceColor!.setXYZ(ringIdx, this._color.r, this._color.g, this._color.b);
+      ringIdx++;
     }
-    this.ringMesh.instanceColor.setXYZ(0, this._color.r, this._color.g, this._color.b);
-    this.ringMesh.instanceColor.needsUpdate = true;
+    this.ringMesh.count = ringIdx;
+    if (ringIdx > 0) {
+      this.ringMesh.instanceMatrix.needsUpdate = true;
+      this.ringMesh.instanceColor!.needsUpdate = true;
+    }
 
-    // Dim non-selected nodes
-    for (const [, i] of this.nodeIndexMap) {
-      this.opacityAttr.setX(i, i === idx ? 1.0 : theme.nodeInactiveOpacity);
+    // Set opacities: selected + path = full, everything else dimmed
+    for (const [id, i] of this.nodeIndexMap) {
+      if (nodeIds.has(id) || pathNodeIds.has(id)) {
+        this.opacityAttr.setX(i, 1.0);
+      } else {
+        this.opacityAttr.setX(i, theme.nodeInactiveOpacity);
+      }
     }
     this.opacityAttr.needsUpdate = true;
+
+    // Tint path nodes with path color
+    if (hasPath) {
+      this._color.set(theme.pathColor);
+      for (const id of pathNodeIds) {
+        if (nodeIds.has(id)) continue; // selected nodes keep their active color
+        const idx = this.nodeIndexMap.get(id);
+        if (idx === undefined) continue;
+        this.colorAttr.setXYZ(idx, this._color.r, this._color.g, this._color.b);
+      }
+      this.colorAttr.needsUpdate = true;
+    }
   }
 
   setHover(nodeId: string | null, theme: RenderTheme) {

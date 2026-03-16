@@ -46,6 +46,58 @@ export function bfsPath(
   return null;
 }
 
+export interface PathResult {
+  nodeIds: string[];
+  edgeIds: string[];
+}
+
+/**
+ * BFS shortest path between two nodes, returning both node and edge IDs.
+ */
+export function bfsPathWithEdges(
+  map: AdjacencyMap,
+  sourceId: string,
+  targetId: string,
+  maxHops = 6
+): PathResult | null {
+  if (sourceId === targetId) return { nodeIds: [sourceId], edgeIds: [] };
+
+  const visited = new Set<string>([sourceId]);
+  const parent = new Map<string, { nodeId: string; edgeId: string }>();
+  const queue: Array<{ id: string; depth: number }> = [{ id: sourceId, depth: 0 }];
+
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!;
+    if (depth >= maxHops) continue;
+
+    const neighbors = map.get(id);
+    if (!neighbors) continue;
+
+    for (const entry of neighbors) {
+      if (visited.has(entry.nodeId)) continue;
+      visited.add(entry.nodeId);
+      parent.set(entry.nodeId, { nodeId: id, edgeId: entry.edgeId });
+
+      if (entry.nodeId === targetId) {
+        const nodeIds: string[] = [targetId];
+        const edgeIds: string[] = [];
+        let current = targetId;
+        while (current !== sourceId) {
+          const p = parent.get(current)!;
+          edgeIds.push(p.edgeId);
+          current = p.nodeId;
+          nodeIds.push(current);
+        }
+        return { nodeIds: nodeIds.reverse(), edgeIds: edgeIds.reverse() };
+      }
+
+      queue.push({ id: entry.nodeId, depth: depth + 1 });
+    }
+  }
+
+  return null;
+}
+
 /**
  * All node IDs within N hops of startId.
  */

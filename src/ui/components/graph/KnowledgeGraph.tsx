@@ -1,4 +1,6 @@
 import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
+import type { Modifiers } from '../../../graph/renderer/types';
+import { bfsPathWithEdges } from '../../../graph/algorithms/graph-algorithms';
 import { GraphCanvas } from './GraphCanvas';
 import type { GraphCanvasHandle } from '../../../graph/renderer/types';
 import { useGraphData } from '../../hooks/useGraphData';
@@ -16,13 +18,17 @@ interface KnowledgeGraphProps {
 export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const graphRef = useRef<GraphCanvasHandle>(null);
   const { nodes, edges } = useGraphData();
-  const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
   const selectedEdgeId = useGraphStore((s) => s.selectedEdgeId);
   const selectNode = useGraphStore((s) => s.selectNode);
+  const toggleNodeSelection = useGraphStore((s) => s.toggleNodeSelection);
+  const selectNodes = useGraphStore((s) => s.selectNodes);
+  const addNodesToSelection = useGraphStore((s) => s.addNodesToSelection);
   const selectEdge = useGraphStore((s) => s.selectEdge);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const types = useNodeTypeStore((s) => s.types);
 
+  const adjacency = useGraphStore((s) => s.adjacency);
   const setFocusNodeCallback = useUIStore((s) => s.setFocusNodeCallback);
 
   const [windowed, setWindowed] = useState(false);
@@ -52,12 +58,28 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     return map;
   }, [types]);
 
+  // Escape key clears selection
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        useGraphStore.getState().clearSelection();
+        setActivePanel('none');
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [setActivePanel]);
+
   const handleNodeClick = useCallback(
-    (nodeId: string) => {
-      selectNode(nodeId);
+    (nodeId: string, modifiers: Modifiers) => {
+      if (modifiers.ctrl) {
+        toggleNodeSelection(nodeId);
+      } else {
+        selectNode(nodeId);
+      }
       setActivePanel('nodeDetail');
     },
-    [selectNode, setActivePanel]
+    [selectNode, toggleNodeSelection, setActivePanel]
   );
 
   const handleEdgeClick = useCallback(
@@ -68,9 +90,40 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     [selectEdge, setActivePanel]
   );
 
-  const handleCanvasClick = useCallback(() => {
-    useGraphStore.getState().clearSelection();
+  const handleCanvasClick = useCallback((modifiers: Modifiers) => {
+    if (!modifiers.ctrl) {
+      useGraphStore.getState().clearSelection();
+    }
   }, []);
+
+  const handleLassoSelect = useCallback(
+    (nodeIds: Set<string>, additive: boolean) => {
+      if (additive) {
+        addNodesToSelection(nodeIds);
+      } else {
+        selectNodes(nodeIds);
+      }
+      if (nodeIds.size > 0) setActivePanel('nodeDetail');
+    },
+    [addNodesToSelection, selectNodes, setActivePanel]
+  );
+
+  // Auto-compute shortest path when exactly 2 nodes selected
+  useEffect(() => {
+    const renderer = graphRef.current?.getRenderer();
+    if (!renderer) return;
+    if (selectedNodeIds.size === 2) {
+      const [a, b] = [...selectedNodeIds];
+      const result = bfsPathWithEdges(adjacency, a, b);
+      if (result) {
+        renderer.setPathHighlight(new Set(result.nodeIds), new Set(result.edgeIds));
+      } else {
+        renderer.clearPathHighlight();
+      }
+    } else {
+      renderer.clearPathHighlight();
+    }
+  }, [selectedNodeIds, adjacency]);
 
   if (!windowed && nodes.length === 0) {
     return (
@@ -91,13 +144,14 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
         ref={graphRef}
         nodes={nodes}
         edges={edges}
-        selectedNodeId={selectedNodeId}
+        selectedNodeIds={selectedNodeIds}
         selectedEdgeId={selectedEdgeId}
         windowed={windowed}
         typeColorMap={typeColorMap}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onCanvasClick={handleCanvasClick}
+        onLassoSelect={handleLassoSelect}
         compact={compact}
       />
       {!compact && <GraphControls graphRef={graphRef} />}

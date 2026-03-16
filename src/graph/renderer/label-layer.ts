@@ -126,6 +126,10 @@ export class LabelLayer {
     }
   }
 
+  getCanvas(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
   dispose() {
     if (this.canvas.parentElement) {
       this.canvas.parentElement.removeChild(this.canvas);
