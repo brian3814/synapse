@@ -28,6 +28,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
     const rendererRef = useRef<GraphRenderer | null>(null);
     const layoutRef = useRef<LayoutRunner | null>(null);
     const nodeIdsRef = useRef<string>('');
+    const forceRunningRef = useRef(false);
     const [rendererReady, setRendererReady] = useState<GraphRenderer | null>(null);
 
     // Store latest props in refs for event handlers
@@ -162,18 +163,18 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
     }, [props.nodes, props.edges, props.windowed]);
 
     // Update view mode (2D/3D) and re-run layout
+    const viewModeIs3D = props.is3D;
     useEffect(() => {
       const renderer = rendererRef.current;
-      const layout = layoutRef.current;
       if (!renderer) return;
-      const mode = props.is3D ? '3d' : '2d';
-      renderer.setViewMode(mode);
+      renderer.setViewMode(viewModeIs3D ? '3d' : '2d');
 
       // Re-run layout with correct dimensions when toggling modes
-      if (layout && renderer.getNodes().length > 0) {
+      if (layoutRef.current && renderer.getNodes().length > 0) {
         const nodes = renderer.getNodes();
-        const dim = props.is3D ? 3 : 2;
-        layout.start(
+        const dim = viewModeIs3D ? 3 : 2;
+        forceRunningRef.current = true;
+        layoutRef.current.start(
           nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
           propsRef.current.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
           {
@@ -182,6 +183,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
               if (r) applyPositions(r, r.getNodes(), positions, dimensions);
             },
             onDone: (positions, dimensions) => {
+              forceRunningRef.current = false;
               const r = rendererRef.current;
               if (r) {
                 applyPositions(r, r.getNodes(), positions, dimensions);
@@ -193,7 +195,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
         );
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [props.is3D]);
+    }, [viewModeIs3D]);
 
     // Update selection
     useEffect(() => {
@@ -202,6 +204,35 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
         props.selectedEdgeId
       );
     }, [props.selectedNodeIds, props.selectedEdgeId]);
+
+    // Helper to start force layout with current data
+    const runForceLayout = (fitOnDone = true) => {
+      const renderer = rendererRef.current;
+      const layout = layoutRef.current;
+      if (!renderer || !layout || renderer.getNodes().length === 0) return;
+      const nodes = renderer.getNodes();
+      const dim = propsRef.current.is3D ? 3 : 2;
+      forceRunningRef.current = true;
+      layout.start(
+        nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
+        propsRef.current.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
+        {
+          onTick: (positions, _alpha, dimensions) => {
+            const r = rendererRef.current;
+            if (r) applyPositions(r, r.getNodes(), positions, dimensions);
+          },
+          onDone: (positions, dimensions) => {
+            forceRunningRef.current = false;
+            const r = rendererRef.current;
+            if (r) {
+              applyPositions(r, r.getNodes(), positions, dimensions);
+              if (fitOnDone) r.fitToView();
+            }
+          },
+        },
+        { dimensions: dim as 2 | 3 }
+      );
+    };
 
     // Imperative handle
     useImperativeHandle(ref, () => ({
@@ -219,6 +250,16 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       },
       async captureScreenshot() {
         return rendererRef.current?.captureScreenshot() ?? null;
+      },
+      startForceLayout() {
+        runForceLayout(false);
+      },
+      stopForceLayout() {
+        layoutRef.current?.stop();
+        forceRunningRef.current = false;
+      },
+      isForceRunning() {
+        return forceRunningRef.current;
       },
     }));
 

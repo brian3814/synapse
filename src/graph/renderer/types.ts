@@ -47,6 +47,9 @@ export interface GraphCanvasHandle {
   fitToView(nodeIds?: string[]): void;
   getRenderer(): GraphRendererInstance | null;
   captureScreenshot(): Promise<Blob | null>;
+  startForceLayout(): void;
+  stopForceLayout(): void;
+  isForceRunning(): boolean;
 }
 
 export interface GraphRendererInstance {

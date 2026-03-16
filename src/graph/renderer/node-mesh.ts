@@ -57,6 +57,9 @@ export class NodeMesh {
     this.ringMesh = new THREE.InstancedMesh(ringGeo, ringMat, 1);
     this.ringMesh.count = 0;
     this.ringMesh.renderOrder = 0;
+    this.ringMesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(3), 3
+    );
   }
 
   private grow(needed: number) {

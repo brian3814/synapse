@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import type { GraphCanvasHandle } from '../../../graph/renderer/types';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { LAYOUT_OPTIONS } from '../../../shared/constants';
@@ -10,6 +10,7 @@ interface GraphControlsProps {
 export function GraphControls({ graphRef }: GraphControlsProps) {
   const { layoutType, setLayoutType, displayMode, is3D, toggle3D } = useUIStore();
   const isSidePanel = displayMode === 'sidePanel';
+  const [forceActive, setForceActive] = useState(false);
 
   const handleFitView = () => {
     graphRef.current?.fitToView();
@@ -39,6 +40,18 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
     }
   };
 
+  const handleToggleForce = useCallback(() => {
+    const handle = graphRef.current;
+    if (!handle) return;
+    if (handle.isForceRunning()) {
+      handle.stopForceLayout();
+      setForceActive(false);
+    } else {
+      handle.startForceLayout();
+      setForceActive(true);
+    }
+  }, [graphRef]);
+
   const availableLayouts = isSidePanel
     ? LAYOUT_OPTIONS.filter((l) => !l.id.includes('3d'))
     : LAYOUT_OPTIONS;
@@ -58,20 +71,33 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
         ))}
       </select>
 
-      {/* 3D toggle (tab mode only) */}
-      {!isSidePanel && (
+      {/* 3D toggle + force toggle */}
+      <div className="flex gap-1">
+        {!isSidePanel && (
+          <button
+            onClick={toggle3D}
+            className={`text-xs px-2 py-1 rounded border ${
+              is3D
+                ? 'bg-indigo-600 text-white border-indigo-500'
+                : 'bg-zinc-800 text-zinc-300 border-zinc-600 hover:bg-zinc-700'
+            }`}
+            title={is3D ? 'Switch to 2D' : 'Switch to 3D'}
+          >
+            {is3D ? '3D' : '2D'}
+          </button>
+        )}
         <button
-          onClick={toggle3D}
+          onClick={handleToggleForce}
           className={`text-xs px-2 py-1 rounded border ${
-            is3D
-              ? 'bg-indigo-600 text-white border-indigo-500'
+            forceActive
+              ? 'bg-amber-600 text-white border-amber-500'
               : 'bg-zinc-800 text-zinc-300 border-zinc-600 hover:bg-zinc-700'
           }`}
-          title={is3D ? 'Switch to 2D' : 'Switch to 3D'}
+          title={forceActive ? 'Stop force layout' : 'Run force layout'}
         >
-          {is3D ? '3D' : '2D'}
+          {forceActive ? '⏸' : '▶'}
         </button>
-      )}
+      </div>
 
       {/* Zoom controls */}
       <div className="flex gap-1">
