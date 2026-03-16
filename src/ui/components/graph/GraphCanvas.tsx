@@ -118,7 +118,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       if (needsLayout && props.nodes.length > 0) {
         if (propsRef.current.layoutType === 'spherical') {
           // Spherical: deterministic O(n), apply directly
-          const positions = sphericalLayout(nodesWithPositions.map((n) => n.id));
+          const positions = sphericalLayout(
+            nodesWithPositions.map((n) => ({ id: n.id, type: n.data?.type as string | undefined }))
+          );
           renderer.updatePositions(positions);
           renderer.fitToView();
         } else {
@@ -183,7 +185,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
         // Spherical: instant deterministic layout
         layoutRef.current?.stop();
         forceRunningRef.current = false;
-        const positions = sphericalLayout(renderer.getNodes().map((n) => n.id));
+        const positions = sphericalLayout(
+          renderer.getNodes().map((n) => ({ id: n.id, type: n.data?.type as string | undefined }))
+        );
         renderer.updatePositions(positions);
         renderer.fitToView();
       } else if (layoutRef.current) {
