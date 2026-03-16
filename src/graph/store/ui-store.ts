@@ -50,13 +50,24 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({
       activePanel: state.activePanel === panel ? 'none' : panel,
     })),
-  setLayoutType: (layout) => set({ layoutType: layout }),
+  setLayoutType: (layout) => set((state) => {
+    // Auto-enable 3D for 3D-only layouts
+    if (layout === 'spherical' || layout === 'forceDirected3d') {
+      return { layoutType: layout, is3D: true };
+    }
+    if (layout === 'forceDirected2d') {
+      return { layoutType: layout, is3D: false };
+    }
+    return { layoutType: layout };
+  }),
   toggle3D: () =>
     set((state) => {
       const is3D = !state.is3D;
+      // When switching to 2D, move off 3D-only layouts
+      const needsLayoutSwitch = !is3D && (state.layoutType === 'spherical' || state.layoutType === 'forceDirected3d');
       return {
         is3D,
-        layoutType: is3D ? 'forceDirected3d' : 'forceDirected2d',
+        layoutType: needsLayoutSwitch ? 'forceDirected2d' : (is3D ? 'forceDirected3d' : state.layoutType),
       };
     }),
   toggleClustering: () =>
