@@ -131,9 +131,6 @@ export function initReadingListSync(): void {
     };
     await saveReadingListItems(items);
     await updateBadge();
-
-    // Trigger background extraction
-    await triggerExtraction(entry.url, entry.title);
   });
 
   // Listen for removed items (external removal, e.g. user removed from Chrome UI)
@@ -175,12 +172,6 @@ export function initReadingListSync(): void {
     if (changed) {
       await saveReadingListItems(items);
       await updateBadge();
-      // Trigger extraction for any pending items
-      for (const item of Object.values(items)) {
-        if (item.status === 'pending') {
-          triggerExtraction(item.url, item.title);
-        }
-      }
     } else {
       await updateBadge();
     }

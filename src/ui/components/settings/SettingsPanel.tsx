@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
 import type { LLMProvider } from '../../../shared/types';
 import { useGraphStore } from '../../../graph/store/graph-store';
-import { useAuthStore } from '../../../graph/store/auth-store';
 import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, disconnectFolder, type FolderStatus } from '../../../filesystem/folder-access';
 import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
@@ -13,8 +12,6 @@ export function SettingsPanel() {
   const [apiKey, setApiKey] = useState('');
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const { authenticated, loading: authLoading, error: authError, signIn, signOut } = useAuthStore();
-
   useEffect(() => {
     chrome.storage.local.get(LLM_CONFIG_STORAGE_KEY).then((result: Record<string, any>) => {
       const config = result[LLM_CONFIG_STORAGE_KEY];
@@ -54,33 +51,6 @@ export function SettingsPanel() {
     <div className="p-4 space-y-4">
       <h3 className="text-sm font-semibold text-zinc-100">Settings</h3>
 
-      {/* Authentication section */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-200 mb-3">Authentication</h3>
-        {authenticated ? (
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-400">Signed in with Anthropic</span>
-            <button
-              onClick={signOut}
-              className="px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded"
-            >
-              Sign out
-            </button>
-          </div>
-        ) : (
-          <div>
-            <button
-              onClick={signIn}
-              disabled={authLoading}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded"
-            >
-              {authLoading ? 'Signing in...' : 'Sign in with Anthropic'}
-            </button>
-            {authError && <p className="text-xs text-red-400 mt-2">{authError}</p>}
-          </div>
-        )}
-      </div>
-
       <div className="space-y-3">
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">LLM Provider</label>
@@ -113,7 +83,7 @@ export function SettingsPanel() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">API Key (fallback)</label>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">API Key</label>
           <div className="flex gap-1">
             <input
               type={showKey ? 'text' : 'password'}

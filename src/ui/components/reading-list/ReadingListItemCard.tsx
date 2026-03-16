@@ -5,6 +5,7 @@ interface Props {
   item: ReadingListItem;
   selected: boolean;
   onSelect: () => void;
+  onMerge: (item: ReadingListItem) => void;
 }
 
 function getDomain(url: string): string {
@@ -26,10 +27,10 @@ function timeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
-export function ReadingListItemCard({ item, selected, onSelect }: Props) {
+export function ReadingListItemCard({ item, selected, onSelect, onMerge }: Props) {
   const retryExtraction = useReadingListStore(s => s.retryExtraction);
 
-  const isProcessing = ['pending', 'fetching', 'extracting'].includes(item.status);
+  const isExtracting = ['fetching', 'extracting'].includes(item.status);
 
   return (
     <div
@@ -48,18 +49,20 @@ export function ReadingListItemCard({ item, selected, onSelect }: Props) {
         <span className="text-xs text-zinc-500">{getDomain(item.url)}</span>
         <span className="text-xs text-zinc-600">&middot;</span>
         <span className="text-xs text-zinc-500">{timeAgo(item.addedAt)}</span>
-        {/* Status badge */}
-        {isProcessing && (
+        {isExtracting && (
           <span className="text-xs text-blue-400 flex items-center gap-1">
             <span className="animate-pulse">&bull;</span> Extracting...
           </span>
+        )}
+        {item.status === 'pending' && (
+          <span className="text-xs text-zinc-400">Awaiting extraction</span>
         )}
         {item.status === 'failed' && (
           <span className="text-xs text-red-400">Failed</span>
         )}
       </div>
 
-      {/* Summary (when extracted and selected) */}
+      {/* Summary (when extracted) */}
       {item.status === 'extracted' && item.summary && (
         <p className="text-xs text-zinc-400 mt-2 line-clamp-3 leading-relaxed">
           {item.summary}
@@ -87,14 +90,24 @@ export function ReadingListItemCard({ item, selected, onSelect }: Props) {
       {/* Actions (when selected) */}
       {selected && (
         <div className="flex gap-2 mt-2">
+          {item.status === 'pending' && (
+            <button
+              className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                retryExtraction(item.url);
+              }}
+            >
+              Extract
+            </button>
+          )}
           {item.status === 'extracted' && (
             <button
               className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
-                // Will be wired to merge hook in Task 7
+                onMerge(item);
               }}
-              data-action="review-merge"
             >
               Review &amp; Merge
             </button>

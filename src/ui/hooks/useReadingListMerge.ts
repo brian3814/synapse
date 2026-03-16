@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
+import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { useLLMExtraction, buildDiffItems } from './useLLMExtraction';
 import { readingList as readingListDb, sourceContent } from '../../db/client/db-client';
@@ -34,6 +35,9 @@ export function useReadingListMerge() {
 
     // Immediately open review UI
     await proceedToReview();
+
+    // Switch to LLM panel where ExtractionReview renders
+    useUIStore.getState().setActivePanel('llm');
   }, [proceedToReview]);
 
   // Watch for review completion — when LLM store resets to 'idle' after we started a merge
@@ -74,6 +78,9 @@ export function useReadingListMerge() {
 
           // 4. Remove from reading list store
           useReadingListStore.getState().removeItem(url);
+
+          // 5. Switch back to reading list panel
+          useUIStore.getState().setActivePanel('readingList');
         } catch (e) {
           console.error('[ReadingListMerge] Post-merge cleanup failed:', e);
         }
