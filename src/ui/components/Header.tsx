@@ -6,7 +6,7 @@ import { useReadingListStore } from '../../graph/store/reading-list-store';
 
 export function Header() {
   const { displayMode, toggleMode } = useDisplayMode();
-  const { activePanel, setActivePanel, is3D, toggle3D, clusteringEnabled, toggleClustering, chatOpen, toggleChat } = useUIStore();
+  const { activePanel, setActivePanel, clusteringEnabled, toggleClustering, chatOpen, toggleChat } = useUIStore();
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const edgeCount = useGraphStore((s) => s.edges.length);
   const readingListItems = useReadingListStore((s) => s.items);
@@ -103,16 +103,6 @@ export function Header() {
         >
           <ClusterIcon />
         </ToolbarButton>
-
-        {!isSidePanel && (
-          <ToolbarButton
-            active={is3D}
-            onClick={toggle3D}
-            title="Toggle 3D"
-          >
-            <span className="text-[10px] font-bold">3D</span>
-          </ToolbarButton>
-        )}
 
         <div className="w-px h-4 bg-zinc-600 mx-1" />
 

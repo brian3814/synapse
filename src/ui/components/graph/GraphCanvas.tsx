@@ -1,8 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { GraphRenderer } from '../../../graph/renderer/graph-renderer';
-import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers, ViewMode } from '../../../graph/renderer/types';
+import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers } from '../../../graph/renderer/types';
 import { LayoutRunner } from '../../../graph/layout/layout-runner';
-import { sphericalLayout } from '../../../graph/layout/spherical-layout';
 import { spatial } from '../../../db/client/db-client';
 import { useViewportSync } from '../../hooks/useViewportSync';
 
@@ -20,8 +19,6 @@ interface GraphCanvasProps {
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void;
   theme?: Partial<RenderTheme>;
   compact?: boolean;
-  is3D?: boolean;
-  layoutType?: string;
 }
 
 export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
@@ -116,107 +113,50 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       renderer.setGraphData(nodesWithPositions, props.edges);
 
       if (needsLayout && props.nodes.length > 0) {
-        if (propsRef.current.layoutType === 'spherical') {
-          // Spherical: deterministic O(n), apply directly
-          const positions = sphericalLayout(
-            nodesWithPositions.map((n) => ({ id: n.id, type: n.data?.type as string | undefined }))
-          );
-          renderer.updatePositions(positions);
+        // Check if nodes already have DB-persisted positions
+        const hasPersistedPositions = nodesWithPositions.some(
+          (n) => n.x !== 0 || n.y !== 0
+        );
+        if (hasPersistedPositions) {
+          // Skip layout, just fit to view
           renderer.fitToView();
         } else {
-          // Check if nodes already have DB-persisted positions
-          const hasPersistedPositions = nodesWithPositions.some(
-            (n) => n.x !== 0 || n.y !== 0
-          );
-          if (hasPersistedPositions) {
-            renderer.fitToView();
-          } else {
-            // Run force layout
-            const dim = propsRef.current.is3D ? 3 : 2;
-            layout.start(
-              nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
-              props.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
-              {
-                onTick: (positions, _alpha, dimensions) => {
-                  const r = rendererRef.current;
-                  if (r) applyPositions(r, r.getNodes(), positions, dimensions);
-                },
-                onDone: (positions, dimensions) => {
-                  const r = rendererRef.current;
-                  if (r) {
-                    applyPositions(r, r.getNodes(), positions, dimensions);
-                    r.fitToView();
-                    const nodes = r.getNodes();
-                    const stride = dimensions;
-                    const updates: Array<{ id: string; x: number; y: number }> = [];
-                    for (let i = 0; i < nodes.length; i++) {
-                      const x = positions[i * stride];
-                      const y = positions[i * stride + 1];
-                      if (!isNaN(x) && !isNaN(y)) {
-                        updates.push({ id: nodes[i].id, x, y });
-                      }
-                    }
-                    if (updates.length > 0) {
-                      spatial.batchUpdatePositions(updates).catch(() => {});
+          // Run force layout
+          layout.start(
+            nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y })),
+            props.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
+            {
+              onTick: (positions, _alpha) => {
+                const r = rendererRef.current;
+                if (r) applyPositions(r, r.getNodes(), positions);
+              },
+              onDone: (positions) => {
+                const r = rendererRef.current;
+                if (r) {
+                  applyPositions(r, r.getNodes(), positions);
+                  r.fitToView();
+                  // Persist layout positions to DB (fire-and-forget)
+                  const nodes = r.getNodes();
+                  const updates: Array<{ id: string; x: number; y: number }> = [];
+                  for (let i = 0; i < nodes.length; i++) {
+                    const x = positions[i * 2];
+                    const y = positions[i * 2 + 1];
+                    if (!isNaN(x) && !isNaN(y)) {
+                      updates.push({ id: nodes[i].id, x, y });
                     }
                   }
-                },
+                  if (updates.length > 0) {
+                    spatial.batchUpdatePositions(updates).catch(() => {});
+                  }
+                }
               },
-              { dimensions: dim as 2 | 3 }
-            );
-          }
+            }
+          );
         }
       }
 
       nodeIdsRef.current = newNodeIds;
     }, [props.nodes, props.edges, props.windowed]);
-
-    // Update view mode and re-run layout when is3D or layoutType changes
-    const viewModeIs3D = props.is3D;
-    const layoutType = props.layoutType;
-    useEffect(() => {
-      const renderer = rendererRef.current;
-      if (!renderer) return;
-      renderer.setViewMode(viewModeIs3D ? '3d' : '2d');
-
-      if (renderer.getNodes().length === 0) return;
-
-      if (layoutType === 'spherical') {
-        // Spherical: instant deterministic layout
-        layoutRef.current?.stop();
-        forceRunningRef.current = false;
-        const positions = sphericalLayout(
-          renderer.getNodes().map((n) => ({ id: n.id, type: n.data?.type as string | undefined }))
-        );
-        renderer.updatePositions(positions);
-        renderer.fitToView();
-      } else if (layoutRef.current) {
-        // Force-directed: run simulation
-        const nodes = renderer.getNodes();
-        const dim = viewModeIs3D ? 3 : 2;
-        forceRunningRef.current = true;
-        layoutRef.current.start(
-          nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
-          propsRef.current.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
-          {
-            onTick: (positions, _alpha, dimensions) => {
-              const r = rendererRef.current;
-              if (r) applyPositions(r, r.getNodes(), positions, dimensions);
-            },
-            onDone: (positions, dimensions) => {
-              forceRunningRef.current = false;
-              const r = rendererRef.current;
-              if (r) {
-                applyPositions(r, r.getNodes(), positions, dimensions);
-                r.fitToView();
-              }
-            },
-          },
-          { dimensions: dim as 2 | 3 }
-        );
-      }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [viewModeIs3D, layoutType]);
 
     // Update selection
     useEffect(() => {
@@ -232,26 +172,24 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       const layout = layoutRef.current;
       if (!renderer || !layout || renderer.getNodes().length === 0) return;
       const nodes = renderer.getNodes();
-      const dim = propsRef.current.is3D ? 3 : 2;
       forceRunningRef.current = true;
       layout.start(
-        nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z })),
+        nodes.map((n) => ({ id: n.id, x: n.x, y: n.y })),
         propsRef.current.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
         {
-          onTick: (positions, _alpha, dimensions) => {
+          onTick: (positions, _alpha) => {
             const r = rendererRef.current;
-            if (r) applyPositions(r, r.getNodes(), positions, dimensions);
+            if (r) applyPositions(r, r.getNodes(), positions);
           },
-          onDone: (positions, dimensions) => {
+          onDone: (positions) => {
             forceRunningRef.current = false;
             const r = rendererRef.current;
             if (r) {
-              applyPositions(r, r.getNodes(), positions, dimensions);
+              applyPositions(r, r.getNodes(), positions);
               if (fitOnDone) r.fitToView();
             }
           },
-        },
-        { dimensions: dim as 2 | 3 }
+        }
       );
     };
 
@@ -291,17 +229,14 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
 function applyPositions(
   renderer: GraphRenderer,
   nodes: RenderNode[],
-  positions: Float32Array,
-  dimensions: number = 2
+  positions: Float32Array
 ) {
-  const stride = dimensions;
-  const posMap = new Map<string, { x: number; y: number; z?: number }>();
+  const posMap = new Map<string, { x: number; y: number }>();
   for (let i = 0; i < nodes.length; i++) {
-    const x = positions[i * stride];
-    const y = positions[i * stride + 1];
-    const z = stride === 3 ? positions[i * stride + 2] : undefined;
+    const x = positions[i * 2];
+    const y = positions[i * 2 + 1];
     if (!isNaN(x) && !isNaN(y)) {
-      posMap.set(nodes[i].id, { x, y, z });
+      posMap.set(nodes[i].id, { x, y });
     }
   }
   renderer.updatePositions(posMap);

@@ -9,7 +9,6 @@ interface UIStore {
   displayMode: DisplayMode;
   activePanel: ActivePanel;
   layoutType: LayoutType;
-  is3D: boolean;
   clusteringEnabled: boolean;
   graphKey: number; // increment to force graph re-render
   chatOpen: boolean;
@@ -21,7 +20,6 @@ interface UIStore {
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
   setLayoutType: (layout: LayoutType) => void;
-  toggle3D: () => void;
   toggleClustering: () => void;
   incrementGraphKey: () => void;
   toggleChat: () => void;
@@ -36,7 +34,6 @@ export const useUIStore = create<UIStore>((set) => ({
   displayMode: 'sidePanel',
   activePanel: 'none',
   layoutType: 'forceDirected2d',
-  is3D: false,
   clusteringEnabled: true,
   graphKey: 0,
   chatOpen: false,
@@ -50,26 +47,7 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({
       activePanel: state.activePanel === panel ? 'none' : panel,
     })),
-  setLayoutType: (layout) => set((state) => {
-    // Auto-enable 3D for 3D-only layouts
-    if (layout === 'spherical' || layout === 'forceDirected3d') {
-      return { layoutType: layout, is3D: true };
-    }
-    if (layout === 'forceDirected2d') {
-      return { layoutType: layout, is3D: false };
-    }
-    return { layoutType: layout };
-  }),
-  toggle3D: () =>
-    set((state) => {
-      const is3D = !state.is3D;
-      // When switching to 2D, move off 3D-only layouts
-      const needsLayoutSwitch = !is3D && (state.layoutType === 'spherical' || state.layoutType === 'forceDirected3d');
-      return {
-        is3D,
-        layoutType: needsLayoutSwitch ? 'forceDirected2d' : (is3D ? 'forceDirected3d' : state.layoutType),
-      };
-    }),
+  setLayoutType: (layout) => set({ layoutType: layout }),
   toggleClustering: () =>
     set((state) => ({ clusteringEnabled: !state.clusteringEnabled })),
   incrementGraphKey: () =>

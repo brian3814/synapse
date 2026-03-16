@@ -8,7 +8,7 @@ interface GraphControlsProps {
 }
 
 export function GraphControls({ graphRef }: GraphControlsProps) {
-  const { layoutType, setLayoutType, displayMode, is3D, toggle3D } = useUIStore();
+  const { layoutType, setLayoutType, displayMode } = useUIStore();
   const isSidePanel = displayMode === 'sidePanel';
   const [forceActive, setForceActive] = useState(false);
 
@@ -71,21 +71,8 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
         ))}
       </select>
 
-      {/* 3D toggle + force toggle */}
+      {/* Zoom controls */}
       <div className="flex gap-1">
-        {!isSidePanel && (
-          <button
-            onClick={toggle3D}
-            className={`text-xs px-2 py-1 rounded border ${
-              is3D
-                ? 'bg-indigo-600 text-white border-indigo-500'
-                : 'bg-zinc-800 text-zinc-300 border-zinc-600 hover:bg-zinc-700'
-            }`}
-            title={is3D ? 'Switch to 2D' : 'Switch to 3D'}
-          >
-            {is3D ? '3D' : '2D'}
-          </button>
-        )}
         <button
           onClick={handleToggleForce}
           className={`text-xs px-2 py-1 rounded border ${
@@ -97,10 +84,6 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
         >
           {forceActive ? '⏸' : '▶'}
         </button>
-      </div>
-
-      {/* Zoom controls */}
-      <div className="flex gap-1">
         <button
           onClick={handleZoomIn}
           className="bg-zinc-800 text-zinc-300 border border-zinc-600 rounded px-2 py-1 text-xs hover:bg-zinc-700"
