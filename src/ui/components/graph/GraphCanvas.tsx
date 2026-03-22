@@ -62,10 +62,14 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       renderer.on('lassoSelect', ({ nodeIds, additive }) => {
         propsRef.current.onLassoSelect?.(nodeIds, additive);
       });
+      renderer.on('nodeDragStart', ({ nodeId }) => {
+        const node = rendererRef.current?.getNodeMap().get(nodeId);
+        if (node) layoutRef.current?.pin(nodeId, node.x, node.y);
+      });
       renderer.on('nodeDragEnd', ({ nodeId, x, y }) => {
         propsRef.current.onNodeDragEnd?.(nodeId, x, y);
-        // Persist dragged position to DB (fire-and-forget)
         spatial.batchUpdatePositions([{ id: nodeId, x, y }]).catch(() => {});
+        layoutRef.current?.unpin(nodeId);
       });
 
       // Layout runner (only used for non-windowed mode)
@@ -113,46 +117,36 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
       renderer.setGraphData(nodesWithPositions, props.edges);
 
       if (needsLayout && props.nodes.length > 0) {
-        // Check if nodes already have DB-persisted positions
-        const hasPersistedPositions = nodesWithPositions.some(
-          (n) => n.x !== 0 || n.y !== 0
-        );
-        if (hasPersistedPositions) {
-          // Skip layout, just fit to view
-          renderer.fitToView();
-        } else {
-          // Run force layout
-          layout.start(
-            nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y })),
-            props.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
-            {
-              onTick: (positions, _alpha) => {
-                const r = rendererRef.current;
-                if (r) applyPositions(r, r.getNodes(), positions);
-              },
-              onDone: (positions) => {
-                const r = rendererRef.current;
-                if (r) {
-                  applyPositions(r, r.getNodes(), positions);
-                  r.fitToView();
-                  // Persist layout positions to DB (fire-and-forget)
-                  const nodes = r.getNodes();
-                  const updates: Array<{ id: string; x: number; y: number }> = [];
-                  for (let i = 0; i < nodes.length; i++) {
-                    const x = positions[i * 2];
-                    const y = positions[i * 2 + 1];
-                    if (!isNaN(x) && !isNaN(y)) {
-                      updates.push({ id: nodes[i].id, x, y });
-                    }
-                  }
-                  if (updates.length > 0) {
-                    spatial.batchUpdatePositions(updates).catch(() => {});
+        // Always run force layout — persisted positions serve as warm-start seeds
+        layout.start(
+          nodesWithPositions.map((n) => ({ id: n.id, x: n.x, y: n.y })),
+          props.edges.map((e) => ({ source: e.sourceId, target: e.targetId })),
+          {
+            onTick: (positions, _alpha) => {
+              const r = rendererRef.current;
+              if (r) applyPositions(r, r.getNodes(), positions);
+            },
+            onDone: (positions) => {
+              const r = rendererRef.current;
+              if (r) {
+                applyPositions(r, r.getNodes(), positions);
+                r.fitToView();
+                const nodes = r.getNodes();
+                const updates: Array<{ id: string; x: number; y: number }> = [];
+                for (let i = 0; i < nodes.length; i++) {
+                  const x = positions[i * 2];
+                  const y = positions[i * 2 + 1];
+                  if (!isNaN(x) && !isNaN(y)) {
+                    updates.push({ id: nodes[i].id, x, y });
                   }
                 }
-              },
-            }
-          );
-        }
+                if (updates.length > 0) {
+                  spatial.batchUpdatePositions(updates).catch(() => {});
+                }
+              }
+            },
+          }
+        );
       }
 
       nodeIdsRef.current = newNodeIds;
