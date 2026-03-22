@@ -318,10 +318,14 @@ export function useLLMExtraction() {
         case 'extraction_complete': {
           chrome.runtime.onMessage.removeListener(listener);
           if (event.extractionResult) {
-            const validated = extractionResultSchema.parse(event.extractionResult);
-            const items = await buildDiffItems(validated);
-            useLLMStore.getState().setDiff({ items });
-            useLLMStore.getState().setStatus('extracted');
+            try {
+              const validated = extractionResultSchema.parse(event.extractionResult);
+              const items = await buildDiffItems(validated);
+              useLLMStore.getState().setDiff({ items });
+              useLLMStore.getState().setStatus('extracted');
+            } catch (e: any) {
+              useLLMStore.getState().setError(`Failed to parse extraction result: ${e.message}`);
+            }
           }
           break;
         }
@@ -331,9 +335,9 @@ export function useLLMExtraction() {
           break;
         case 'done':
           chrome.runtime.onMessage.removeListener(listener);
-          // If status is still agent-running (no extraction_complete), just finish
+          // If status is still agent-running, agent finished without calling save_entities
           if (useLLMStore.getState().status === 'agent-running') {
-            useLLMStore.getState().setStatus('idle');
+            useLLMStore.getState().setError('Agent finished without extracting any entities. Try a more specific prompt.');
           }
           break;
       }

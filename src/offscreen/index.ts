@@ -115,6 +115,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }).catch(() => {});
         }
       },
+    }).catch((e) => {
+      chunkBuffer.drain();
+      chrome.runtime.sendMessage({
+        type: 'AGENT_PROGRESS',
+        payload: { runId, event: { type: 'error', error: e?.message ?? 'Agent loop failed unexpectedly' } },
+      }).catch(() => {});
     });
 
     return false;
