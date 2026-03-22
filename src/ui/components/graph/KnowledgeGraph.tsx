@@ -47,6 +47,8 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   useEffect(() => {
     spatial.totalNodeCount().then((count) => {
       setWindowed(count > SMALL_GRAPH_THRESHOLD);
+    }).catch(() => {
+      // DB not ready or timed out — default to non-windowed
     });
   }, [nodes.length]); // re-check when nodes change
 
