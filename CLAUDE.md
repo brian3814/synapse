@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chrome Manifest V3 extension providing a local-first knowledge graph with SQLite persistence (wa-sqlite + OPFS), 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. The UI runs in the Chrome Side Panel (default) or a full tab.
+Chrome Manifest V3 extension providing a local-first knowledge graph with SQLite persistence (wa-sqlite + OP
+FS), 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. The UI runs in the Chrome Side Panel (default) or a full tab.
 
 ## Build Commands
 
@@ -115,6 +116,24 @@ Layout runs in a Web Worker (`src/graph/layout/`):
 - Pin/unpin support for node dragging during live simulation
 
 React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.subscribe()` pushes data imperatively — no React re-renders during interactions. Graph container must use `absolute inset-0` positioning with `min-h-0` on flex parents.
+
+## Graph Renderer Pitfalls
+
+**Pitfall #14: InstancedMesh custom attributes require `onBeforeCompile`.** Three.js `MeshBasicMaterial` silently ignores custom geometry attributes (like `instanceOpacity`). Setting an attribute via `geometry.setAttribute()` does nothing unless you inject it into the shader via `material.onBeforeCompile`. The `node-mesh.ts` uses this to make per-instance opacity work. If you add new per-instance attributes, you must also patch the shader.
+
+**Pitfall #15: InstancedMesh frustum culling uses geometry bounds, not instance bounds.** Three.js culls the entire InstancedMesh based on the geometry's bounding sphere (e.g., `CircleGeometry(1)` → radius 1 at origin). When the camera pans away, ALL instances vanish. Always set `frustumCulled = false` on InstancedMesh objects, and propagate this in `grow()` / capacity-rebuild methods.
+
+**Pitfall #16: Spatial hash must be rebuilt after node position changes outside `updatePositions()`.** The `SpatialHash` is only rebuilt in `GraphRenderer.updatePositions()` (the public method). Direct position updates like `handleDragMove` bypass this, leaving the hash stale. Hit-testing then fails at the new position. Always call `spatialHash.rebuild()` after any position mutation.
+
+**Pitfall #17: Selection color restoration.** `NodeMesh.setSelection()` dims inactive nodes via opacity but `applySelection()` also changes selected node colors to `nodeActiveColor` via `setHover()`. When selection is cleared, `setSelection()` must restore original colors from the node data — resetting opacity alone leaves nodes stuck at the active color.
+
+**Pitfall #18: Drag vs click disambiguation.** Pointer-down on a node must NOT immediately start dragging — this swallows the click event. Use a `pendingDragNodeId` pattern: record the node on pointer-down, promote to active drag only after a movement threshold (3px) in pointer-move. If pointer-up fires without threshold crossing, treat as a click.
+
+**Pitfall #19: Ring mesh position sync.** The selection ring (`ringMesh`) copies the node's matrix at selection time but doesn't auto-update. If node positions change (drag, force layout ticks), the ring stays at the old position. `updatePositions()` must also update ring matrices via a `ringNodeIds` mapping.
+
+**Pitfall #20: Sequential DB round-trips in loops.** The DB client uses MessageChannel round-trips (UI → SharedWorker → DedicatedWorker → SQLite → back). Calling `await db.someQuery()` in a `for` loop serializes these, causing multi-second latency with 20+ items. Use `Promise.all()` to parallelize independent DB calls (e.g., `entityResolution.findMatches` in `buildDiffItems` and `proceedToReview`).
+
+**Pitfall #21: Tailwind utility classes may not apply in extension contexts.** Some Tailwind classes (especially spacing like `py-3`, `pt-3`) were observed not applying in the Chrome extension side panel, with computed styles showing `0px` despite correct class names and the classes existing in the CSS bundle. Use inline `style={{}}` props as a reliable fallback for critical spacing.
 
 ## Key References
 
