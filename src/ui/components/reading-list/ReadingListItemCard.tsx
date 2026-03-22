@@ -31,102 +31,104 @@ export function ReadingListItemCard({ item, selected, onSelect, onMerge }: Props
   const retryExtraction = useReadingListStore(s => s.retryExtraction);
 
   const isExtracting = ['fetching', 'extracting'].includes(item.status);
+  const entityCount = item.extractedNodes?.length ?? 0;
+  const edgeCount = item.extractedEdges?.length ?? 0;
 
   return (
     <div
-      className={`px-3 py-2.5 border-b border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors ${
-        selected ? 'bg-zinc-800/80 border-l-2 border-l-indigo-500' : ''
+      className={`px-3.5 py-3 rounded-lg border cursor-pointer transition-colors ${
+        selected
+          ? 'bg-zinc-800 border-indigo-500'
+          : 'bg-zinc-800 border-zinc-700/50 hover:border-zinc-600'
       }`}
       onClick={onSelect}
     >
-      {/* Title + domain */}
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-medium text-zinc-200 line-clamp-2 leading-tight">
+      {/* Top row: title + action button */}
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-medium text-zinc-200 line-clamp-2 leading-tight flex-1 min-w-0">
           {item.pageTitle || item.title}
         </h3>
-      </div>
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-xs text-zinc-500">{getDomain(item.url)}</span>
-        <span className="text-xs text-zinc-600">&middot;</span>
-        <span className="text-xs text-zinc-500">{timeAgo(item.addedAt)}</span>
+        {/* Always-visible action button */}
+        {item.status === 'pending' && !isExtracting && (
+          <button
+            className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              retryExtraction(item.url);
+            }}
+          >
+            Extract
+          </button>
+        )}
         {isExtracting && (
-          <span className="text-xs text-blue-400 flex items-center gap-1">
+          <span className="text-xs text-blue-400 flex items-center gap-1 flex-shrink-0 py-1">
             <span className="animate-pulse">&bull;</span> Extracting...
           </span>
         )}
-        {item.status === 'pending' && (
-          <span className="text-xs text-zinc-400">Awaiting extraction</span>
+        {item.status === 'extracted' && (
+          <button
+            className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMerge(item);
+            }}
+          >
+            Review &amp; Merge
+          </button>
         )}
         {item.status === 'failed' && (
-          <span className="text-xs text-red-400">Failed</span>
+          <button
+            className="px-2.5 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded-md transition-colors flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              retryExtraction(item.url);
+            }}
+          >
+            Retry
+          </button>
         )}
       </div>
 
-      {/* Summary (when extracted) */}
-      {item.status === 'extracted' && item.summary && (
-        <p className="text-xs text-zinc-400 mt-2 line-clamp-3 leading-relaxed">
-          {item.summary}
-        </p>
-      )}
+      {/* Metadata row */}
+      <div className="flex items-center gap-2 mt-1.5">
+        <span className="text-xs text-zinc-500">{getDomain(item.url)}</span>
+        <span className="text-xs text-zinc-600">&middot;</span>
+        <span className="text-xs text-zinc-500">{timeAgo(item.addedAt)}</span>
+        {item.status === 'extracted' && entityCount > 0 && !selected && (
+          <>
+            <span className="text-xs text-zinc-600">&middot;</span>
+            <span className="text-xs text-zinc-400">{entityCount} entities</span>
+          </>
+        )}
+        {item.status === 'failed' && item.error && (
+          <>
+            <span className="text-xs text-zinc-600">&middot;</span>
+            <span className="text-xs text-red-400 truncate">{item.error}</span>
+          </>
+        )}
+      </div>
 
-      {/* Key topics */}
-      {item.status === 'extracted' && item.keyTopics && item.keyTopics.length > 0 && selected && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {item.keyTopics.map((topic, i) => (
-            <span key={i} className="px-1.5 py-0.5 text-xs bg-zinc-700/50 text-zinc-300 rounded">
-              {topic}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Entity count */}
-      {item.status === 'extracted' && selected && (
-        <div className="text-xs text-zinc-500 mt-2">
-          {item.extractedNodes?.length ?? 0} entities &middot; {item.extractedEdges?.length ?? 0} relationships
-        </div>
-      )}
-
-      {/* Actions (when selected) */}
-      {selected && (
-        <div className="flex gap-2 mt-2">
-          {item.status === 'pending' && (
-            <button
-              className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                retryExtraction(item.url);
-              }}
-            >
-              Extract
-            </button>
+      {/* Expanded details (when selected + extracted) */}
+      {selected && item.status === 'extracted' && (
+        <>
+          {item.summary && (
+            <p className="text-xs text-zinc-400 mt-2 line-clamp-3 leading-relaxed">
+              {item.summary}
+            </p>
           )}
-          {item.status === 'extracted' && (
-            <button
-              className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMerge(item);
-              }}
-            >
-              Review &amp; Merge
-            </button>
+          {item.keyTopics && item.keyTopics.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {item.keyTopics.map((topic, i) => (
+                <span key={i} className="px-1.5 py-0.5 text-xs bg-zinc-700/50 text-zinc-300 rounded">
+                  {topic}
+                </span>
+              ))}
+            </div>
           )}
-          {item.status === 'failed' && (
-            <button
-              className="px-2.5 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                retryExtraction(item.url);
-              }}
-            >
-              Retry
-            </button>
-          )}
-          {item.error && (
-            <span className="text-xs text-red-400/80 self-center">{item.error}</span>
-          )}
-        </div>
+          <div className="text-xs text-zinc-500 mt-2">
+            {entityCount} entities &middot; {edgeCount} relationships
+          </div>
+        </>
       )}
     </div>
   );
