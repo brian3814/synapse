@@ -14,6 +14,7 @@ export class NodeMesh {
   private nodeIds: string[] = [];
   private nodeIndexMap = new Map<string, number>();
   private freeSlots: number[] = [];
+  private ringNodeIds: string[] = []; // maps ring instance index → node ID
 
   // Reusable temporaries
   private readonly _mat = new THREE.Matrix4();
@@ -222,8 +223,17 @@ export class NodeMesh {
       this._mat.makeScale(size, size, size);
       this._mat.setPosition(pos.x, pos.y, pos.z ?? 0);
       this.mesh.setMatrixAt(idx, this._mat);
+
+      // Update ring position if this node has one
+      const ringIdx = this.ringNodeIds.indexOf(id);
+      if (ringIdx !== -1) {
+        this.ringMesh.setMatrixAt(ringIdx, this._mat);
+      }
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.ringMesh.count > 0) {
+      this.ringMesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   private ringCapacity = 1;
@@ -251,22 +261,31 @@ export class NodeMesh {
     (this as any).ringMesh = newRing;
   }
 
-  setSelection(nodeIds: Set<string>, pathNodeIds: Set<string>, theme: RenderTheme) {
+  setSelection(nodeIds: Set<string>, pathNodeIds: Set<string>, theme: RenderTheme, nodeMap?: Map<string, RenderNode>) {
     const hasSelection = nodeIds.size > 0;
     const hasPath = pathNodeIds.size > 0;
 
     if (!hasSelection && !hasPath) {
       this.ringMesh.count = 0;
-      for (const [, i] of this.nodeIndexMap) {
+      this.ringNodeIds = [];
+      for (const [id, i] of this.nodeIndexMap) {
         this.opacityAttr.setX(i, 1.0);
+        // Restore original color
+        const node = nodeMap?.get(id);
+        if (node) {
+          this._color.set(node.color);
+          this.colorAttr.setXYZ(i, this._color.r, this._color.g, this._color.b);
+        }
       }
       this.opacityAttr.needsUpdate = true;
+      this.colorAttr.needsUpdate = true;
       return;
     }
 
     // Show rings for all selected nodes
     this.ensureRingCapacity(nodeIds.size);
     this._color.set(theme.selectionRingColor);
+    this.ringNodeIds = [];
     let ringIdx = 0;
     for (const id of nodeIds) {
       const idx = this.nodeIndexMap.get(id);
@@ -274,6 +293,7 @@ export class NodeMesh {
       this.mesh.getMatrixAt(idx, this._mat);
       this.ringMesh.setMatrixAt(ringIdx, this._mat);
       this.ringMesh.instanceColor!.setXYZ(ringIdx, this._color.r, this._color.g, this._color.b);
+      this.ringNodeIds.push(id);
       ringIdx++;
     }
     this.ringMesh.count = ringIdx;

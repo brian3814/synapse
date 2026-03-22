@@ -109,12 +109,26 @@ export class GraphRenderer implements GraphRendererInstance {
     this.lassoOverlay = new LassoOverlay(container);
 
     // Wire up camera controller events
+    this.cameraController.onNodeHitTest = (sx, sy) => {
+      const result = hitTest(sx, sy, this.nodes, this.edges, this.nodeMap,
+        this.cameraController.camera, this.renderer.domElement, this.spatialHash);
+      if (result.type === 'node' && result.id) {
+        const node = this.nodeMap.get(result.id);
+        if (node?.data?.isCluster) return null;
+        return result.id;
+      }
+      return null;
+    };
+    this.cameraController.onDragStart = (nodeId) => {
+      this.emit('nodeDragStart', { nodeId });
+    };
     this.cameraController.onClick = (sx, sy, modifiers) => this.handleClick(sx, sy, modifiers);
     this.cameraController.onPointerMoveWorld = (sx, sy) => this.handleHover(sx, sy);
     this.cameraController.onDragMove = (wx, wy) => this.handleDragMove(wx, wy);
     this.cameraController.onDragEnd = (nodeId, worldX, worldY) => {
       const node = this.nodeMap.get(nodeId);
       if (node) {
+        this.spatialHash.rebuild(this.nodes);
         this.emit('nodeDragEnd', { nodeId, x: node.x, y: node.y });
       }
     };
@@ -282,7 +296,7 @@ export class GraphRenderer implements GraphRendererInstance {
   }
 
   private applySelection() {
-    this.nodeMesh.setSelection(this.selectedNodeIds, this.pathNodeIds, this.theme);
+    this.nodeMesh.setSelection(this.selectedNodeIds, this.pathNodeIds, this.theme, this.nodeMap);
     // Highlight selected nodes with active color
     for (const id of this.selectedNodeIds) {
       this.nodeMesh.setHover(id, this.theme);

@@ -34,6 +34,8 @@ export class CameraController {
   private onPointerUpBound: (e: PointerEvent) => void;
 
   // External callbacks
+  onNodeHitTest?: (screenX: number, screenY: number) => string | null;
+  onDragStart?: (nodeId: string) => void;
   onDragMove?: (worldX: number, worldY: number) => void;
   onPointerMoveWorld?: (screenX: number, screenY: number) => void;
   onClick?: (screenX: number, screenY: number, modifiers: Modifiers) => void;
@@ -99,12 +101,14 @@ export class CameraController {
 
   private clickStartScreen = { x: 0, y: 0 };
   private pointerMoved = false;
+  private pendingDragNodeId: string | null = null; // node under pointer, awaiting movement threshold
 
   private onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
 
     this.clickStartScreen = { x: e.clientX, y: e.clientY };
     this.pointerMoved = false;
+    this.pendingDragNodeId = null;
 
     if (e.shiftKey && !this.isDragging) {
       this.isLassoing = true;
@@ -116,6 +120,13 @@ export class CameraController {
     }
 
     if (!this.isDragging) {
+      // Check if pointer is on a node — don't start drag yet, wait for movement
+      const nodeId = this.onNodeHitTest?.(e.clientX, e.clientY);
+      if (nodeId) {
+        this.pendingDragNodeId = nodeId;
+        // Don't start pan either — wait for move threshold to decide
+        return;
+      }
       this.isPanning = true;
       this.panStartX = e.clientX;
       this.panStartY = e.clientY;
@@ -134,6 +145,13 @@ export class CameraController {
       this.lassoEnd = this.screenToWorld(e.clientX, e.clientY);
       this.onLassoUpdate?.(this.lassoStart, this.lassoEnd);
       return;
+    }
+
+    // Promote pending drag to active drag once movement threshold is crossed
+    if (this.pendingDragNodeId && this.pointerMoved) {
+      this.startDrag(this.pendingDragNodeId);
+      this.onDragStart?.(this.pendingDragNodeId);
+      this.pendingDragNodeId = null;
     }
 
     if (this.isDragging) {
@@ -155,6 +173,9 @@ export class CameraController {
   }
 
   private onPointerUp(e: PointerEvent) {
+    const hadPendingDrag = this.pendingDragNodeId !== null;
+    this.pendingDragNodeId = null;
+
     if (this.isLassoing) {
       this.isLassoing = false;
       this.canvas.style.cursor = '';
@@ -173,6 +194,7 @@ export class CameraController {
     }
 
     if (!this.pointerMoved && !this.isDragging) {
+      // Click — fire regardless of whether we had a pending drag (that means node was clicked without moving)
       this.onClick?.(e.clientX, e.clientY, {
         ctrl: e.metaKey || e.ctrlKey,
         shift: e.shiftKey,
