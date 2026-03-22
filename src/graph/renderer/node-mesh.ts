@@ -28,10 +28,35 @@ export class NodeMesh {
     const circleMat = new THREE.MeshBasicMaterial({
       transparent: true,
       depthTest: false,
+      depthWrite: false,
     });
+    // Inject per-instance opacity into the shader
+    circleMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <color_pars_vertex>',
+        `#include <color_pars_vertex>
+        attribute float instanceOpacity;
+        varying float vInstanceOpacity;`
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <color_vertex>',
+        `#include <color_vertex>
+        vInstanceOpacity = instanceOpacity;`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <color_pars_fragment>',
+        `#include <color_pars_fragment>
+        varying float vInstanceOpacity;`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `gl_FragColor = vec4(outgoingLight, diffuseColor.a * vInstanceOpacity);`
+      );
+    };
     this.mesh = new THREE.InstancedMesh(circleGeo, circleMat, this.capacity);
     this.mesh.count = 0;
     this.mesh.renderOrder = 1;
+    this.mesh.frustumCulled = false;
 
     // Per-instance color
     this.colorAttr = new THREE.InstancedBufferAttribute(
@@ -53,7 +78,8 @@ export class NodeMesh {
     });
     this.ringMesh = new THREE.InstancedMesh(ringGeo, ringMat, 1);
     this.ringMesh.count = 0;
-    this.ringMesh.renderOrder = 0;
+    this.ringMesh.renderOrder = 3;
+    this.ringMesh.frustumCulled = false;
     this.ringMesh.instanceColor = new THREE.InstancedBufferAttribute(
       new Float32Array(3), 3
     );
@@ -70,6 +96,7 @@ export class NodeMesh {
 
     const newMesh = new THREE.InstancedMesh(oldGeo, oldMat as THREE.Material, this.capacity);
     newMesh.renderOrder = this.mesh.renderOrder;
+    newMesh.frustumCulled = false;
 
     // Copy existing transforms
     for (let i = 0; i < this.count; i++) {
@@ -211,6 +238,7 @@ export class NodeMesh {
 
     const newRing = new THREE.InstancedMesh(oldGeo, oldMat as THREE.Material, this.ringCapacity);
     newRing.renderOrder = this.ringMesh.renderOrder;
+    newRing.frustumCulled = false;
     newRing.instanceColor = new THREE.InstancedBufferAttribute(
       new Float32Array(this.ringCapacity * 3), 3
     );
