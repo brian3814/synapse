@@ -39,23 +39,16 @@ export async function buildDiffItems(
   validated: { nodes: Array<{ label: string; type: string; properties?: Record<string, unknown> }>; edges: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }> }
 ): Promise<DiffItem[]> {
   const graph = useGraphStore.getState();
-  const items: DiffItem[] = [];
 
-  for (const node of validated.nodes) {
+  // Resolve all nodes in parallel to avoid sequential DB round-trips
+  const nodeItems = await Promise.all(validated.nodes.map(async (node): Promise<DiffItem> => {
     // First try in-memory exact match
     const inMemoryMatch = graph.nodes.find(
       (n) => n.label.toLowerCase() === node.label.toLowerCase()
     );
 
     if (inMemoryMatch) {
-      items.push({
-        action: 'merge',
-        type: 'node',
-        extracted: node,
-        existingMatch: inMemoryMatch,
-        accepted: true,
-      });
-      continue;
+      return { action: 'merge', type: 'node', extracted: node, existingMatch: inMemoryMatch, accepted: true };
     }
 
     // Try DB-level entity resolution (alias + fuzzy matching)
@@ -64,37 +57,23 @@ export async function buildDiffItems(
       if (matches.length > 0) {
         const bestMatch = matches[0];
         const existingNode = graph.nodes.find((n) => n.id === bestMatch.nodeId);
-        items.push({
-          action: 'merge',
-          type: 'node',
-          extracted: node,
-          existingMatch: existingNode ?? undefined,
-          accepted: true,
-        });
-        continue;
+        return { action: 'merge', type: 'node', extracted: node, existingMatch: existingNode ?? undefined, accepted: true };
       }
     } catch {
       // DB not ready or entity resolution failed, fall through to 'add'
     }
 
-    items.push({
-      action: 'add',
-      type: 'node',
-      extracted: node,
-      accepted: true,
-    });
-  }
+    return { action: 'add', type: 'node', extracted: node, accepted: true };
+  }));
 
-  for (const edge of validated.edges) {
-    items.push({
-      action: 'add',
-      type: 'edge',
-      extracted: edge,
-      accepted: true,
-    });
-  }
+  const edgeItems: DiffItem[] = validated.edges.map((edge) => ({
+    action: 'add',
+    type: 'edge',
+    extracted: edge,
+    accepted: true,
+  }));
 
-  return items;
+  return [...nodeItems, ...edgeItems];
 }
 
 export function useLLMExtraction() {
@@ -373,12 +352,11 @@ export function useLLMExtraction() {
     const reviewEdges: ReviewEdge[] = [];
     const labelToTempId = new Map<string, string>();
 
-    // Convert node DiffItems → ReviewNodes
-    for (const item of diff.items) {
-      if (item.type !== 'node') continue;
+    // Convert node DiffItems → ReviewNodes (resolve fuzzy matches in parallel)
+    const nodeItems = diff.items.filter(item => item.type === 'node');
+    const resolvedNodes = await Promise.all(nodeItems.map(async (item) => {
       const extracted = item.extracted as { label: string; type: string; properties?: Record<string, unknown> };
       const tempId = `temp-${crypto.randomUUID()}`;
-      labelToTempId.set(extracted.label.toLowerCase(), tempId);
 
       let mergeRecommendation: ReviewNode['mergeRecommendation'];
 
@@ -392,7 +370,6 @@ export function useLLMExtraction() {
           status: 'pending',
         };
       } else if (item.action === 'add') {
-        // Try finding fuzzy matches for new nodes
         try {
           const matches: EntityMatch[] = await entityResolution.findMatches(extracted.label);
           if (matches.length > 0) {
@@ -413,14 +390,12 @@ export function useLLMExtraction() {
         }
       }
 
-      reviewNodes.push({
-        tempId,
-        label: extracted.label,
-        type: extracted.type,
-        properties: extracted.properties ?? {},
-        mergeRecommendation,
-        removed: false,
-      });
+      return { tempId, label: extracted.label, type: extracted.type, properties: extracted.properties ?? {}, mergeRecommendation, removed: false } as ReviewNode;
+    }));
+
+    for (const node of resolvedNodes) {
+      labelToTempId.set(node.label.toLowerCase(), node.tempId);
+      reviewNodes.push(node);
     }
 
     // Convert edge DiffItems → ReviewEdges
