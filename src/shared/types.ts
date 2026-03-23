@@ -289,6 +289,14 @@ export interface AgentTurn {
   collapsed?: boolean;
 }
 
+export interface ChatAgentTurn {
+  type: 'thinking' | 'tool_call' | 'tool_result';
+  content: string;
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
+  isError?: boolean;
+}
+
 // Display mode
 export type DisplayMode = 'sidePanel' | 'tab';
 

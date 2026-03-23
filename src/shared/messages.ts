@@ -244,6 +244,40 @@ export interface ReadingListRetryMessage extends ExtensionMessage {
   };
 }
 
+// Chat agent messages
+// UI -> Service Worker (no API key) for tool-use LLM calls
+export interface ChatLLMRequestMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_REQUEST';
+  payload: {
+    requestId: string;
+    provider: string;
+    model: string;
+    systemPrompt: string;
+    messages: Array<{ role: string; content: string | Array<any> }>;
+    tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+  };
+}
+
+// SW -> Offscreen (with API key injected)
+export interface ChatLLMRequestWithKeyMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_REQUEST_WITH_KEY';
+  payload: ChatLLMRequestMessage['payload'] & { apiKey: string };
+}
+
+// Offscreen -> broadcast (streaming chunks + final result)
+export interface ChatLLMStreamMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_STREAM';
+  payload: {
+    requestId: string;
+    textChunk?: string;
+    done: boolean;
+    textContent?: string;
+    toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
+    stopReason?: string;
+    error?: string;
+  };
+}
+
 // OAuth messages
 export interface OAuthStartMessage extends ExtensionMessage {
   type: 'OAUTH_START';
@@ -295,7 +329,10 @@ export type RuntimeMessage =
   | OAuthStartMessage
   | OAuthRevokeMessage
   | OAuthCheckMessage
-  | OAuthStatusMessage;
+  | OAuthStatusMessage
+  | ChatLLMRequestMessage
+  | ChatLLMRequestWithKeyMessage
+  | ChatLLMStreamMessage;
 
 // Helper to create messages
 export function createMessage<T extends ExtensionMessage>(
