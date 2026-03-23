@@ -271,6 +271,34 @@ export const readingList = {
     sendRequest('readingList.getRecent', limit) as Promise<any[]>,
 };
 
+// Chat session operations
+export const chat = {
+  getActiveSession: () =>
+    sendRequest('chat.getActiveSession') as Promise<any | null>,
+  createSession: (id: string, title: string) =>
+    sendRequest('chat.createSession', { id, title }) as Promise<any>,
+  expireSession: (id: string) =>
+    sendRequest('chat.expireSession', id) as Promise<{ success: boolean }>,
+  expireStale: () =>
+    sendRequest('chat.expireStale') as Promise<{ success: boolean }>,
+  touchSession: (id: string) =>
+    sendRequest('chat.touchSession', id) as Promise<{ success: boolean }>,
+  pruneSessions: () =>
+    sendRequest('chat.pruneSessions') as Promise<{ success: boolean }>,
+  saveMessage: (input: {
+    id: string;
+    sessionId: string;
+    role: 'user' | 'assistant';
+    content: string;
+    ragContext?: string | null;
+    status: 'complete' | 'error';
+  }) => sendRequest('chat.saveMessage', input) as Promise<any>,
+  getMessages: (sessionId: string) =>
+    sendRequest('chat.getMessages', sessionId) as Promise<any[]>,
+  getRecentMessages: (sessionId: string, limit?: number) =>
+    sendRequest('chat.getRecentMessages', { sessionId, limit }) as Promise<any[]>,
+};
+
 // Query engine operations
 export const graph = {
   query: (graphQuery: unknown) => sendRequest('query.execute', graphQuery),

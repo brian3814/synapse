@@ -14,6 +14,7 @@ import * as spatialQueries from './queries/spatial-queries';
 import * as readingListQueries from './queries/reading-list-queries';
 import * as tagQueries from './queries/tag-queries';
 import * as conceptSourceQueries from './queries/concept-source-queries';
+import * as chatQueries from './queries/chat-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -65,6 +66,8 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       ensureInit();
       await executeExec('DELETE FROM edges');
       await executeExec('DELETE FROM nodes');
+      await executeExec('DELETE FROM chat_messages');
+      await executeExec('DELETE FROM chat_sessions');
       return { result: { success: true }, syncEvent: { type: 'reset' } };
     }
 
@@ -419,6 +422,50 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'mutation.execute': {
       ensureInit();
       return { result: await executeGraphMutation(params) };
+    }
+
+    // Chat session operations
+    case 'chat.getActiveSession': {
+      ensureInit();
+      return { result: await chatQueries.getActiveSession() };
+    }
+    case 'chat.createSession': {
+      ensureInit();
+      const p = params as { id: string; title: string };
+      return { result: await chatQueries.createSession(p.id, p.title) };
+    }
+    case 'chat.expireSession': {
+      ensureInit();
+      await chatQueries.expireSession(params as string);
+      return { result: { success: true } };
+    }
+    case 'chat.expireStale': {
+      ensureInit();
+      await chatQueries.expireAllStaleSessions();
+      return { result: { success: true } };
+    }
+    case 'chat.touchSession': {
+      ensureInit();
+      await chatQueries.touchSession(params as string);
+      return { result: { success: true } };
+    }
+    case 'chat.pruneSessions': {
+      ensureInit();
+      await chatQueries.pruneSessions();
+      return { result: { success: true } };
+    }
+    case 'chat.saveMessage': {
+      ensureInit();
+      return { result: await chatQueries.saveMessage(params as any) };
+    }
+    case 'chat.getMessages': {
+      ensureInit();
+      return { result: await chatQueries.getSessionMessages(params as string) };
+    }
+    case 'chat.getRecentMessages': {
+      ensureInit();
+      const p = params as { sessionId: string; limit?: number };
+      return { result: await chatQueries.getRecentMessages(p.sessionId, p.limit) };
     }
 
     default:
