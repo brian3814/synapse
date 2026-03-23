@@ -87,7 +87,7 @@ export function SearchPanel() {
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="text-sm text-zinc-200 truncate">{node.label}</span>
+                <span className="text-sm text-zinc-200 truncate">{node.name}</span>
                 <span className="text-xs text-zinc-500 ml-auto shrink-0">{node.type}</span>
               </button>
             );

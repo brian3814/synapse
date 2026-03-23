@@ -127,7 +127,7 @@ async function getSourceExcerpts(
         const node = nodeMap.get(nodeId);
         excerpts.push({
           nodeId,
-          nodeLabel: node?.label ?? 'Unknown',
+          nodeLabel: node?.name ?? 'Unknown',
           url: sc.url,
           title: sc.title,
           excerpt: sc.content.slice(0, maxExcerptLength),
@@ -189,7 +189,7 @@ export function formatRAGPrompt(context: RAGContext): string {
           props = ' | ' + entries.map(([k, v]) => `${k}: ${v}`).join(', ');
         }
       } catch {}
-      parts.push(`- [${node.type}] ${node.label} (id:${node.id})${props}${node.source_url ? ` (source: ${node.source_url})` : ''}`);
+      parts.push(`- [${node.type}] ${node.name} (id:${node.id})${props}${node.source_url ? ` (source: ${node.source_url})` : ''}`);
     }
     parts.push('');
   }
@@ -197,7 +197,7 @@ export function formatRAGPrompt(context: RAGContext): string {
   // Relationships
   if (context.relevantEdges.length > 0) {
     parts.push('## Relationships:');
-    const nodeMap = new Map(context.relevantNodes.map((n) => [n.id, n.label]));
+    const nodeMap = new Map(context.relevantNodes.map((n) => [n.id, n.name]));
     for (const edge of context.relevantEdges.slice(0, 30)) {
       const src = nodeMap.get(edge.source_id) ?? edge.source_id;
       const tgt = nodeMap.get(edge.target_id) ?? edge.target_id;

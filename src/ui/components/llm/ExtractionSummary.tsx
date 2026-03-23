@@ -19,7 +19,7 @@ export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
     const extracted = item.extracted as ExtractionResult['nodes'][0];
     const type = extracted.type || 'unknown';
     const list = nodesByType.get(type) ?? [];
-    list.push(extracted.label);
+    list.push(extracted.name);
     nodesByType.set(type, list);
   }
 
@@ -50,9 +50,9 @@ export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
               const e = item.extracted as ExtractionResult['edges'][0];
               return (
                 <p key={i} className="text-sm text-zinc-300">
-                  {e.sourceLabel} <span className="text-zinc-500">&rarr;</span>{' '}
+                  {e.sourceName} <span className="text-zinc-500">&rarr;</span>{' '}
                   <span className="text-indigo-400">{e.label}</span>{' '}
-                  <span className="text-zinc-500">&rarr;</span> {e.targetLabel}
+                  <span className="text-zinc-500">&rarr;</span> {e.targetName}
                 </p>
               );
             })}

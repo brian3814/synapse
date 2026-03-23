@@ -21,7 +21,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
   const types = useNodeTypeStore((s) => s.types);
 
   const isSelected = selectedTempId === node.tempId;
-  const [editLabel, setEditLabel] = useState(node.label);
+  const [editName, setEditName] = useState(node.name);
   const [editType, setEditType] = useState(node.type);
   const [showMergeDetail, setShowMergeDetail] = useState(false);
 
@@ -33,14 +33,14 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
       select(null, null);
     } else {
       select(node.tempId, 'node');
-      setEditLabel(node.label);
+      setEditName(node.name);
       setEditType(node.type);
     }
   };
 
   const handleSaveEdit = () => {
-    const changes: Partial<Pick<ReviewNode, 'label' | 'type'>> = {};
-    if (editLabel !== node.label) changes.label = editLabel;
+    const changes: Partial<Pick<ReviewNode, 'name' | 'type'>> = {};
+    if (editName !== node.name) changes.name = editName;
     if (editType !== node.type) changes.type = editType;
     if (Object.keys(changes).length > 0) {
       editNode(node.tempId, changes);
@@ -81,7 +81,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
                   : '#10b981',
           }}
         />
-        <span className="text-sm text-zinc-200 truncate font-medium">{node.label}</span>
+        <span className="text-sm text-zinc-200 truncate font-medium">{node.name}</span>
         <span className="text-xs text-zinc-500 ml-auto shrink-0">{node.type}</span>
 
         {/* Merge badge */}
@@ -107,7 +107,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
       {merge && showMergeDetail && merge.status === 'pending' && (
         <div className="px-3 pb-2 pl-7 space-y-1">
           <p className="text-xs text-amber-400/80">
-            Match: <span className="text-zinc-300">{merge.existingLabel}</span>
+            Match: <span className="text-zinc-300">{merge.existingName}</span>
             <span className="text-zinc-500 ml-1">({Math.round(merge.similarity * 100)}% {merge.matchType})</span>
           </p>
           <div className="flex gap-1">
@@ -139,7 +139,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
       {merge?.status === 'accepted' && (
         <div className="px-3 pb-2 pl-7">
           <p className="text-xs text-green-400/80">
-            Merging with: <span className="text-zinc-300">{merge.existingLabel}</span>
+            Merging with: <span className="text-zinc-300">{merge.existingName}</span>
           </p>
         </div>
       )}
@@ -150,12 +150,12 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
           <div className="flex gap-2">
             <input
               type="text"
-              value={editLabel}
-              onChange={(e) => setEditLabel(e.target.value)}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
               onBlur={handleSaveEdit}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
               className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500"
-              placeholder="Label"
+              placeholder="Name"
               onClick={(e) => e.stopPropagation()}
             />
             <select
@@ -223,7 +223,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
               <p className="text-xs text-zinc-400">Property assignments:</p>
               {pendingConversion.assignments.map((a, i) => (
                 <div key={i} className="flex items-center gap-1 text-xs">
-                  <span className="text-zinc-400">{a.adjacentLabel} gets:</span>
+                  <span className="text-zinc-400">{a.adjacentName} gets:</span>
                   <input
                     type="text"
                     value={a.suggestedKey}

@@ -96,7 +96,7 @@ export function IntelligencePanel() {
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: node.color ?? '#6B7280' }}
                   />
-                  <span className="text-xs text-zinc-300 truncate">{node.label}</span>
+                  <span className="text-xs text-zinc-300 truncate">{node.name}</span>
                   <span className="text-[10px] text-zinc-600 ml-auto">{degree} connections</span>
                 </button>
               );
@@ -176,7 +176,7 @@ function ClusterCard({ cluster, onNodeClick }: { cluster: Cluster; onNodeClick: 
               onClick={() => onNodeClick(node!.id)}
               className="text-[10px] px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 transition-colors"
             >
-              {node!.label}
+              {node!.name}
             </button>
           ))}
           {clusterNodes.length > 12 && (
@@ -204,18 +204,18 @@ function SuggestionCard({
   if (!nodeA || !nodeB) return null;
 
   const sharedLabels = suggestion.sharedNeighbors
-    .map((id) => nodes.find((n) => n.id === id)?.label ?? '?')
+    .map((id) => nodes.find((n) => n.id === id)?.name ?? '?')
     .slice(0, 3);
 
   return (
     <div className="px-3 py-2 bg-zinc-800/70 rounded border border-zinc-700/50">
       <p className="text-xs text-zinc-300">
         <button onClick={() => onNodeClick(suggestion.nodeA)} className="text-indigo-400 hover:text-indigo-300">
-          {nodeA.label}
+          {nodeA.name}
         </button>
         {' and '}
         <button onClick={() => onNodeClick(suggestion.nodeB)} className="text-indigo-400 hover:text-indigo-300">
-          {nodeB.label}
+          {nodeB.name}
         </button>
         {' share '}
         <span className="text-zinc-200 font-medium">{suggestion.sharedNeighbors.length}</span>

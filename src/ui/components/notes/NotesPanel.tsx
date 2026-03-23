@@ -72,7 +72,7 @@ function NoteListItem({ node, onEdit }: { node: GraphNode; onEdit: (id: string) 
       className="w-full text-left px-3 py-2.5 rounded bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-700/50 transition-colors group"
     >
       <p className="text-sm text-zinc-200 font-medium truncate group-hover:text-zinc-100">
-        {node.label}
+        {node.name}
       </p>
       {preview && (
         <p className="text-xs text-zinc-500 mt-0.5 truncate">{preview}</p>

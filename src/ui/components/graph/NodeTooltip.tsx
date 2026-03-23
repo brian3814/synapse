@@ -4,7 +4,7 @@ import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 interface NodeTooltipProps {
   node: {
     id: string;
-    label: string;
+    name: string;
     data?: {
       type?: string;
       properties?: Record<string, unknown>;
@@ -26,7 +26,7 @@ export function NodeTooltip({ node }: NodeTooltipProps) {
           style={{ backgroundColor: color }}
         />
         <span className="font-medium text-sm text-zinc-100 truncate">
-          {node.label}
+          {node.name}
         </span>
       </div>
       <span className="text-xs text-zinc-400 capitalize">{type}</span>

@@ -143,7 +143,7 @@ export function DiffView({ onApply }: DiffViewProps) {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wide ${style.badge}`}>
                       {style.label}
                     </span>
-                    <span className="text-sm text-zinc-200 truncate font-medium">{extracted.label}</span>
+                    <span className="text-sm text-zinc-200 truncate font-medium">{extracted.name}</span>
                     <span className="text-xs text-zinc-500 ml-auto shrink-0">{extracted.type}</span>
                   </label>
 
@@ -151,8 +151,8 @@ export function DiffView({ onApply }: DiffViewProps) {
                   {item.action === 'merge' && existing && (
                     <div className="px-3 pb-2 pl-9">
                       <p className="text-xs text-amber-400/80">
-                        Merges with: <span className="text-zinc-300">{existing.label}</span>
-                        {existing.label.toLowerCase() !== extracted.label.toLowerCase() && (
+                        Merges with: <span className="text-zinc-300">{existing.name}</span>
+                        {existing.name.toLowerCase() !== extracted.name.toLowerCase() && (
                           <span className="text-zinc-500 ml-1">(alias will be created)</span>
                         )}
                       </p>
@@ -201,11 +201,11 @@ export function DiffView({ onApply }: DiffViewProps) {
                     new
                   </span>
                   <span className="text-sm text-zinc-200 truncate">
-                    <span className="text-zinc-300">{extracted.sourceLabel}</span>
+                    <span className="text-zinc-300">{extracted.sourceName}</span>
                     <span className="text-zinc-500 mx-1">&rarr;</span>
                     <span className="text-indigo-400">{extracted.label}</span>
                     <span className="text-zinc-500 mx-1">&rarr;</span>
-                    <span className="text-zinc-300">{extracted.targetLabel}</span>
+                    <span className="text-zinc-300">{extracted.targetName}</span>
                   </span>
                 </label>
               );

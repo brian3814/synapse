@@ -3,11 +3,11 @@ import { useExtractionReviewStore, type ReviewEdge } from '../../../graph/store/
 
 interface ReviewEdgeItemProps {
   edge: ReviewEdge;
-  sourceLabel: string;
-  targetLabel: string;
+  sourceName: string;
+  targetName: string;
 }
 
-export function ReviewEdgeItem({ edge, sourceLabel, targetLabel }: ReviewEdgeItemProps) {
+export function ReviewEdgeItem({ edge, sourceName, targetName }: ReviewEdgeItemProps) {
   const selectedTempId = useExtractionReviewStore((s) => s.selectedTempId);
   const select = useExtractionReviewStore((s) => s.select);
   const editEdge = useExtractionReviewStore((s) => s.editEdge);
@@ -42,11 +42,11 @@ export function ReviewEdgeItem({ edge, sourceLabel, targetLabel }: ReviewEdgeIte
         onClick={handleClick}
       >
         <span className="text-sm text-zinc-200 truncate">
-          <span className="text-zinc-300">{sourceLabel}</span>
+          <span className="text-zinc-300">{sourceName}</span>
           <span className="text-zinc-500 mx-1">&rarr;</span>
           <span className="text-indigo-400">{edge.label}</span>
           <span className="text-zinc-500 mx-1">&rarr;</span>
-          <span className="text-zinc-300">{targetLabel}</span>
+          <span className="text-zinc-300">{targetName}</span>
         </span>
       </div>
 

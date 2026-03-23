@@ -16,8 +16,8 @@ export function ReviewItemList() {
   // Build a combined label map: review nodes + existing graph nodes
   const labelMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const n of nodes) map.set(n.tempId, n.label);
-    for (const n of graphNodes) map.set(n.id, n.label);
+    for (const n of nodes) map.set(n.tempId, n.name);
+    for (const n of graphNodes) map.set(n.id, n.name);
     return map;
   }, [nodes, graphNodes]);
 
@@ -64,8 +64,8 @@ export function ReviewItemList() {
               <ReviewEdgeItem
                 key={edge.tempId}
                 edge={edge}
-                sourceLabel={labelMap.get(edge.sourceTempId) ?? '?'}
-                targetLabel={labelMap.get(edge.targetTempId) ?? '?'}
+                sourceName={labelMap.get(edge.sourceTempId) ?? '?'}
+                targetName={labelMap.get(edge.targetTempId) ?? '?'}
               />
             ))}
           </div>

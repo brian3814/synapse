@@ -234,7 +234,7 @@ function RAGContextDetails({ context }: { context: NonNullable<ChatMessageType['
       <div className="mt-1 space-y-1.5 text-[10px]">
         {context.relevantNodes.slice(0, 10).map((node) => (
           <span key={node.id} className="inline-block mr-1 px-1.5 py-0.5 bg-zinc-900 rounded text-zinc-400">
-            [{node.type}] {node.label}
+            [{node.type}] {node.name}
           </span>
         ))}
         {context.relevantNodes.length > 10 && (

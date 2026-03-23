@@ -54,7 +54,7 @@ export function useContextualRelevance() {
           // Map nodes to the terms they matched
           const results: RelatedMatch[] = matched.map((node) => {
             const matchedTerm = terms.find(
-              (t: string) => node.label.toLowerCase().includes(t.toLowerCase())
+              (t: string) => node.name.toLowerCase().includes(t.toLowerCase())
             ) ?? terms[0];
             return { node, matchedTerm };
           });

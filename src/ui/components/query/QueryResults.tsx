@@ -51,7 +51,7 @@ function ResultNodeItem({
   depth: number;
 }) {
   const nodeId = node.data.id as string | undefined;
-  const label = (node.data.label as string) || node.type;
+  const label = (node.data.name as string) || node.type;
   const color = getColor(node.type);
   const relEntries = Object.entries(node.relationship);
 

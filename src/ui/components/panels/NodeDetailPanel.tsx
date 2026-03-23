@@ -3,6 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
+import { tags, conceptSources } from '../../../db/client/db-client';
 
 export function NodeDetailPanel() {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
@@ -23,16 +24,30 @@ export function NodeDetailPanel() {
   );
 
   const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState('');
+  const [name, setName] = useState('');
   const [type, setType] = useState('');
   const [properties, setProperties] = useState<Record<string, unknown>>({});
+  const [nodeTags, setNodeTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [sources, setSources] = useState<{ resourceIdentifier: string; createdAt: string }[]>([]);
 
   useEffect(() => {
     if (node) {
-      setLabel(node.label);
+      setName(node.name);
       setType(node.type);
       setProperties(node.properties);
       setEditing(false);
+      setTagInput('');
+
+      // Load tags
+      tags.getForNode(node.id).then(setNodeTags).catch(() => setNodeTags([]));
+
+      // Load concept sources
+      if (node.type === 'concept') {
+        conceptSources.getForConcept(node.id).then(setSources).catch(() => setSources([]));
+      } else {
+        setSources([]);
+      }
     }
   }, [node]);
 
@@ -66,7 +81,7 @@ export function NodeDetailPanel() {
                 className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: n.color || getColorForType(n.type) }}
               />
-              <span className="text-zinc-200 truncate">{n.label}</span>
+              <span className="text-zinc-200 truncate">{n.name}</span>
               <span className="text-zinc-500 capitalize ml-auto flex-shrink-0">{n.type}</span>
             </div>
           ))}
@@ -84,27 +99,47 @@ export function NodeDetailPanel() {
   }
 
   const handleSave = async () => {
-    await updateNode({ id: node.id, label, type, properties });
+    await updateNode({ id: node.id, name, type, properties });
+    await tags.setForNode(node.id, nodeTags);
     setEditing(false);
   };
 
   const handleDelete = async () => {
-    if (confirm(`Delete node "${node.label}"? Connected edges will also be removed.`)) {
+    if (confirm(`Delete node "${node.name}"? Connected edges will also be removed.`)) {
       await deleteNode(node.id);
       setActivePanel('none');
     }
+  };
+
+  const handleAddTag = () => {
+    const tag = tagInput.trim().toLowerCase();
+    if (tag && !nodeTags.includes(tag)) {
+      setNodeTags([...nodeTags, tag]);
+    }
+    setTagInput('');
   };
 
   const color = node.color || getColorForType(node.type);
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-          <h3 className="text-sm font-semibold text-zinc-100">Node Detail</h3>
+      {/* Header: Node name + actions */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+          <h3 className="text-base font-semibold text-zinc-100 truncate" title={node.name}>
+            {editing ? (
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+              />
+            ) : (
+              node.name
+            )}
+          </h3>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-shrink-0">
           {!editing ? (
             <button
               onClick={() => setEditing(true)}
@@ -129,60 +164,116 @@ export function NodeDetailPanel() {
         </div>
       </div>
 
-      <div className="space-y-3">
-        <Field label="Label">
-          {editing ? (
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-            />
-          ) : (
-            <span className="text-sm text-zinc-200">{node.label}</span>
-          )}
-        </Field>
-
-        <Field label="Type">
+      {/* Metadata section */}
+      <div className="space-y-3" style={{ paddingTop: 4 }}>
+        {/* Type */}
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
           {editing ? (
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
             >
-              {nodeTypesList.map((t) => (
-                <option key={t.type} value={t.type}>{t.type}</option>
-              ))}
-              {/* Keep current type selectable even if not in ontology */}
-              {!nodeTypesList.some((t) => t.type === type) && (
+              <option value="resource">resource</option>
+              <option value="note">note</option>
+              <option value="concept">concept</option>
+              {!['resource', 'note', 'concept'].includes(type) && (
                 <option value={type}>{type}</option>
               )}
             </select>
           ) : (
-            <span className="text-sm text-zinc-200 capitalize">{node.type}</span>
+            <span
+              className="inline-block text-xs px-2 py-0.5 rounded-full font-medium capitalize"
+              style={{ backgroundColor: color + '33', color }}
+            >
+              {node.type}
+            </span>
           )}
-        </Field>
+        </div>
 
-        <Field label="Properties">
-          {editing ? (
-            <PropertyEditor value={properties} onChange={setProperties} />
-          ) : (
-            <pre className="text-xs text-zinc-400 bg-zinc-800 rounded p-2 overflow-x-auto">
-              {JSON.stringify(node.properties, null, 2)}
-            </pre>
-          )}
-        </Field>
+        {/* Tags */}
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">Tags</label>
+          <div className="flex flex-wrap gap-1">
+            {nodeTags.map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-700 rounded-full text-xs text-zinc-300">
+                {tag}
+                {editing && (
+                  <button onClick={() => setNodeTags(nodeTags.filter(t => t !== tag))} className="text-zinc-500 hover:text-zinc-300">
+                    x
+                  </button>
+                )}
+              </span>
+            ))}
+            {editing && (
+              <div className="inline-flex items-center gap-1">
+                <input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                  placeholder="Add tag..."
+                  className="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-zinc-200 outline-none focus:border-indigo-500 w-20"
+                />
+                <button
+                  onClick={handleAddTag}
+                  className="text-xs text-indigo-400 hover:text-indigo-300"
+                >
+                  +
+                </button>
+              </div>
+            )}
+            {!editing && nodeTags.length === 0 && (
+              <span className="text-xs text-zinc-600 italic">No tags</span>
+            )}
+          </div>
+        </div>
 
-        {node.sourceUrl && (
-          <Field label="Source">
-            <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>
-          </Field>
-        )}
-
-        <Field label="Created">
-          <span className="text-xs text-zinc-500">{node.createdAt}</span>
-        </Field>
+        {/* ID + Timestamps */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+          <span title={node.id}>ID: {node.id.slice(0, 8)}...</span>
+          <span>Created: {node.createdAt}</span>
+          <span>Updated: {node.updatedAt}</span>
+        </div>
       </div>
 
+      {/* Properties */}
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">Properties</label>
+        {editing ? (
+          <PropertyEditor value={properties} onChange={setProperties} />
+        ) : (
+          <pre className="text-xs text-zinc-400 bg-zinc-800 rounded p-2 overflow-x-auto">
+            {JSON.stringify(node.properties, null, 2)}
+          </pre>
+        )}
+      </div>
+
+      {/* Sources (concept nodes only) */}
+      {node.type === 'concept' && sources.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">
+            Sources ({sources.length})
+          </label>
+          <div className="space-y-1">
+            {sources.map((src) => (
+              <div key={src.resourceIdentifier} className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1">
+                {src.resourceIdentifier}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Source URL (legacy / resource nodes) */}
+      {node.sourceUrl && (
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">Source</label>
+          <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>
+        </div>
+      )}
+
+      {/* Connected Edges */}
       {connectedEdges.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-zinc-400 mb-2">
@@ -203,11 +294,11 @@ export function NodeDetailPanel() {
                   className="w-full text-left px-2 py-1.5 bg-zinc-800 rounded text-xs hover:bg-zinc-700 flex items-center gap-2"
                 >
                   <span className="text-zinc-400">
-                    {edge.sourceId === node.id ? '→' : '←'}
+                    {edge.sourceId === node.id ? '\u2192' : '\u2190'}
                   </span>
                   <span className="text-indigo-400">{edge.label}</span>
                   <span className="text-zinc-500">
-                    {otherNode?.label ?? '?'}
+                    {otherNode?.name ?? '?'}
                   </span>
                 </button>
               );
@@ -215,15 +306,6 @@ export function NodeDetailPanel() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-zinc-400 block mb-1">{label}</label>
-      {children}
     </div>
   );
 }

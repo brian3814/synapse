@@ -23,7 +23,7 @@ interface QueryBuilderProps {
 
 export interface BuilderState {
   nodeType: string;
-  labelPattern: string;
+  namePattern: string;
   filters: PropertyFilter[];
   relationships: RelationshipRow[];
   orderByField: string;
@@ -37,7 +37,7 @@ const SELECT_CLASS = 'bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 tex
 export function QueryBuilder({ onQueryReady, initialState }: QueryBuilderProps) {
   const [nodeTypes, setNodeTypes] = useState<string[]>([]);
   const [nodeType, setNodeType] = useState(initialState?.nodeType ?? '');
-  const [labelPattern, setLabelPattern] = useState(initialState?.labelPattern ?? '');
+  const [namePattern, setLabelPattern] = useState(initialState?.namePattern ?? '');
   const [filters, setFilters] = useState<PropertyFilter[]>(initialState?.filters ?? []);
   const [relationships, setRelationships] = useState<RelationshipRow[]>(initialState?.relationships ?? []);
   const [orderByField, setOrderByField] = useState(initialState?.orderByField ?? '');
@@ -58,8 +58,8 @@ export function QueryBuilder({ onQueryReady, initialState }: QueryBuilderProps) 
       var: 'n',
     };
 
-    if (labelPattern.trim()) {
-      query.nodePattern = labelPattern.trim();
+    if (namePattern.trim()) {
+      query.nodePattern = namePattern.trim();
     }
 
     // Where clause from filters
@@ -139,7 +139,7 @@ export function QueryBuilder({ onQueryReady, initialState }: QueryBuilderProps) 
     }
 
     return JSON.stringify(graphQuery, null, 2);
-  }, [nodeType, labelPattern, filters, relationships, orderByField, orderByDir, limit]);
+  }, [nodeType, namePattern, filters, relationships, orderByField, orderByDir, limit]);
 
   // Notify parent whenever form state changes
   useEffect(() => {
@@ -165,9 +165,9 @@ export function QueryBuilder({ onQueryReady, initialState }: QueryBuilderProps) 
 
       {/* Label Pattern */}
       <div>
-        <label className="text-xs font-medium text-zinc-400 block mb-1">Label Pattern</label>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">Name Pattern</label>
         <input
-          value={labelPattern}
+          value={namePattern}
           onChange={(e) => setLabelPattern(e.target.value)}
           placeholder="e.g. Ali*"
           className={INPUT_CLASS}
@@ -321,7 +321,7 @@ export function QueryBuilder({ onQueryReady, initialState }: QueryBuilderProps) 
                 <input
                   value={orderByField}
                   onChange={(e) => setOrderByField(e.target.value)}
-                  placeholder="e.g. n.label"
+                  placeholder="e.g. n.name"
                   className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1.5 py-1 text-xs text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
                 />
                 <select
@@ -403,7 +403,7 @@ export function parseBuilderState(json: string): BuilderState | null {
 
     return {
       nodeType: root.type || '',
-      labelPattern: root.nodePattern || '',
+      namePattern: root.nodePattern || '',
       filters,
       relationships,
       orderByField: orderBy?.field || '',

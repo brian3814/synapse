@@ -87,11 +87,11 @@ export function EdgeDetailPanel() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 bg-zinc-800 rounded p-2">
           <button onClick={() => goToNode(edge.sourceId)} className="text-indigo-400 hover:text-indigo-300 text-sm truncate">
-            {sourceNode?.label ?? edge.sourceId}
+            {sourceNode?.name ?? edge.sourceId}
           </button>
           <span className="text-zinc-500 text-xs shrink-0">→</span>
           <button onClick={() => goToNode(edge.targetId)} className="text-indigo-400 hover:text-indigo-300 text-sm truncate">
-            {targetNode?.label ?? edge.targetId}
+            {targetNode?.name ?? edge.targetId}
           </button>
         </div>
 

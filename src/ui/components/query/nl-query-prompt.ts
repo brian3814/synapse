@@ -14,7 +14,7 @@ export function buildNLQuerySystemPrompt(nodeTypes: string[], edgeTypes: string[
 NodeDescriptor = {
   type: string,               // Node type to match (use "*" for any type)
   var?: string,               // Variable name for referencing in return/orderBy
-  nodePattern?: string,       // Label pattern with wildcards: "Ali*", "*AI*"
+  nodePattern?: string,       // Name pattern with wildcards: "Ali*", "*AI*"
   where?: WhereClause,        // Property filters
   relationship?: {            // Connected nodes via edge type
     [edgeType: string]: NodeDescriptor
@@ -34,7 +34,7 @@ FilterOperator = {
 }
 \`\`\`
 
-Node properties: id, label, type, properties (JSON), source_url, created_at, updated_at
+Node properties: id, name, type, properties (JSON), source_url, created_at, updated_at
 Edge properties: id, source_id, target_id, label, type, properties (JSON), weight, created_at
 
 ## Available types in this graph
@@ -46,7 +46,7 @@ Edge types: ${edgeTypes.length > 0 ? edgeTypes.join(', ') : '(none yet)'}
 
 User: "nodes related to AI"
 \`\`\`json
-{"query":[{"type":"*","var":"n","where":{"label":{"$like":"%AI%"}}}],"return":["n"]}
+{"query":[{"type":"*","var":"n","where":{"name":{"$like":"%AI%"}}}],"return":["n"]}
 \`\`\`
 
 User: "all people"

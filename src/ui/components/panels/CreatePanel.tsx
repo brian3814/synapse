@@ -3,6 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { DEFAULT_NODE_TYPE } from '../../../shared/constants';
 import { AddTypeModal } from './AddTypeModal';
+import { tags } from '../../../db/client/db-client';
 
 type CreateTab = 'node' | 'edge';
 
@@ -39,89 +40,87 @@ export function CreatePanel() {
   );
 }
 
-const ADD_NEW_TYPE_VALUE = '__add_new__';
-
 function CreateNodeForm() {
   const createNode = useGraphStore((s) => s.createNode);
-  const types = useNodeTypeStore((s) => s.types);
-  const [label, setLabel] = useState('');
+  const [name, setName] = useState('');
   const [type, setType] = useState(DEFAULT_NODE_TYPE);
+  const [tagsInput, setTagsInput] = useState('');
   const [error, setError] = useState('');
-  const [showAddType, setShowAddType] = useState(false);
-
-  const handleTypeChange = (value: string) => {
-    if (value === ADD_NEW_TYPE_VALUE) {
-      setShowAddType(true);
-    } else {
-      setType(value);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!label.trim()) {
-      setError('Label is required');
+    if (!name.trim()) {
+      setError('Name is required');
       return;
     }
 
-    const result = await createNode({ label: label.trim(), type });
+    const result = await createNode({ name: name.trim(), type });
     if (result) {
-      setLabel('');
+      // Save tags if any
+      const tagList = tagsInput
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (tagList.length > 0) {
+        await tags.setForNode(result.id, tagList);
+      }
+
+      setName('');
       setType(DEFAULT_NODE_TYPE);
+      setTagsInput('');
     } else {
       setError('Failed to create node');
     }
   };
 
   return (
-    <>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">Label</label>
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Enter node label..."
-            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
-            autoFocus
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
-          <select
-            value={type}
-            onChange={(e) => handleTypeChange(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            {types.map((t) => (
-              <option key={t.type} value={t.type}>
-                {t.type}
-              </option>
-            ))}
-            <option value={ADD_NEW_TYPE_VALUE}>+ Add new type...</option>
-          </select>
-        </div>
-
-        {error && <p className="text-xs text-red-400">{error}</p>}
-
-        <button
-          type="submit"
-          className="w-full bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
-        >
-          Create Node
-        </button>
-      </form>
-
-      {showAddType && (
-        <AddTypeModal
-          onClose={() => setShowAddType(false)}
-          onCreated={(newType) => setType(newType)}
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">Name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter node name..."
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+          autoFocus
         />
-      )}
-    </>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+        >
+          <option value="resource">resource</option>
+          <option value="note">note</option>
+          <option value="concept">concept</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">Tags</label>
+        <input
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder="Comma-separated tags..."
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+        />
+        <p className="text-[10px] text-zinc-600 mt-0.5">e.g. important, research, topic-x</p>
+      </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      <button
+        type="submit"
+        className="w-full bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
+      >
+        Create Node
+      </button>
+    </form>
   );
 }
 
@@ -172,7 +171,7 @@ function CreateEdgeForm() {
           <option value="">Select source...</option>
           {nodes.map((n) => (
             <option key={n.id} value={n.id}>
-              {n.label} ({n.type})
+              {n.name} ({n.type})
             </option>
           ))}
         </select>
@@ -188,7 +187,7 @@ function CreateEdgeForm() {
           <option value="">Select target...</option>
           {nodes.map((n) => (
             <option key={n.id} value={n.id}>
-              {n.label} ({n.type})
+              {n.name} ({n.type})
             </option>
           ))}
         </select>

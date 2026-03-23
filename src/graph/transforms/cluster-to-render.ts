@@ -11,7 +11,7 @@ export function clusterSummaryToRenderNodes(
 ): RenderNode[] {
   return clusters.map((c) => ({
     id: `cluster-${c.type}`,
-    label: `${c.type} (${c.count})`,
+    name: `${c.type} (${c.count})`,
     x: c.avgX,
     y: c.avgY,
     z: 0,

@@ -4,7 +4,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 
 interface NodeOption {
   id: string;
-  label: string;
+  name: string;
   isExisting: boolean;
 }
 
@@ -20,12 +20,12 @@ export function AddEdgeForm({ activeNodes, onClose }: AddEdgeFormProps) {
   const options: NodeOption[] = useMemo(() => {
     const reviewOptions: NodeOption[] = activeNodes.map((n) => ({
       id: n.tempId,
-      label: n.label,
+      name: n.name,
       isExisting: false,
     }));
     const existingOptions: NodeOption[] = graphNodes.map((n) => ({
       id: n.id,
-      label: n.label,
+      name: n.name,
       isExisting: true,
     }));
     return [...reviewOptions, ...existingOptions];
@@ -51,12 +51,12 @@ export function AddEdgeForm({ activeNodes, onClose }: AddEdgeFormProps) {
         >
           <optgroup label="New (extracted)">
             {options.filter((o) => !o.isExisting).map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </optgroup>
           <optgroup label="Existing">
             {options.filter((o) => o.isExisting).map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </optgroup>
         </select>
@@ -68,12 +68,12 @@ export function AddEdgeForm({ activeNodes, onClose }: AddEdgeFormProps) {
         >
           <optgroup label="New (extracted)">
             {options.filter((o) => !o.isExisting).map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </optgroup>
           <optgroup label="Existing">
             {options.filter((o) => o.isExisting).map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
+              <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </optgroup>
         </select>

@@ -64,7 +64,7 @@ function RelatedNodeItem({ match, onClick }: { match: RelatedMatch; onClick: () 
         style={{ backgroundColor: node.color ?? '#6B7280' }}
       />
       <span className="text-xs text-zinc-300 truncate group-hover:text-zinc-100">
-        {node.label}
+        {node.name}
       </span>
       <span className="text-[10px] text-zinc-600 ml-auto shrink-0">{node.type}</span>
     </button>

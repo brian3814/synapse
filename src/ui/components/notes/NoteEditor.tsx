@@ -23,7 +23,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
 
     const node = graphStore.nodes.find((n) => n.id === nodeId);
     if (node) {
-      setTitle(node.label);
+      setTitle(node.name);
       // Load content from source_content or properties
       if (typeof node.properties?.content === 'string') {
         setContent(node.properties.content);
@@ -55,7 +55,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         // Update existing note
         await graphStore.updateNode({
           id: nodeId,
-          label: title,
+          name: title,
           properties,
         });
 
@@ -69,7 +69,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       } else {
         // Create new note node
         const node = await graphStore.createNode({
-          label: title,
+          name: title,
           type: 'note',
           properties,
         });
@@ -180,7 +180,7 @@ function WikiLinkHints({ content }: { content: string }) {
     <div className="flex flex-wrap gap-1">
       {links.map((link) => {
         const exists = nodes.some(
-          (n) => n.label.toLowerCase() === link.toLowerCase()
+          (n) => n.name.toLowerCase() === link.toLowerCase()
         );
         return (
           <span
@@ -215,7 +215,7 @@ async function createWikiLinkEdges(sourceNodeId: string, wikiLinks: string[]) {
   const graphStore = useGraphStore.getState();
   for (const linkLabel of wikiLinks) {
     const target = graphStore.nodes.find(
-      (n) => n.label.toLowerCase() === linkLabel.toLowerCase()
+      (n) => n.name.toLowerCase() === linkLabel.toLowerCase()
     );
     if (target && target.id !== sourceNodeId) {
       try {

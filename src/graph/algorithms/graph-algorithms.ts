@@ -285,7 +285,7 @@ export function labelPropagation(
       const degree = (map.get(id) ?? []).length;
       if (degree > maxDegree) {
         maxDegree = degree;
-        centralLabel = nodeMap.get(id)?.label ?? clusterLabel;
+        centralLabel = nodeMap.get(id)?.name ?? clusterLabel;
       }
     }
 
@@ -466,7 +466,7 @@ export function detectPatterns(
     insights.push({
       type: 'hub_node',
       title: 'Hub Entities',
-      description: `${hubs.length} highly connected ${hubs.length === 1 ? 'entity' : 'entities'}: ${hubs.slice(0, 3).map((n) => n.label).join(', ')}`,
+      description: `${hubs.length} highly connected ${hubs.length === 1 ? 'entity' : 'entities'}: ${hubs.slice(0, 3).map((n) => n.name).join(', ')}`,
       nodeIds: hubs.map((n) => n.id),
     });
   }
@@ -489,7 +489,7 @@ export function detectPatterns(
     insights.push({
       type: 'recent_topic',
       title: 'Recent Focus',
-      description: `You've been adding "${dominantType[0]}" entities recently: ${recentOfType.slice(0, 4).map((n) => n.label).join(', ')}`,
+      description: `You've been adding "${dominantType[0]}" entities recently: ${recentOfType.slice(0, 4).map((n) => n.name).join(', ')}`,
       nodeIds: recentOfType.map((n) => n.id),
     });
   }
