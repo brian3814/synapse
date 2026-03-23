@@ -38,7 +38,6 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
         {message.status === 'complete' && (
           <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg space-y-2">
             <MarkdownContent content={message.content} onNodeClick={onNodeClick} />
-            {message.ragContext && <RAGContextDetails context={message.ragContext} />}
             <CopyButton text={message.content} position="bottom-1 left-1" />
           </div>
         )}
@@ -223,35 +222,3 @@ function processInline(text: string, onNodeClick?: (nodeId: string) => void): Re
   return <>{parts}</>;
 }
 
-function RAGContextDetails({ context }: { context: NonNullable<ChatMessageType['ragContext']> }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="text-zinc-500 text-[10px] cursor-pointer hover:text-zinc-400 mt-2">
-        Context: {context.relevantNodes.length} entities, {context.relevantEdges.length} relationships, {context.sourceExcerpts.length} sources
-      </summary>
-      <div className="mt-1 space-y-1.5 text-[10px]">
-        {context.relevantNodes.slice(0, 10).map((node) => (
-          <span key={node.id} className="inline-block mr-1 px-1.5 py-0.5 bg-zinc-900 rounded text-zinc-400">
-            [{node.type}] {node.name}
-          </span>
-        ))}
-        {context.relevantNodes.length > 10 && (
-          <span className="text-zinc-600">+{context.relevantNodes.length - 10} more</span>
-        )}
-        {context.sourceExcerpts.length > 0 && (
-          <div className="mt-1 space-y-0.5">
-            {context.sourceExcerpts.map((s, i) => (
-              <p key={i} className="text-zinc-500 truncate">
-                <a href={s.url} target="_blank" rel="noopener" className="text-indigo-400/60 hover:text-indigo-400">
-                  {s.title ?? s.url}
-                </a>
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-    </details>
-  );
-}
