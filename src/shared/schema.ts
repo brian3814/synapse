@@ -2,14 +2,15 @@ import { z } from 'zod';
 
 // LLM extraction output schema
 export const extractedNodeSchema = z.object({
-  label: z.string().min(1),
+  name: z.string().min(1),
   type: z.string().min(1),
   properties: z.record(z.string(), z.unknown()).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export const extractedEdgeSchema = z.object({
-  sourceLabel: z.string().min(1),
-  targetLabel: z.string().min(1),
+  sourceName: z.string().min(1),
+  targetName: z.string().min(1),
   label: z.string().min(1),
   type: z.string().optional(),
 });
@@ -30,7 +31,7 @@ export type ReadingListExtractionResult = z.infer<typeof readingListExtractionSc
 
 // Node input validation
 export const createNodeInputSchema = z.object({
-  label: z.string().min(1, 'Label is required'),
+  name: z.string().min(1, 'Name is required'),
   type: z.string().min(1).default('concept'),
   properties: z.record(z.string(), z.unknown()).optional().default({}),
   color: z.string().optional(),
@@ -40,7 +41,7 @@ export const createNodeInputSchema = z.object({
 
 export const updateNodeInputSchema = z.object({
   id: z.string().min(1),
-  label: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   x: z.number().optional(),

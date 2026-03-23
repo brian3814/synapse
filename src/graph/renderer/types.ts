@@ -1,6 +1,6 @@
 export interface RenderNode {
   id: string;
-  label: string;
+  name: string;
   x: number;
   y: number;
   z: number;

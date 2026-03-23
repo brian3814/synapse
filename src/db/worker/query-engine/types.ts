@@ -75,7 +75,7 @@ export interface GraphMutation {
 export interface CreateNodeDescriptor {
   type: string;
   identifier?: string;
-  label: string;
+  name: string;
   properties?: Record<string, unknown>;
   color?: string;
   size?: number;

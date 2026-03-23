@@ -5,8 +5,8 @@ export const up = `
 CREATE TABLE IF NOT EXISTS nodes (
     id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     identifier  TEXT UNIQUE,
-    label       TEXT NOT NULL,
-    type        TEXT NOT NULL DEFAULT 'entity',
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL DEFAULT 'concept',
     properties  TEXT NOT NULL DEFAULT '{}',
     x           REAL,
     y           REAL,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type);
-CREATE INDEX IF NOT EXISTS idx_nodes_label ON nodes(label);
+CREATE INDEX IF NOT EXISTS idx_nodes_name ON nodes(name);
 CREATE INDEX IF NOT EXISTS idx_nodes_identifier ON nodes(identifier);
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -83,4 +83,19 @@ CREATE TABLE IF NOT EXISTS ontology_edge_types (
     target_types      TEXT,
     properties_schema TEXT
 );
+
+CREATE TABLE IF NOT EXISTS node_tags (
+    node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    tag     TEXT NOT NULL,
+    PRIMARY KEY (node_id, tag)
+);
+CREATE INDEX IF NOT EXISTS idx_node_tags_tag ON node_tags(tag);
+
+CREATE TABLE IF NOT EXISTS concept_sources (
+    concept_id          TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    resource_identifier TEXT NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (concept_id, resource_identifier)
+);
+CREATE INDEX IF NOT EXISTS idx_concept_sources_resource ON concept_sources(resource_identifier);
 `;

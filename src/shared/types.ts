@@ -2,7 +2,7 @@
 export interface DbNode {
   id: string;
   identifier: string | null;
-  label: string;
+  name: string;
   type: string;
   properties: string; // JSON string
   x: number | null;
@@ -73,7 +73,7 @@ export interface DbIndexedFile {
 export interface DbNodeSlim {
   id: string;
   identifier: string | null;
-  label: string;
+  name: string;
   type: string;
   color: string | null;
   size: number;
@@ -96,9 +96,10 @@ export interface DbEdgeSlim {
 export interface GraphNode {
   id: string;
   identifier: string | null;
-  label: string;
+  name: string;
   type: string;
   properties: Record<string, unknown>;
+  tags?: string[];
   x?: number;
   y?: number;
   z?: number;
@@ -130,10 +131,11 @@ export interface GraphData {
 
 // Input types for creating/updating
 export interface CreateNodeInput {
-  label: string;
+  name: string;
   type?: string;
   identifier?: string;
   properties?: Record<string, unknown>;
+  tags?: string[];
   color?: string;
   size?: number;
   sourceUrl?: string;
@@ -141,9 +143,10 @@ export interface CreateNodeInput {
 
 export interface UpdateNodeInput {
   id: string;
-  label?: string;
+  name?: string;
   type?: string;
   properties?: Record<string, unknown>;
+  tags?: string[];
   x?: number;
   y?: number;
   z?: number;
@@ -181,7 +184,7 @@ export interface CreateSourceContentInput {
 // Entity resolution types
 export interface EntityMatch {
   nodeId: string;
-  label: string;
+  name: string;
   matchType: 'exact' | 'alias' | 'fuzzy';
   similarity: number;
 }
@@ -197,13 +200,14 @@ export interface LLMConfig {
 
 export interface ExtractionResult {
   nodes: Array<{
-    label: string;
+    name: string;
     type: string;
     properties?: Record<string, unknown>;
+    tags?: string[];
   }>;
   edges: Array<{
-    sourceLabel: string;
-    targetLabel: string;
+    sourceName: string;
+    targetName: string;
     label: string;
     type?: string;
   }>;
@@ -308,8 +312,8 @@ export interface ReadingListItem {
   error?: string;
   summary?: string;
   keyTopics?: string[];
-  extractedNodes?: Array<{ label: string; type: string; properties?: Record<string, unknown> }>;
-  extractedEdges?: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }>;
+  extractedNodes?: Array<{ name: string; type: string; properties?: Record<string, unknown> }>;
+  extractedEdges?: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
   pageContent?: string;  // cleaned HTML text for source_content saving on merge
   pageTitle?: string;
   extractedAt?: number;
