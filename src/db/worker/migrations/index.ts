@@ -114,5 +114,22 @@ export async function runMigrations(): Promise<number> {
     }
   }
 
+  // Ensure chat tables exist (added after initial schema was already deployed,
+  // so CREATE IF NOT EXISTS runs idempotently on every init)
+  await exec(`CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY, title TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_active_at TEXT NOT NULL DEFAULT (datetime('now')),
+    status TEXT NOT NULL DEFAULT 'active'
+  );`);
+  await exec(`CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, content TEXT NOT NULL, rag_context TEXT,
+    status TEXT NOT NULL DEFAULT 'complete',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`);
+  await exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);`);
+
   return appliedVersion;
 }
