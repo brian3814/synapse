@@ -20,7 +20,7 @@ Chat messages live in React `useState` — lost on every panel close/reload. Eac
 
 ## Data Model
 
-New migration file: `src/db/worker/migrations/008-chat-sessions.ts`, registered in `migrations/index.ts`.
+Tables added directly to `src/db/worker/migrations/001-initial-schema.ts` — no separate migration file since there is no existing chat data to migrate.
 
 ```sql
 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -143,7 +143,7 @@ The same change propagates to `LLM_REQUEST_WITH_KEY` (SW -> offscreen).
 
 | File | Purpose |
 |---|---|
-| `src/db/worker/migrations/008-chat-sessions.ts` | Migration creating `chat_sessions` and `chat_messages` tables + index |
+| (none — tables added to `001-initial-schema.ts`) | |
 | `src/db/worker/queries/chat-queries.ts` | All chat session/message CRUD: create session, save message, get active session, load messages (with 20-message window query), expire session, prune excess sessions, bulk expire stale |
 | `src/ui/hooks/useChatSession.ts` | Session lifecycle hook. On mount: restore or expire. Wraps existing `useChatQuery` streaming logic. Exposes `sendMessage()`, `newSession()`, `messages`, `isProcessing`. |
 
@@ -151,7 +151,7 @@ The same change propagates to `LLM_REQUEST_WITH_KEY` (SW -> offscreen).
 
 | File | Change |
 |---|---|
-| `src/db/worker/migrations/index.ts` | Register migration 008 |
+| `src/db/worker/migrations/001-initial-schema.ts` | Add `chat_sessions` and `chat_messages` tables + index to initial schema |
 | `src/db/worker/db-worker.ts` | Add action handlers for `chat.*` operations, import chat-queries. Add `chat_sessions`/`chat_messages` to `clearAll`. |
 | `src/db/client/db-client.ts` | Add `chat` namespace with typed client methods |
 | `src/shared/messages.ts` | Add optional `messages` array to `LLMRequestMessage` and `LLMRequestWithKeyMessage` payloads |
