@@ -219,8 +219,8 @@ export interface ReadingListExtractionResultMessage extends ExtensionMessage {
     success: boolean;
     summary?: string;
     keyTopics?: string[];
-    nodes?: Array<{ label: string; type: string; properties?: Record<string, unknown> }>;
-    edges?: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }>;
+    nodes?: Array<{ name: string; type: string; properties?: Record<string, unknown>; tags?: string[] }>;
+    edges?: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
     pageContent?: string;
     pageTitle?: string;
     error?: string;

@@ -136,7 +136,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'save_entities',
     description:
-      'Save extracted entities and relationships to the knowledge graph. This is the terminal tool — call it when extraction is complete. Nodes must have label and type. Edges reference nodes by sourceLabel and targetLabel.',
+      'Save extracted entities and relationships to the knowledge graph. This is the terminal tool — call it when extraction is complete. Nodes must have name and type. Edges reference nodes by sourceName and targetName.',
     parameters: {
       type: 'object',
       properties: {
@@ -145,14 +145,15 @@ export const AGENT_TOOLS: ToolDefinition[] = [
           items: {
             type: 'object',
             properties: {
-              label: { type: 'string', description: 'Entity name' },
+              name: { type: 'string', description: 'Entity name' },
               type: { type: 'string', description: 'Entity type (e.g. person, company, concept)' },
               properties: {
                 type: 'object',
                 description: 'Optional key-value properties',
               },
+              tags: { type: 'array', items: { type: 'string' }, description: 'Domain tags (e.g. technology, psychology)' },
             },
-            required: ['label', 'type'],
+            required: ['name', 'type'],
           },
           description: 'Entities to save',
         },
@@ -161,12 +162,12 @@ export const AGENT_TOOLS: ToolDefinition[] = [
           items: {
             type: 'object',
             properties: {
-              sourceLabel: { type: 'string', description: 'Source entity label' },
-              targetLabel: { type: 'string', description: 'Target entity label' },
+              sourceName: { type: 'string', description: 'Source entity name' },
+              targetName: { type: 'string', description: 'Target entity name' },
               label: { type: 'string', description: 'Relationship label (e.g. works_at, located_in)' },
               type: { type: 'string', description: 'Relationship category' },
             },
-            required: ['sourceLabel', 'targetLabel', 'label'],
+            required: ['sourceName', 'targetName', 'label'],
           },
           description: 'Relationships between entities',
         },

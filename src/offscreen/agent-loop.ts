@@ -20,9 +20,11 @@ Rules for extraction:
 - Extract the most important entities and relationships relevant to the user's request
 - Leverage markdown structure (headings, tables, links) to identify entities and relationships more accurately
 - Use consistent, lowercase relationship labels (e.g., "works_at", "located_in", "created_by")
-- Use short lowercase node types (e.g., "person", "company", "concept", "technology")
+- Node type must be one of: resource, concept, note
+- For resource nodes, include properties.kind (url, image, video, pdf)
+- Include a tags array for domain annotations (e.g. ["technology", "ai"])
 - Include relevant properties as key-value pairs on nodes
-- Ensure all edges reference entities that exist in your nodes array by their exact label
+- Ensure all edges reference entities that exist in your nodes array by their exact name
 - Call save_entities exactly once when done — it is the terminal tool
 
 Be efficient: don't call tools unnecessarily. If get_page_content gives you everything you need, proceed directly to save_entities.`;

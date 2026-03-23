@@ -36,7 +36,7 @@ function streamFromOffscreen(
 }
 
 export async function buildDiffItems(
-  validated: { nodes: Array<{ label: string; type: string; properties?: Record<string, unknown> }>; edges: Array<{ sourceLabel: string; targetLabel: string; label: string; type?: string }> }
+  validated: { nodes: Array<{ name: string; type: string; properties?: Record<string, unknown>; tags?: string[] }>; edges: Array<{ sourceName: string; targetName: string; label: string; type?: string }> }
 ): Promise<DiffItem[]> {
   const graph = useGraphStore.getState();
 
@@ -44,7 +44,7 @@ export async function buildDiffItems(
   const nodeItems = await Promise.all(validated.nodes.map(async (node): Promise<DiffItem> => {
     // First try in-memory exact match
     const inMemoryMatch = graph.nodes.find(
-      (n) => n.label.toLowerCase() === node.label.toLowerCase()
+      (n) => n.name.toLowerCase() === node.name.toLowerCase()
     );
 
     if (inMemoryMatch) {
@@ -53,7 +53,7 @@ export async function buildDiffItems(
 
     // Try DB-level entity resolution (alias + fuzzy matching)
     try {
-      const matches: EntityMatch[] = await entityResolution.findMatches(node.label);
+      const matches: EntityMatch[] = await entityResolution.findMatches(node.name);
       if (matches.length > 0) {
         const bestMatch = matches[0];
         const existingNode = graph.nodes.find((n) => n.id === bestMatch.nodeId);
@@ -163,24 +163,24 @@ export function useLLMExtraction() {
       for (const item of diff.items) {
         if (!item.accepted || item.type !== 'node') continue;
 
-        const extracted = item.extracted as { label: string; type: string; properties?: Record<string, unknown> };
+        const extracted = item.extracted as { name: string; type: string; properties?: Record<string, unknown>; tags?: string[] };
 
         if (item.action === 'add') {
           const created = await graph.createNode({
-            label: extracted.label,
+            name: extracted.name,
             type: extracted.type,
             properties: extracted.properties,
             sourceUrl: llm.sourceUrl ?? undefined,
           });
           if (created) {
-            nodeIdMap.set(extracted.label.toLowerCase(), created.id);
+            nodeIdMap.set(extracted.name.toLowerCase(), created.id);
           }
         } else if (item.existingMatch) {
-          nodeIdMap.set(extracted.label.toLowerCase(), item.existingMatch.id);
-          // Register the extracted label as an alias if it differs from the existing label
-          if (extracted.label.toLowerCase() !== item.existingMatch.label.toLowerCase()) {
+          nodeIdMap.set(extracted.name.toLowerCase(), item.existingMatch.id);
+          // Register the extracted name as an alias if it differs from the existing name
+          if (extracted.name.toLowerCase() !== (item.existingMatch as { id: string; name: string }).name.toLowerCase()) {
             try {
-              await entityResolution.addAlias(item.existingMatch.id, extracted.label);
+              await entityResolution.addAlias(item.existingMatch.id, extracted.name);
             } catch {
               // Alias may already exist, ignore
             }
@@ -193,18 +193,18 @@ export function useLLMExtraction() {
       for (const item of diff.items) {
         if (!item.accepted || item.type !== 'edge') continue;
 
-        const extracted = item.extracted as { sourceLabel: string; targetLabel: string; label: string; type?: string };
+        const extracted = item.extracted as { sourceName: string; targetName: string; label: string; type?: string };
 
         const sourceId =
-          nodeIdMap.get(extracted.sourceLabel.toLowerCase()) ??
+          nodeIdMap.get(extracted.sourceName.toLowerCase()) ??
           updatedGraph.nodes.find(
-            (n) => n.label.toLowerCase() === extracted.sourceLabel.toLowerCase()
+            (n) => n.name.toLowerCase() === extracted.sourceName.toLowerCase()
           )?.id;
 
         const targetId =
-          nodeIdMap.get(extracted.targetLabel.toLowerCase()) ??
+          nodeIdMap.get(extracted.targetName.toLowerCase()) ??
           updatedGraph.nodes.find(
-            (n) => n.label.toLowerCase() === extracted.targetLabel.toLowerCase()
+            (n) => n.name.toLowerCase() === extracted.targetName.toLowerCase()
           )?.id;
 
         if (sourceId && targetId) {
@@ -354,35 +354,35 @@ export function useLLMExtraction() {
     const graph = useGraphStore.getState();
     const reviewNodes: ReviewNode[] = [];
     const reviewEdges: ReviewEdge[] = [];
-    const labelToTempId = new Map<string, string>();
+    const nameToTempId = new Map<string, string>();
 
     // Convert node DiffItems → ReviewNodes (resolve fuzzy matches in parallel)
     const nodeItems = diff.items.filter(item => item.type === 'node');
     const resolvedNodes = await Promise.all(nodeItems.map(async (item) => {
-      const extracted = item.extracted as { label: string; type: string; properties?: Record<string, unknown> };
+      const extracted = item.extracted as { name: string; type: string; properties?: Record<string, unknown>; tags?: string[] };
       const tempId = `temp-${crypto.randomUUID()}`;
 
       let mergeRecommendation: ReviewNode['mergeRecommendation'];
 
       if (item.action === 'merge' && item.existingMatch) {
-        const existing = item.existingMatch as { id: string; label: string };
+        const existing = item.existingMatch as { id: string; name: string };
         mergeRecommendation = {
           existingNodeId: existing.id,
-          existingLabel: existing.label,
+          existingName: existing.name,
           matchType: 'exact',
           similarity: 1,
           status: 'pending',
         };
       } else if (item.action === 'add') {
         try {
-          const matches: EntityMatch[] = await entityResolution.findMatches(extracted.label);
+          const matches: EntityMatch[] = await entityResolution.findMatches(extracted.name);
           if (matches.length > 0) {
             const best = matches[0];
             const existingNode = graph.nodes.find((n) => n.id === best.nodeId);
             if (existingNode) {
               mergeRecommendation = {
                 existingNodeId: best.nodeId,
-                existingLabel: best.label,
+                existingName: best.name,
                 matchType: best.matchType,
                 similarity: best.similarity,
                 status: 'pending',
@@ -394,20 +394,20 @@ export function useLLMExtraction() {
         }
       }
 
-      return { tempId, label: extracted.label, type: extracted.type, properties: extracted.properties ?? {}, mergeRecommendation, removed: false } as ReviewNode;
+      return { tempId, name: extracted.name, type: extracted.type, properties: extracted.properties ?? {}, tags: extracted.tags ?? [], mergeRecommendation, removed: false } as ReviewNode;
     }));
 
     for (const node of resolvedNodes) {
-      labelToTempId.set(node.label.toLowerCase(), node.tempId);
+      nameToTempId.set(node.name.toLowerCase(), node.tempId);
       reviewNodes.push(node);
     }
 
     // Convert edge DiffItems → ReviewEdges
     for (const item of diff.items) {
       if (item.type !== 'edge') continue;
-      const extracted = item.extracted as { sourceLabel: string; targetLabel: string; label: string; type?: string };
-      const sourceTempId = labelToTempId.get(extracted.sourceLabel.toLowerCase());
-      const targetTempId = labelToTempId.get(extracted.targetLabel.toLowerCase());
+      const extracted = item.extracted as { sourceName: string; targetName: string; label: string; type?: string };
+      const sourceTempId = nameToTempId.get(extracted.sourceName.toLowerCase());
+      const targetTempId = nameToTempId.get(extracted.targetName.toLowerCase());
       if (!sourceTempId || !targetTempId) continue;
 
       reviewEdges.push({
@@ -445,10 +445,10 @@ export function useLLMExtraction() {
           const existingId = node.mergeRecommendation.existingNodeId;
           tempIdToRealId.set(node.tempId, existingId);
 
-          // Register alias if labels differ
-          if (node.label.toLowerCase() !== node.mergeRecommendation.existingLabel.toLowerCase()) {
+          // Register alias if names differ
+          if (node.name.toLowerCase() !== node.mergeRecommendation.existingName.toLowerCase()) {
             try {
-              await entityResolution.addAlias(existingId, node.label);
+              await entityResolution.addAlias(existingId, node.name);
             } catch {
               // Alias may already exist
             }
@@ -467,7 +467,7 @@ export function useLLMExtraction() {
         } else {
           // New node: create it
           const created = await graph.createNode({
-            label: node.label,
+            name: node.name,
             type: node.type,
             properties: node.properties,
             sourceUrl: llm.sourceUrl ?? undefined,
@@ -495,11 +495,11 @@ export function useLLMExtraction() {
             return undefined;
           }
 
-          // 3. Fall back to label matching
+          // 3. Fall back to name matching
           const reviewNode = reviewStore.nodes.find((rn) => rn.tempId === id);
           if (!reviewNode) return undefined;
           return updatedGraph.nodes.find(
-            (n) => n.label.toLowerCase() === reviewNode.label.toLowerCase()
+            (n) => n.name.toLowerCase() === reviewNode.name.toLowerCase()
           )?.id;
         };
 

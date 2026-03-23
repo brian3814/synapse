@@ -6,19 +6,21 @@ const EXTRACTION_SYSTEM_PROMPT = `You are a knowledge graph extraction assistant
 Output format:
 {
   "nodes": [
-    { "label": "Entity Name", "type": "descriptive_type", "properties": { "key": "value" } }
+    { "name": "Entity Name", "type": "descriptive_type", "properties": { "key": "value" }, "tags": ["domain_tag"] }
   ],
   "edges": [
-    { "sourceLabel": "Source Entity", "targetLabel": "Target Entity", "label": "relationship_type", "type": "relationship_category" }
+    { "sourceName": "Source Entity", "targetName": "Target Entity", "label": "relationship_type", "type": "relationship_category" }
   ]
 }
 
 Rules:
 - Extract the most important entities and relationships
 - Use consistent, lowercase relationship labels (e.g., "works_at", "located_in", "created_by")
-- For node types, use short lowercase descriptive labels (e.g., "person", "company", "concept", "tool", "resource"). Choose the most specific type that fits.
+- Node type must be one of: resource, concept, note
+- For resource nodes, include properties.kind (url, image, video, pdf)
+- Include a tags array for domain annotations (e.g. ["technology", "ai"])
 - Include relevant properties as key-value pairs
-- Ensure all edges reference entities that exist in the nodes array
+- Ensure all edges reference entities that exist in the nodes array by their exact name
 - Return ONLY valid JSON, no other text`;
 
 export async function executeLLMRequestStreaming(
