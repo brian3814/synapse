@@ -72,6 +72,7 @@ export interface LLMRequestMessage extends ExtensionMessage {
     model: string;
     prompt: string;
     systemPrompt?: string;
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   };
 }
 

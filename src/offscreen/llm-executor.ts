@@ -27,7 +27,7 @@ export async function executeLLMRequestStreaming(
   payload: LLMRequestWithKeyMessage['payload'],
   onChunk: (text: string, done: boolean) => void
 ): Promise<{ content: string }> {
-  return await streamAnthropic(payload.apiKey, payload.model, payload.prompt, onChunk, payload.systemPrompt);
+  return await streamAnthropic(payload.apiKey, payload.model, payload.prompt, onChunk, payload.systemPrompt, payload.messages);
 }
 
 async function streamAnthropic(
@@ -35,12 +35,21 @@ async function streamAnthropic(
   model: string,
   userPrompt: string,
   onChunk: (text: string, done: boolean) => void,
-  customSystemPrompt?: string
+  customSystemPrompt?: string,
+  priorMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ content: string }> {
   const systemPrompt = customSystemPrompt ?? EXTRACTION_SYSTEM_PROMPT;
   const userContent = customSystemPrompt
     ? userPrompt
     : `Extract entities and relationships from the following text:\n\n${userPrompt}`;
+
+  // Build messages array: prior conversation history + current prompt
+  const messages: Array<{ role: string; content: string }> = [];
+  if (priorMessages && priorMessages.length > 0) {
+    messages.push(...priorMessages);
+  }
+  messages.push({ role: 'user', content: userContent });
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -54,9 +63,7 @@ async function streamAnthropic(
       model,
       max_tokens: 4096,
       system: systemPrompt,
-      messages: [
-        { role: 'user', content: userContent },
-      ],
+      messages,
       stream: true,
     }),
   });
