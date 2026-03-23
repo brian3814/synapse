@@ -88,7 +88,7 @@ export async function generateStressTestData(
     const y = centroid.cy + gaussianRandom() * jitterSpread;
 
     statements.push({
-      sql: `INSERT INTO nodes (id, identifier, label, type, properties, size, x, y) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      sql: `INSERT INTO nodes (id, identifier, name, type, properties, size, x, y) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
       params: [id, identifier, label, type, properties, 0.5 + Math.random() * 2, x, y],
     });
   }

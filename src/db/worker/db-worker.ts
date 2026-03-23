@@ -12,6 +12,8 @@ import * as indexedFileQueries from './queries/indexed-file-queries';
 import * as stressTestQueries from './queries/stress-test-queries';
 import * as spatialQueries from './queries/spatial-queries';
 import * as readingListQueries from './queries/reading-list-queries';
+import * as tagQueries from './queries/tag-queries';
+import * as conceptSourceQueries from './queries/concept-source-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -248,8 +250,8 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     // Entity resolution operations
     case 'entityResolution.findMatches': {
       ensureInit();
-      const p = params as { label: string; fuzzyThreshold?: number };
-      return { result: await entityResolutionQueries.findMatches(p.label, p.fuzzyThreshold) };
+      const p = params as { name: string; fuzzyThreshold?: number };
+      return { result: await entityResolutionQueries.findMatches(p.name, p.fuzzyThreshold) };
     }
 
     case 'entityResolution.addAlias': {
@@ -266,6 +268,47 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'entityResolution.removeAlias': {
       ensureInit();
       return { result: await entityResolutionQueries.removeAlias(params as string) };
+    }
+
+    // Tag operations
+    case 'tags.getForNode': {
+      ensureInit();
+      return { result: await tagQueries.getTagsForNode(params as string) };
+    }
+    case 'tags.setForNode': {
+      ensureInit();
+      const p = params as { nodeId: string; tags: string[] };
+      await tagQueries.setTagsForNode(p.nodeId, p.tags);
+      return { result: { success: true } };
+    }
+    case 'tags.getAllTags': {
+      ensureInit();
+      return { result: await tagQueries.getAllTags() };
+    }
+
+    // Concept source operations
+    case 'conceptSources.getForConcept': {
+      ensureInit();
+      return { result: await conceptSourceQueries.getSourcesForConcept(params as string) };
+    }
+    case 'conceptSources.addSource': {
+      ensureInit();
+      const p = params as { conceptId: string; resourceIdentifier: string };
+      await conceptSourceQueries.addSource(p.conceptId, p.resourceIdentifier);
+      return { result: { success: true } };
+    }
+    case 'conceptSources.removeSource': {
+      ensureInit();
+      const p = params as { conceptId: string; resourceIdentifier: string };
+      return { result: await conceptSourceQueries.removeSource(p.conceptId, p.resourceIdentifier) };
+    }
+    case 'conceptSources.removeAllForResource': {
+      ensureInit();
+      return { result: await conceptSourceQueries.removeAllForResource(params as string) };
+    }
+    case 'conceptSources.getConceptsForResource': {
+      ensureInit();
+      return { result: await conceptSourceQueries.getConceptsForResource(params as string) };
     }
 
     // Indexed file operations

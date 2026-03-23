@@ -10,7 +10,7 @@ export async function getAllNodes(): Promise<DbNode[]> {
 /** Slim projection for bulk graph loading — skips properties, timestamps */
 export async function getAllNodesSlim(): Promise<DbNodeSlim[]> {
   const { rows } = await executeQuery<DbNodeSlim>(
-    'SELECT id, identifier, label, type, color, size, source_url, x, y FROM nodes;'
+    'SELECT id, identifier, name, type, color, size, source_url, x, y FROM nodes;'
   );
   return rows;
 }
@@ -21,7 +21,7 @@ export async function getNodeById(id: string): Promise<DbNode | null> {
 }
 
 export async function createNode(input: {
-  label: string;
+  name: string;
   type?: string;
   identifier?: string;
   properties?: string;
@@ -31,15 +31,15 @@ export async function createNode(input: {
 }): Promise<DbNode> {
   const id = generateId();
   const type = input.type ?? 'concept';
-  const identifier = input.identifier ?? generateIdentifier(type, input.label);
+  const identifier = input.identifier ?? generateIdentifier(type, input.name, input.sourceUrl);
   const { rows } = await executeQuery<DbNode>(
-    `INSERT INTO nodes (id, identifier, label, type, properties, color, size, source_url)
+    `INSERT INTO nodes (id, identifier, name, type, properties, color, size, source_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *;`,
     [
       id,
       identifier,
-      input.label,
+      input.name,
       type,
       input.properties ?? '{}',
       input.color ?? null,
@@ -52,7 +52,7 @@ export async function createNode(input: {
 
 export async function updateNode(input: {
   id: string;
-  label?: string;
+  name?: string;
   type?: string;
   properties?: string;
   x?: number;
@@ -64,9 +64,9 @@ export async function updateNode(input: {
   const sets: string[] = [];
   const params: unknown[] = [];
 
-  if (input.label !== undefined) {
-    sets.push('label = ?');
-    params.push(input.label);
+  if (input.name !== undefined) {
+    sets.push('name = ?');
+    params.push(input.name);
   }
   if (input.type !== undefined) {
     sets.push('type = ?');
@@ -149,8 +149,8 @@ export async function searchNodes(queryText: string, limit = 50): Promise<DbNode
   const pattern = `%${queryText}%`;
   const { rows } = await executeQuery<DbNode>(
     `SELECT * FROM nodes
-     WHERE label LIKE ? OR type LIKE ?
-     ORDER BY label
+     WHERE name LIKE ? OR type LIKE ?
+     ORDER BY name
      LIMIT ?;`,
     [pattern, pattern, limit]
   );
@@ -159,7 +159,7 @@ export async function searchNodes(queryText: string, limit = 50): Promise<DbNode
 
 export async function getNodesByType(type: string): Promise<DbNode[]> {
   const { rows } = await executeQuery<DbNode>(
-    'SELECT * FROM nodes WHERE type = ? ORDER BY label;',
+    'SELECT * FROM nodes WHERE type = ? ORDER BY name;',
     [type]
   );
   return rows;
@@ -202,7 +202,7 @@ export async function matchTerms(
   // Build a query that checks for LIKE matches against each term
   // Use UNION for efficiency, limited terms to prevent huge queries
   const limitedTerms = terms.slice(0, 30);
-  const placeholders = limitedTerms.map(() => 'LOWER(label) LIKE ?').join(' OR ');
+  const placeholders = limitedTerms.map(() => 'LOWER(name) LIKE ?').join(' OR ');
   const params = limitedTerms.map((t) => `%${t.toLowerCase()}%`);
 
   const { rows } = await executeQuery<DbNode>(
@@ -215,8 +215,17 @@ export async function matchTerms(
   return rows;
 }
 
-export function generateIdentifier(type: string, label: string): string {
-  const slug = label
+export function generateIdentifier(type: string, name: string, sourceUrl?: string): string {
+  if (type === 'resource' && sourceUrl) {
+    const slug = sourceUrl
+      .replace(/^https?:\/\//, '')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .toLowerCase()
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 100);
+    return `resource/${slug}`;
+  }
+  const slug = name
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')

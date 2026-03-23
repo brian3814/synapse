@@ -103,7 +103,7 @@ async function createNodeWithCollision(
   onCollision: 'fail' | 'skip' | 'merge' | 'create_new',
   mergeMode: 'overwrite' | 'keep_existing' | 'deep_merge',
 ): Promise<MutationOutcome> {
-  const identifier = desc.identifier ?? generateIdentifier(desc.type, desc.label);
+  const identifier = desc.identifier ?? generateIdentifier(desc.type, desc.name, desc.sourceUrl);
 
   // Check for existing node with same identifier
   const { rows: existing } = await executeQuery<DbNode>(
@@ -152,13 +152,13 @@ async function insertNode(
   try {
     const id = generateId();
     const { rows } = await executeQuery<DbNode>(
-      `INSERT INTO nodes (id, identifier, label, type, properties, color, size, source_url)
+      `INSERT INTO nodes (id, identifier, name, type, properties, color, size, source_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING *;`,
       [
         id,
         identifier,
-        desc.label,
+        desc.name,
         desc.type,
         JSON.stringify(desc.properties ?? {}),
         desc.color ?? null,
@@ -200,9 +200,9 @@ async function mergeNode(
     }
 
     const { rows } = await executeQuery<DbNode>(
-      `UPDATE nodes SET properties = ?, label = ?, updated_at = datetime('now')
+      `UPDATE nodes SET properties = ?, name = ?, updated_at = datetime('now')
        WHERE identifier = ? RETURNING *;`,
-      [JSON.stringify(mergedProps), desc.label, identifier]
+      [JSON.stringify(mergedProps), desc.name, identifier]
     );
 
     return {

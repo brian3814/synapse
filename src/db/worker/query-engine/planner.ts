@@ -22,7 +22,7 @@ function validatePropertyName(name: string): void {
 
 // Columns that live directly on the nodes/edges tables (not in JSON properties)
 const NODE_DIRECT_COLUMNS = new Set([
-  'id', 'identifier', 'label', 'type', 'color', 'size',
+  'id', 'identifier', 'name', 'type', 'color', 'size',
   'source_url', 'x', 'y', 'z', 'created_at', 'updated_at',
 ]);
 const EDGE_DIRECT_COLUMNS = new Set([
@@ -144,7 +144,7 @@ function walkDescriptor(
   // nodePattern filter (wildcard label matching)
   if (desc.nodePattern) {
     const sqlPattern = desc.nodePattern.replace(/\*/g, '%');
-    state.whereClauses.push(`${nodeAlias}.label LIKE ?`);
+    state.whereClauses.push(`${nodeAlias}.name LIKE ?`);
     state.params.push(sqlPattern);
   }
 
@@ -258,7 +258,7 @@ function buildRecursiveJoin(
   }
   if (repeatConfig.endNodePattern) {
     const pat = repeatConfig.endNodePattern.replace(/\*/g, '%');
-    stopCondition += ` AND n.label NOT LIKE ?`;
+    stopCondition += ` AND n.name NOT LIKE ?`;
     cteParams.push(pat);
   }
 
@@ -399,7 +399,7 @@ function applyFilterOperator(
 
 function addNodeSelectColumns(alias: string, state: PlannerState): void {
   const cols = [
-    'id', 'identifier', 'label', 'type', 'properties',
+    'id', 'identifier', 'name', 'type', 'properties',
     'x', 'y', 'z', 'color', 'size', 'source_url',
     'created_at', 'updated_at',
   ];

@@ -191,14 +191,38 @@ export const sourceContent = {
 
 // Entity resolution operations
 export const entityResolution = {
-  findMatches: (label: string, fuzzyThreshold?: number) =>
-    sendRequest('entityResolution.findMatches', { label, fuzzyThreshold }) as Promise<any[]>,
+  findMatches: (name: string, fuzzyThreshold?: number) =>
+    sendRequest('entityResolution.findMatches', { name, fuzzyThreshold }) as Promise<any[]>,
   addAlias: (nodeId: string, alias: string) =>
     sendRequest('entityResolution.addAlias', { nodeId, alias }) as Promise<any>,
   getAliases: (nodeId: string) =>
     sendRequest('entityResolution.getAliases', nodeId) as Promise<any[]>,
   removeAlias: (aliasId: string) =>
     sendRequest('entityResolution.removeAlias', aliasId) as Promise<boolean>,
+};
+
+// Tag operations
+export const tags = {
+  getForNode: (nodeId: string) =>
+    sendRequest('tags.getForNode', nodeId) as Promise<string[]>,
+  setForNode: (nodeId: string, tags: string[]) =>
+    sendRequest('tags.setForNode', { nodeId, tags }) as Promise<{ success: boolean }>,
+  getAllTags: () =>
+    sendRequest('tags.getAllTags') as Promise<string[]>,
+};
+
+// Concept source operations
+export const conceptSources = {
+  getForConcept: (conceptId: string) =>
+    sendRequest('conceptSources.getForConcept', conceptId) as Promise<{ resourceIdentifier: string; createdAt: string }[]>,
+  addSource: (conceptId: string, resourceIdentifier: string) =>
+    sendRequest('conceptSources.addSource', { conceptId, resourceIdentifier }) as Promise<{ success: boolean }>,
+  removeSource: (conceptId: string, resourceIdentifier: string) =>
+    sendRequest('conceptSources.removeSource', { conceptId, resourceIdentifier }) as Promise<boolean>,
+  removeAllForResource: (resourceIdentifier: string) =>
+    sendRequest('conceptSources.removeAllForResource', resourceIdentifier) as Promise<number>,
+  getConceptsForResource: (resourceIdentifier: string) =>
+    sendRequest('conceptSources.getConceptsForResource', resourceIdentifier) as Promise<string[]>,
 };
 
 // Indexed file operations

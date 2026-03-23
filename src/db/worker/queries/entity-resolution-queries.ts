@@ -40,28 +40,28 @@ export function similarity(a: string, b: string): number {
 
 export interface ResolvedEntity {
   nodeId: string;
-  label: string;
+  name: string;
   matchType: 'exact' | 'alias' | 'fuzzy';
   similarity: number;
 }
 
-/** Find existing nodes that match a given label */
+/** Find existing nodes that match a given name */
 export async function findMatches(
-  label: string,
+  name: string,
   fuzzyThreshold = 0.7
 ): Promise<ResolvedEntity[]> {
-  const normalized = normalizeLabel(label);
+  const normalized = normalizeLabel(name);
   const matches: ResolvedEntity[] = [];
 
-  // 1. Exact label match (case-insensitive)
+  // 1. Exact name match (case-insensitive)
   const { rows: exactRows } = await executeQuery<DbNode>(
-    `SELECT * FROM nodes WHERE LOWER(TRIM(label)) = ?;`,
+    `SELECT * FROM nodes WHERE LOWER(TRIM(name)) = ?;`,
     [normalized]
   );
   for (const node of exactRows) {
     matches.push({
       nodeId: node.id,
-      label: node.label,
+      name: node.name,
       matchType: 'exact',
       similarity: 1,
     });
@@ -69,8 +69,8 @@ export async function findMatches(
   if (matches.length > 0) return matches;
 
   // 2. Alias match
-  const { rows: aliasRows } = await executeQuery<DbEntityAlias & { node_label: string }>(
-    `SELECT ea.*, n.label as node_label
+  const { rows: aliasRows } = await executeQuery<DbEntityAlias & { node_name: string }>(
+    `SELECT ea.*, n.name as node_name
      FROM entity_aliases ea
      JOIN nodes n ON n.id = ea.node_id
      WHERE ea.alias_lower = ?;`,
@@ -79,7 +79,7 @@ export async function findMatches(
   for (const alias of aliasRows) {
     matches.push({
       nodeId: alias.node_id,
-      label: alias.node_label,
+      name: alias.node_name,
       matchType: 'alias',
       similarity: 1,
     });
@@ -88,14 +88,14 @@ export async function findMatches(
 
   // 3. Fuzzy match — check all nodes (for small-to-medium graphs this is fine)
   const { rows: allNodes } = await executeQuery<DbNode>(
-    'SELECT id, label FROM nodes;'
+    'SELECT id, name FROM nodes;'
   );
   for (const node of allNodes) {
-    const sim = similarity(label, node.label);
+    const sim = similarity(name, node.name);
     if (sim >= fuzzyThreshold) {
       matches.push({
         nodeId: node.id,
-        label: node.label,
+        name: node.name,
         matchType: 'fuzzy',
         similarity: sim,
       });

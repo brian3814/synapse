@@ -39,7 +39,7 @@ export async function getNodesInBounds(
   limit = 5000
 ): Promise<DbNodeSlim[]> {
   const { rows } = await executeQuery<DbNodeSlim>(
-    `SELECT id, identifier, label, type, color, size, source_url, x, y
+    `SELECT id, identifier, name, type, color, size, source_url, x, y
      FROM nodes
      WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?
      LIMIT ?;`,
