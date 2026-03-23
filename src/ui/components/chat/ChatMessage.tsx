@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ChatMessage as ChatMessageType } from '../../hooks/useChatQuery';
+import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession';
 
 interface ChatMessageProps {
   message: ChatMessageType;

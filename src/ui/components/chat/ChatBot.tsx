@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useGraphStore } from '../../../graph/store/graph-store';
-import { useChatQuery } from '../../hooks/useChatQuery';
+import { useChatSession } from '../../hooks/useChatSession';
 import { useInputHistory } from '../../hooks/useInputHistory';
 import { ChatMessage } from './ChatMessage';
 
 export function ChatBot() {
   const { chatOpen, chatDisplayMode, toggleChat, setChatDisplayMode } = useUIStore();
-  const { messages, sendMessage, clearHistory, isProcessing } = useChatQuery();
+  const { messages, sendMessage, newSession, isProcessing, sessionReady } = useChatSession();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayMode = useUIStore((s) => s.displayMode);
@@ -70,7 +70,7 @@ export function ChatBot() {
 
   const headerProps = {
     onClose: toggleChat,
-    onClear: clearHistory,
+    onNewSession: newSession,
     chatDisplayMode,
     onToggleMode: () => setChatDisplayMode(chatDisplayMode === 'float' ? 'sidebar' : 'float'),
   };
@@ -88,7 +88,7 @@ export function ChatBot() {
     return (
       <div className="flex flex-col h-full bg-zinc-900 border-l border-zinc-700">
         <ChatHeader {...headerProps} />
-        <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} />
+        <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} />
         <ChatInput {...inputProps} />
       </div>
     );
@@ -102,7 +102,7 @@ export function ChatBot() {
       }`}
     >
       <ChatHeader {...headerProps} />
-      <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} />
+      <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} />
       <ChatInput {...inputProps} />
     </div>
   );
@@ -110,12 +110,12 @@ export function ChatBot() {
 
 function ChatHeader({
   onClose,
-  onClear,
+  onNewSession,
   chatDisplayMode,
   onToggleMode,
 }: {
   onClose: () => void;
-  onClear: () => void;
+  onNewSession: () => void;
   chatDisplayMode: 'float' | 'sidebar';
   onToggleMode: () => void;
 }) {
@@ -131,11 +131,11 @@ function ChatHeader({
           {chatDisplayMode === 'float' ? <DockIcon /> : <UndockIcon />}
         </button>
         <button
-          onClick={onClear}
-          title="Clear history"
+          onClick={onNewSession}
+          title="New session"
           className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
         >
-          <TrashIcon />
+          <NewSessionIcon />
         </button>
         <button
           onClick={onClose}
@@ -153,15 +153,19 @@ function ChatMessages({
   messages,
   messagesEndRef,
   onNodeClick,
+  sessionReady,
 }: {
-  messages: ReturnType<typeof useChatQuery>['messages'];
+  messages: ReturnType<typeof useChatSession>['messages'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onNodeClick: (nodeId: string) => void;
+  sessionReady: boolean;
 }) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-0">
-        <p className="text-zinc-500 text-sm">Ask a question about your graph</p>
+        <p className="text-zinc-500 text-sm">
+          {sessionReady ? 'Ask a question about your graph' : 'Restoring session...'}
+        </p>
       </div>
     );
   }
@@ -230,9 +234,9 @@ const UndockIcon = () => (
   </svg>
 );
 
-const TrashIcon = () => (
+const NewSessionIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    <path d="M12 8v8" /><path d="M8 12h8" />
   </svg>
 );
 
