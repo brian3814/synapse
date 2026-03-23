@@ -32,6 +32,15 @@ export async function createNode(input: {
   const id = generateId();
   const type = input.type ?? 'concept';
   const identifier = input.identifier ?? generateIdentifier(type, input.name, input.sourceUrl);
+
+  // Return existing node if identifier already exists (common during extraction
+  // when the same entity appears across multiple pages or re-extractions)
+  const { rows: existing } = await executeQuery<DbNode>(
+    'SELECT * FROM nodes WHERE identifier = ?;',
+    [identifier]
+  );
+  if (existing.length > 0) return existing[0];
+
   const { rows } = await executeQuery<DbNode>(
     `INSERT INTO nodes (id, identifier, name, type, properties, color, size, source_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
