@@ -8,7 +8,7 @@ function dbNodeToGraphNode(row: DbNode): GraphNode {
   return {
     id: row.id,
     identifier: row.identifier,
-    label: row.label,
+    name: row.name,
     type: row.type,
     properties: JSON.parse(row.properties || '{}'),
     x: row.x ?? undefined,
@@ -43,7 +43,7 @@ function slimNodeToGraphNode(row: DbNodeSlim): GraphNode {
   return {
     id: row.id,
     identifier: row.identifier,
-    label: row.label,
+    name: row.name,
     type: row.type,
     properties: {},
     x: row.x ?? undefined,
@@ -126,7 +126,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   createNode: async (input) => {
     try {
       const row = await dbNodes.create({
-        label: input.label,
+        name: input.name,
         type: input.type,
         properties: JSON.stringify(input.properties ?? {}),
         color: input.color,
@@ -147,7 +147,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     try {
       const row = await dbNodes.update({
         id: input.id,
-        label: input.label,
+        name: input.name,
         type: input.type,
         properties: input.properties ? JSON.stringify(input.properties) : undefined,
         x: input.x,

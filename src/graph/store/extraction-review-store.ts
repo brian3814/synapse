@@ -6,12 +6,13 @@ export type TempId = string; // `temp-${uuid}`
 
 export interface ReviewNode {
   tempId: TempId;
-  label: string;
+  name: string;
   type: string;
   properties: Record<string, unknown>;
+  tags?: string[];
   mergeRecommendation?: {
     existingNodeId: string;
-    existingLabel: string;
+    existingName: string;
     matchType: 'exact' | 'alias' | 'fuzzy';
     similarity: number;
     status: 'pending' | 'accepted' | 'dismissed';
@@ -45,11 +46,11 @@ export type ReviewCommand =
 
 export interface PendingConversion {
   nodeTempId: TempId;
-  nodeLabel: string;
+  nodeName: string;
   loading: boolean;
   assignments: Array<{
     adjacentTempId: TempId;
-    adjacentLabel: string;
+    adjacentName: string;
     suggestedKey: string;
     originalEdgeLabel: string;
     value: string;
@@ -79,7 +80,7 @@ interface ExtractionReviewStore {
   select(tempId: TempId | null, type: 'node' | 'edge' | null): void;
 
   // Edits
-  editNode(tempId: TempId, changes: Partial<Pick<ReviewNode, 'label' | 'type' | 'properties'>>): void;
+  editNode(tempId: TempId, changes: Partial<Pick<ReviewNode, 'name' | 'type' | 'properties' | 'tags'>>): void;
   editEdge(tempId: TempId, changes: Partial<Pick<ReviewEdge, 'label' | 'type'>>): void;
   addEdge(sourceTempId: TempId, targetTempId: TempId, label: string, type?: string): void;
   removeEdge(tempId: TempId): void;
@@ -394,7 +395,7 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
     set({
       pendingConversion: {
         nodeTempId,
-        nodeLabel: node.label,
+        nodeName: node.name,
         loading: true,
         assignments: [],
       },
@@ -409,7 +410,7 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
         edgeLabel: e.label,
         direction: isSource ? 'outgoing' : 'incoming',
         adjacentTempId,
-        adjacentLabel: adjacentNode?.label ?? 'Unknown',
+        adjacentName: adjacentNode?.name ?? 'Unknown',
       };
     });
 
@@ -423,10 +424,10 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
       if (llmConfig?.apiKey) {
         const requestId = crypto.randomUUID();
 
-        const prompt = `Given these relationships from the perspective of "${node.label}", suggest the property key name from each adjacent node's perspective. Return ONLY a JSON object mapping each edge label to the suggested property key.
+        const prompt = `Given these relationships from the perspective of "${node.name}", suggest the property key name from each adjacent node's perspective. Return ONLY a JSON object mapping each edge label to the suggested property key.
 
 Relationships:
-${edgeInfos.map((e) => `- ${e.direction === 'outgoing' ? `${node.label} --[${e.edgeLabel}]--> ${e.adjacentLabel}` : `${e.adjacentLabel} --[${e.edgeLabel}]--> ${node.label}`}`).join('\n')}
+${edgeInfos.map((e) => `- ${e.direction === 'outgoing' ? `${node.name} --[${e.edgeLabel}]--> ${e.adjacentName}` : `${e.adjacentName} --[${e.edgeLabel}]--> ${node.name}`}`).join('\n')}
 
 Example: if Python --[has_framework]--> Django, and Python is being converted, Django should get property key "language" or "written_in".
 
@@ -480,16 +481,16 @@ Return JSON like: {"has_framework": "written_in"}`;
       // Build assignments
       const assignments = edgeInfos.map((e) => ({
         adjacentTempId: e.adjacentTempId,
-        adjacentLabel: e.adjacentLabel,
+        adjacentName: e.adjacentName,
         suggestedKey: suggestedKeys[e.edgeLabel] ?? e.edgeLabel,
         originalEdgeLabel: e.edgeLabel,
-        value: node.label,
+        value: node.name,
       }));
 
       set({
         pendingConversion: {
           nodeTempId,
-          nodeLabel: node.label,
+          nodeName: node.name,
           loading: false,
           assignments,
         },
@@ -498,16 +499,16 @@ Return JSON like: {"has_framework": "written_in"}`;
       // On any error, fall back to edge labels as keys
       const assignments = edgeInfos.map((e) => ({
         adjacentTempId: e.adjacentTempId,
-        adjacentLabel: e.adjacentLabel,
+        adjacentName: e.adjacentName,
         suggestedKey: e.edgeLabel,
         originalEdgeLabel: e.edgeLabel,
-        value: node.label,
+        value: node.name,
       }));
 
       set({
         pendingConversion: {
           nodeTempId,
-          nodeLabel: node.label,
+          nodeName: node.name,
           loading: false,
           assignments,
         },
