@@ -3,6 +3,8 @@
  * Extracted from agent-loop.ts for reuse by the reading list extractor.
  */
 
+import { htmlToMarkdown } from '../shared/html-to-markdown';
+
 const DEFAULT_FETCH_MAX_BYTES = 20_000;
 
 /**
@@ -52,18 +54,30 @@ export async function fetchAndCleanContent(
     if (!response.ok) {
       return { content: '', error: `Fetch failed: ${response.status} ${response.statusText}` };
     }
-    const text = await response.text();
-    // Basic HTML cleaning
-    const cleaned = text
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const html = await response.text();
+
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const body = doc.body;
+    if (!body) {
+      return { content: '', error: 'No body element found in fetched HTML' };
+    }
+
+    // Remove non-content elements before Turndown processes them
+    const removeSelectors = [
+      'script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript',
+      '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+    ];
+    removeSelectors.forEach((sel) => {
+      body.querySelectorAll(sel).forEach((el) => el.remove());
+    });
+
+    let markdown = htmlToMarkdown(body);
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
     const truncated =
-      cleaned.length > maxBytes
-        ? cleaned.substring(0, maxBytes) + '...[truncated]'
-        : cleaned;
+      markdown.length > maxBytes
+        ? markdown.substring(0, maxBytes) + '\n\n...[truncated]'
+        : markdown;
     return { content: truncated };
   } catch (e: any) {
     return { content: '', error: e.message };

@@ -1,4 +1,5 @@
-import { extractPageContent } from './page-extractor';
+import { extractPageContent, extractContentElement } from './page-extractor';
+import { htmlToMarkdown } from '../shared/html-to-markdown';
 
 const MAX_TEXT_LENGTH = 50_000;
 
@@ -8,7 +9,7 @@ export function executeTool(
 ): string {
   switch (name) {
     case 'get_page_content':
-      return getPageContent();
+      return getPageContent(input);
     case 'get_page_metadata':
       return getPageMetadata();
     case 'query_selector':
@@ -26,12 +27,25 @@ export function executeTool(
   }
 }
 
-function getPageContent(): string {
-  const { text, title, url } = extractPageContent();
-  const content = text.length > MAX_TEXT_LENGTH
-    ? text.substring(0, MAX_TEXT_LENGTH) + '...[truncated]'
-    : text;
-  return JSON.stringify({ title, url, content });
+function getPageContent(input: Record<string, unknown>): string {
+  const format = (input.format as string) ?? 'markdown';
+
+  if (format === 'text') {
+    const { text, title, url } = extractPageContent();
+    const content = text.length > MAX_TEXT_LENGTH
+      ? text.substring(0, MAX_TEXT_LENGTH) + '...[truncated]'
+      : text;
+    return JSON.stringify({ title, url, content });
+  }
+
+  // Markdown path (default)
+  const { title, url, element } = extractContentElement();
+  let markdown = htmlToMarkdown(element);
+  markdown = markdown.replace(/\n{3,}/g, '\n\n');
+  if (markdown.length > MAX_TEXT_LENGTH) {
+    markdown = markdown.substring(0, MAX_TEXT_LENGTH) + '\n\n...[truncated]';
+  }
+  return JSON.stringify({ title, url, content: markdown });
 }
 
 function getPageMetadata(): string {

@@ -13,10 +13,16 @@ export const AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'get_page_content',
     description:
-      'Get the full cleaned text content of the current page. Returns the main article/body text with navigation, scripts, and styling removed.',
+      'Get the cleaned content of the current page. Returns markdown by default (preserving headings, links, tables, lists) or plain text. Navigation, scripts, and styling are removed.',
     parameters: {
       type: 'object',
-      properties: {},
+      properties: {
+        format: {
+          type: 'string',
+          enum: ['markdown', 'text'],
+          description: 'Output format. "markdown" (default) preserves document structure; "text" returns plain text.',
+        },
+      },
       required: [],
     },
     executionContext: 'content-script',
@@ -114,7 +120,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
   {
     name: 'fetch_url',
     description:
-      'Fetch an external URL and return its cleaned text content (max 20KB). Useful for reading linked pages referenced on the current page.',
+      'Fetch an external URL and return its content as markdown (max 20KB). Preserves headings, links, tables, and lists. Useful for reading linked pages referenced on the current page.',
     parameters: {
       type: 'object',
       properties: {

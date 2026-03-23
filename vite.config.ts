@@ -13,6 +13,11 @@ function contentScriptPlugin(): Plugin {
     closeBundle: async () => {
       await viteBuild({
         configFile: false,
+        resolve: {
+          alias: {
+            '@': resolve(__dirname, 'src'),
+          },
+        },
         build: {
           outDir: resolve(__dirname, 'dist'),
           emptyOutDir: false,

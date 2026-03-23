@@ -1,11 +1,11 @@
-export function extractPageContent(): { title: string; text: string; url: string } {
+/**
+ * Return the cleaned content-bearing DOM element for the page.
+ * Used by both text extraction (innerText) and markdown extraction (Turndown).
+ */
+export function extractContentElement(): { title: string; url: string; element: HTMLElement } {
   const title = document.title || '';
   const url = window.location.href;
 
-  // Try Readability-style extraction (simplified, since we can't import in content script)
-  let text = '';
-
-  // Try to get the main content
   const article =
     document.querySelector('article') ||
     document.querySelector('[role="main"]') ||
@@ -15,16 +15,22 @@ export function extractPageContent(): { title: string; text: string; url: string
     document.querySelector('.entry-content');
 
   if (article) {
-    text = article.innerText;
-  } else {
-    // Fallback: get body text, excluding scripts, styles, nav, footer
-    const body = document.body.cloneNode(true) as HTMLElement;
-    const removeSelectors = ['script', 'style', 'nav', 'footer', 'header', 'aside', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]'];
-    removeSelectors.forEach((sel) => {
-      body.querySelectorAll(sel).forEach((el) => el.remove());
-    });
-    text = body.innerText;
+    return { title, url, element: article.cloneNode(true) as HTMLElement };
   }
+
+  // Fallback: clone body, remove non-content elements
+  const body = document.body.cloneNode(true) as HTMLElement;
+  const removeSelectors = ['script', 'style', 'nav', 'footer', 'header', 'aside', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]'];
+  removeSelectors.forEach((sel) => {
+    body.querySelectorAll(sel).forEach((el) => el.remove());
+  });
+
+  return { title, url, element: body };
+}
+
+export function extractPageContent(): { title: string; text: string; url: string } {
+  const { title, url, element } = extractContentElement();
+  let text = element.innerText;
 
   // Trim and limit length
   text = text.replace(/\s+/g, ' ').trim();
