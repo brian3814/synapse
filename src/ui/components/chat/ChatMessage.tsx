@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession';
+import { ChatToolCall } from './ChatToolCall';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -23,6 +24,13 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
       <div className="max-w-[95%] space-y-2">
         {message.status === 'streaming' && (
           <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
+            {message.agentTurns && message.agentTurns.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {message.agentTurns.map((turn, i) => (
+                  <ChatToolCall key={i} turn={turn} />
+                ))}
+              </div>
+            )}
             <MarkdownContent content={message.content || '...'} onNodeClick={onNodeClick} />
             <span className="inline-block w-1.5 h-3.5 bg-indigo-400 animate-pulse ml-0.5" />
             <CopyButton text={message.content} position="bottom-1 left-1" />
@@ -31,12 +39,26 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
 
         {message.status === 'executing' && (
           <div className="bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
-            <p className="text-zinc-400 text-xs">Searching knowledge graph...</p>
+            {message.agentTurns && message.agentTurns.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {message.agentTurns.map((turn, i) => (
+                  <ChatToolCall key={i} turn={turn} />
+                ))}
+              </div>
+            )}
+            <p className="text-zinc-400 text-xs">Thinking...</p>
           </div>
         )}
 
         {message.status === 'complete' && (
           <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg space-y-2">
+            {message.agentTurns && message.agentTurns.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {message.agentTurns.map((turn, i) => (
+                  <ChatToolCall key={i} turn={turn} />
+                ))}
+              </div>
+            )}
             <MarkdownContent content={message.content} onNodeClick={onNodeClick} />
             <CopyButton text={message.content} position="bottom-1 left-1" />
           </div>
