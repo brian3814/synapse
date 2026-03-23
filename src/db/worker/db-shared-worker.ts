@@ -83,6 +83,29 @@ function resetWorkerState(): void {
   pendingRequests.clear();
 }
 
+/**
+ * Health-check: send a lightweight ping to the dedicated worker and wait for a response.
+ * Returns false if the worker doesn't respond within `timeoutMs`, which means the
+ * dedicated worker was terminated (e.g., the tab/panel that spawned it was closed)
+ * and the MessagePort is dead — messages sent to it silently disappear.
+ */
+function pingWorker(timeoutMs = 2000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!workerPort) { resolve(false); return; }
+    const pingId = `__ping__${Date.now()}`;
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    const onPong = (event: MessageEvent<WorkerResponse>) => {
+      if (event.data.requestId === pingId) {
+        clearTimeout(timer);
+        workerPort!.removeEventListener('message', onPong);
+        resolve(event.data.success);
+      }
+    };
+    workerPort.addEventListener('message', onPong);
+    workerPort.postMessage({ requestId: pingId, action: 'ping' } as WorkerRequest);
+  });
+}
+
 function attachWorkerPort(port: MessagePort): void {
   // If we already have a working worker port, ignore
   if (workerPort && workerReady) {
@@ -154,12 +177,31 @@ self.onconnect = (connectEvent: MessageEvent) => {
     // Handle init requests
     if (request.action === 'init') {
       if (workerReady) {
-        // Worker already initialized — respond immediately
-        port.postMessage({
-          requestId: request.requestId,
-          success: true,
-          data: { ready: true },
-        } as WorkerResponse);
+        // Worker was previously initialized — verify it's still alive before
+        // responding. A dedicated worker is owned by the document that created it;
+        // when that side-panel/tab closes, Chrome terminates the worker but the
+        // SharedWorker's MessagePort stays open (just dead). Without this ping,
+        // we'd report "ready" and then every forwarded request would silently
+        // vanish into the dead port, causing 10s timeouts on the UI side.
+        pingWorker().then((alive) => {
+          if (alive) {
+            port.postMessage({
+              requestId: request.requestId,
+              success: true,
+              data: { ready: true },
+            } as WorkerResponse);
+          } else {
+            // Worker died — reset state and ask the new tab to spawn a replacement
+            console.warn('[SharedWorker] Worker ping failed, requesting new worker');
+            resetWorkerState();
+            pendingInits.push({ port, requestId: request.requestId });
+            port.postMessage({
+              requestId: '__needs_worker__',
+              success: true,
+              data: { needsWorker: true },
+            } as WorkerResponse);
+          }
+        });
       } else {
         // Queue this init and tell the tab we need a worker
         pendingInits.push({ port, requestId: request.requestId });

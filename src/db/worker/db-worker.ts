@@ -48,6 +48,10 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       return { result: { ready: true } };
     }
 
+    case 'ping': {
+      return { result: { alive: true } };
+    }
+
     case 'reset': {
       await resetDatabase();
       await runMigrations();
