@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph } from '../../db/client/db-client';
+import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, conceptSources } from '../../db/client/db-client';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
@@ -170,6 +170,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   deleteNode: async (id) => {
     try {
+      // Capture node data before deletion for cleanup
+      const node = get().nodes.find((n) => n.id === id);
       const success = await dbNodes.delete(id);
       if (success) {
         set((state) => {
@@ -185,6 +187,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
             selectedNodeIds,
           };
         });
+
+        // Best-effort cleanup: remove concept_sources for deleted resource nodes
+        if (node?.type === 'resource' && node.identifier) {
+          conceptSources.removeAllForResource(node.identifier).catch(() => {
+            // Best-effort cleanup
+          });
+        }
       }
       return success;
     } catch (e: any) {

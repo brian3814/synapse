@@ -3,7 +3,7 @@ import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../../graph/store/extraction-review-store';
 import { extractionResultSchema } from '../../shared/schema';
-import { entityResolution, sourceContent } from '../../db/client/db-client';
+import { entityResolution, sourceContent, conceptSources } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
 function streamFromOffscreen(
@@ -234,6 +234,35 @@ export function useLLMExtraction() {
           });
         } catch (e) {
           console.warn('[Extraction] Failed to save source content:', e);
+        }
+      }
+
+      // Link concept nodes to their source resource (parallelized per Pitfall #20)
+      if (llm.sourceUrl) {
+        const resourceNode = useGraphStore.getState().nodes.find(
+          (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
+        );
+        const resourceIdentifier = resourceNode?.identifier;
+        if (resourceIdentifier) {
+          const conceptNodeIds: string[] = [];
+          for (const item of diff.items) {
+            if (!item.accepted || item.type !== 'node') continue;
+            const extracted = item.extracted as { name: string; type: string };
+            if (extracted.type === 'concept') {
+              const realId = nodeIdMap.get(extracted.name.toLowerCase())
+                ?? item.existingMatch?.id;
+              if (realId) conceptNodeIds.push(realId);
+            }
+          }
+          if (conceptNodeIds.length > 0) {
+            await Promise.all(
+              conceptNodeIds.map((id) =>
+                conceptSources.addSource(id, resourceIdentifier).catch(() => {
+                  // Best-effort: source link may already exist
+                })
+              )
+            );
+          }
         }
       }
 
@@ -531,6 +560,32 @@ export function useLLMExtraction() {
           });
         } catch (e) {
           console.warn('[Extraction] Failed to save source content:', e);
+        }
+      }
+
+      // Link concept nodes to their source resource (parallelized per Pitfall #20)
+      if (llm.sourceUrl) {
+        const resourceNode = useGraphStore.getState().nodes.find(
+          (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
+        );
+        const resourceIdentifier = resourceNode?.identifier;
+        if (resourceIdentifier) {
+          const conceptNodeIds: string[] = [];
+          for (const node of activeNodes) {
+            if (node.type === 'concept') {
+              const realId = tempIdToRealId.get(node.tempId);
+              if (realId) conceptNodeIds.push(realId);
+            }
+          }
+          if (conceptNodeIds.length > 0) {
+            await Promise.all(
+              conceptNodeIds.map((id) =>
+                conceptSources.addSource(id, resourceIdentifier).catch(() => {
+                  // Best-effort: source link may already exist
+                })
+              )
+            );
+          }
         }
       }
 
