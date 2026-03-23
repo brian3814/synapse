@@ -1,4 +1,4 @@
-import { executeLLMRequestStreaming } from './llm-executor';
+import { executeLLMRequestStreaming, streamAnthropicWithTools } from './llm-executor';
 import { runAgentLoop } from './agent-loop';
 import { extractReadingListItem } from './reading-list-extractor';
 
@@ -122,6 +122,42 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         payload: { runId, event: { type: 'error', error: e?.message ?? 'Agent loop failed unexpectedly' } },
       }).catch(() => {});
     });
+
+    return false;
+  }
+
+  if (message.type === 'CHAT_LLM_REQUEST_WITH_KEY') {
+    const { requestId, apiKey, model, systemPrompt, messages, tools } = message.payload;
+    sendResponse({ acknowledged: true });
+
+    const buffer = new ChunkBuffer({
+      maxBytes: 100,
+      maxMs: 50,
+      flush: (text) => {
+        chrome.runtime.sendMessage({
+          type: 'CHAT_LLM_STREAM',
+          payload: { requestId, textChunk: text, done: false },
+        }).catch(() => {});
+      },
+    });
+
+    streamAnthropicWithTools(apiKey, model, systemPrompt, messages, tools, (text) => {
+      buffer.add(text);
+    })
+      .then(({ textContent, toolCalls, stopReason }) => {
+        buffer.drain();
+        chrome.runtime.sendMessage({
+          type: 'CHAT_LLM_STREAM',
+          payload: { requestId, done: true, textContent, toolCalls, stopReason },
+        }).catch(() => {});
+      })
+      .catch((e) => {
+        buffer.drain();
+        chrome.runtime.sendMessage({
+          type: 'CHAT_LLM_STREAM',
+          payload: { requestId, done: true, error: e.message },
+        }).catch(() => {});
+      });
 
     return false;
   }

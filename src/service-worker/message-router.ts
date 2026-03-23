@@ -13,6 +13,7 @@ export function handleMessage(
   // Broadcast messages from offscreen — SW should ignore them
   if (message.type === 'LLM_STREAM_CHUNK') return false;
   if (message.type === 'AGENT_PROGRESS') return false;
+  if (message.type === 'CHAT_LLM_STREAM') return false;
   if (message.type === 'PAGE_TERMS') return false; // Let UI pick up directly
   if (message.type === 'OAUTH_STATUS') return false;
   if (message.type === 'READING_LIST_EXTRACTION_RESULT') {
@@ -80,6 +81,17 @@ async function handleMessageAsync(
       const agentWithKey = { type: 'AGENT_RUN_START_WITH_KEY', payload: { ...(message as any).payload, apiKey: agentApiKey } };
       const response = await chrome.runtime.sendMessage(agentWithKey);
       return response;
+    }
+
+    case 'CHAT_LLM_REQUEST': {
+      await ensureOffscreenDocument();
+      const chatApiKey = await getAuthToken();
+      const chatWithKey = {
+        type: 'CHAT_LLM_REQUEST_WITH_KEY',
+        payload: { ...(message as any).payload, apiKey: chatApiKey },
+      };
+      await chrome.runtime.sendMessage(chatWithKey);
+      return { acknowledged: true };
     }
 
     case 'TOOL_EXECUTE': {
