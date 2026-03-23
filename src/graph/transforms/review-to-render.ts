@@ -23,7 +23,7 @@ export function reviewNodesToRender(
 
       return {
         id: node.tempId,
-        label: node.label,
+        name: node.name,
         x: 0,
         y: 0,
         z: 0,
@@ -45,7 +45,7 @@ export function existingNodesToRender(
 ): RenderNode[] {
   return existingNodes.map((node) => ({
     id: node.id,
-    label: node.label,
+    name: node.name,
     x: node.x ?? 0,
     y: node.y ?? 0,
     z: node.z ?? 0,
@@ -96,7 +96,7 @@ export function reviewNodesToOverlayRender(
 
       return {
         id: node.tempId,
-        label: node.label,
+        name: node.name,
         x: 0,
         y: 0,
         z: 0,

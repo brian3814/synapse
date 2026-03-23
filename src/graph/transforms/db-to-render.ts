@@ -8,7 +8,7 @@ export function graphNodesToRender(
 ): RenderNode[] {
   return nodes.map((node) => ({
     id: node.id,
-    label: node.label,
+    name: node.name,
     x: node.x ?? 0,
     y: node.y ?? 0,
     z: node.z ?? 0,

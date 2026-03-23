@@ -118,7 +118,7 @@ export class LabelLayer {
       }
 
       ctx.fillText(
-        node.label,
+        node.name,
         screenX * dpr,
         (screenY + LABEL_Y_OFFSET_PX) * dpr
       );

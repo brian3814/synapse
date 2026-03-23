@@ -14,7 +14,7 @@ import {
 function slimToRenderNode(row: DbNodeSlim, typeColorMap: Map<string, string>): RenderNode {
   return {
     id: row.id,
-    label: row.label,
+    name: row.name,
     x: row.x ?? 0,
     y: row.y ?? 0,
     z: 0,
