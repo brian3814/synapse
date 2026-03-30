@@ -14,6 +14,22 @@ export interface ChatToolDefinition extends Omit<ToolDefinition, 'executionConte
 
 export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
   {
+    name: 'search_knowledge',
+    description:
+      'Search the knowledge graph comprehensively. Finds entities by name, expands to connected neighbors (1-hop graph traversal), and retrieves stored source content with URLs. This is the recommended FIRST tool for any question about what the user knows. Returns entities with IDs, relationships, and source excerpts with URLs for citation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query — use key terms from the user\'s question',
+        },
+      },
+      required: ['query'],
+    },
+    executionContext: 'ui',
+  },
+  {
     name: 'search_nodes',
     description:
       'Search the knowledge graph for nodes matching a query. Uses full-text search. Returns matching nodes with their type, properties, and ID.',

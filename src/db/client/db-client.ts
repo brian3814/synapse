@@ -297,6 +297,8 @@ export const chat = {
     sendRequest('chat.getMessages', sessionId) as Promise<any[]>,
   getRecentMessages: (sessionId: string, limit?: number) =>
     sendRequest('chat.getRecentMessages', { sessionId, limit }) as Promise<any[]>,
+  getAllSessions: () =>
+    sendRequest('chat.getAllSessions') as Promise<any[]>,
 };
 
 // Query engine operations

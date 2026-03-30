@@ -63,8 +63,8 @@ function extractSearchTerms(question: string): string[] {
 async function findRelevantNodes(terms: string[], limit = 30): Promise<DbNode[]> {
   const nodeSet = new Map<string, DbNode>();
 
-  for (const term of terms) {
-    const results = await nodesApi.search(term, limit);
+  const allResults = await Promise.all(terms.map((term) => nodesApi.search(term, limit)));
+  for (const results of allResults) {
     for (const node of results) {
       nodeSet.set(node.id, node);
     }
@@ -81,22 +81,24 @@ async function expandSubgraph(
   const allNodeIds = new Set(nodeIds);
   const allEdges: DbEdge[] = [];
 
-  // Get edges for the initial set of nodes
-  for (const nodeId of nodeIds) {
-    const nodeEdges: DbEdge[] = await edgesApi.getForNode(nodeId);
-    for (const edge of nodeEdges) {
+  // Get edges for the initial set of nodes (parallelized per Pitfall #20)
+  const firstHopResults = await Promise.all(nodeIds.map((id) => edgesApi.getForNode(id)));
+  for (const nodeEdges of firstHopResults) {
+    for (const edge of nodeEdges as DbEdge[]) {
       allEdges.push(edge);
       allNodeIds.add(edge.source_id);
       allNodeIds.add(edge.target_id);
     }
   }
 
-  // For 2-hop: expand one more level
+  // For 2-hop: expand one more level (parallelized per Pitfall #20)
   if (hops >= 2) {
     const secondHopIds = Array.from(allNodeIds).filter((id) => !nodeIds.includes(id));
-    for (const nodeId of secondHopIds.slice(0, 20)) { // limit second hop expansion
-      const nodeEdges: DbEdge[] = await edgesApi.getForNode(nodeId);
-      for (const edge of nodeEdges) {
+    const secondHopResults = await Promise.all(
+      secondHopIds.slice(0, 20).map((id) => edgesApi.getForNode(id))
+    );
+    for (const nodeEdges of secondHopResults) {
+      for (const edge of nodeEdges as DbEdge[]) {
         if (!allEdges.some((e) => e.id === edge.id)) {
           allEdges.push(edge);
         }
@@ -118,27 +120,29 @@ async function getSourceExcerpts(
   nodeMap: Map<string, DbNode>,
   maxExcerptLength = 1000
 ): Promise<RAGContext['sourceExcerpts']> {
-  const excerpts: RAGContext['sourceExcerpts'] = [];
-
-  for (const nodeId of nodeIds.slice(0, 15)) { // limit to 15 sources
-    try {
-      const sc: DbSourceContent | null = await sourceContent.getByNodeId(nodeId);
-      if (sc?.content) {
-        const node = nodeMap.get(nodeId);
-        excerpts.push({
-          nodeId,
-          nodeLabel: node?.name ?? 'Unknown',
-          url: sc.url,
-          title: sc.title,
-          excerpt: sc.content.slice(0, maxExcerptLength),
-        });
+  // Parallelized per Pitfall #20
+  const results = await Promise.all(
+    nodeIds.slice(0, 15).map(async (nodeId) => {
+      try {
+        const sc: DbSourceContent | null = await sourceContent.getByNodeId(nodeId);
+        if (sc?.content) {
+          const node = nodeMap.get(nodeId);
+          return {
+            nodeId,
+            nodeLabel: node?.name ?? 'Unknown',
+            url: sc.url,
+            title: sc.title,
+            excerpt: sc.content.slice(0, maxExcerptLength),
+          };
+        }
+      } catch {
+        // Source content not available for this node
       }
-    } catch {
-      // Source content not available for this node
-    }
-  }
+      return null;
+    })
+  );
 
-  return excerpts;
+  return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /** Full RAG retrieval: search → expand → fetch sources */

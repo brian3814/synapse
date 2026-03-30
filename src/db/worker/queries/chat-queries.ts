@@ -76,6 +76,16 @@ export async function getSessionMessages(sessionId: string): Promise<any[]> {
   return rows;
 }
 
+export async function getAllSessions(): Promise<any[]> {
+  const { rows } = await executeQuery<any>(
+    `SELECT id, title, created_at, last_active_at, status
+     FROM chat_sessions
+     ORDER BY last_active_at DESC
+     LIMIT 20;`
+  );
+  return rows;
+}
+
 export async function getRecentMessages(sessionId: string, limit: number = 20): Promise<any[]> {
   const { rows } = await executeQuery<any>(
     `SELECT * FROM (

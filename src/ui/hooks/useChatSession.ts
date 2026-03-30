@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { chat } from '../../db/client/db-client';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
-import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress } from './chat-agent-loop';
+import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -10,6 +10,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   agentTurns?: ChatAgentTurn[];
+  subgraph?: ChatSubgraphData;
   error?: string;
   status: MessageStatus;
 }
@@ -142,7 +143,10 @@ export function useChatSession() {
               }
               break;
             case 'done':
-              // Final text is returned from runChatAgent
+              // Attach subgraph data for referenced entities display
+              if (event.subgraph) {
+                updateMessage(assistantId, { subgraph: event.subgraph });
+              }
               break;
             case 'error':
               // Error will be thrown and caught by the outer catch
@@ -195,5 +199,20 @@ export function useChatSession() {
     setIsProcessing(false);
   }, []);
 
-  return { messages, sendMessage, newSession, isProcessing, sessionReady };
+  const loadSession = useCallback(async (sessionId: string) => {
+    sessionIdRef.current = sessionId;
+    const dbMessages = await chat.getMessages(sessionId);
+    const restored: ChatMessage[] = dbMessages.map((m: any) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      status: m.status as MessageStatus,
+    }));
+    setMessages(restored);
+    setIsProcessing(false);
+  }, []);
+
+  const currentSessionId = sessionIdRef.current;
+
+  return { messages, sendMessage, newSession, loadSession, currentSessionId, isProcessing, sessionReady };
 }

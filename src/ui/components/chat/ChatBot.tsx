@@ -4,10 +4,11 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useChatSession } from '../../hooks/useChatSession';
 import { useInputHistory } from '../../hooks/useInputHistory';
 import { ChatMessage } from './ChatMessage';
+import { SessionPicker } from './SessionPicker';
 
 export function ChatBot() {
   const { chatOpen, chatDisplayMode, toggleChat, setChatDisplayMode } = useUIStore();
-  const { messages, sendMessage, newSession, isProcessing, sessionReady } = useChatSession();
+  const { messages, sendMessage, newSession, loadSession, currentSessionId, isProcessing, sessionReady } = useChatSession();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayMode = useUIStore((s) => s.displayMode);
@@ -71,8 +72,11 @@ export function ChatBot() {
   const headerProps = {
     onClose: toggleChat,
     onNewSession: newSession,
+    onLoadSession: loadSession,
+    currentSessionId,
     chatDisplayMode,
     onToggleMode: () => setChatDisplayMode(chatDisplayMode === 'float' ? 'sidebar' : 'float'),
+    sessionTitle: messages.length > 0 ? messages[0].content : null,
   };
 
   const inputProps = {
@@ -88,7 +92,7 @@ export function ChatBot() {
     return (
       <div className="flex flex-col h-full bg-zinc-900 border-l border-zinc-700">
         <ChatHeader {...headerProps} />
-        <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} />
+        <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} onSuggestionClick={setInput} />
         <ChatInput {...inputProps} />
       </div>
     );
@@ -102,7 +106,7 @@ export function ChatBot() {
       }`}
     >
       <ChatHeader {...headerProps} />
-      <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} />
+      <ChatMessages messages={messages} messagesEndRef={messagesEndRef} onNodeClick={handleNodeLinkClick} sessionReady={sessionReady} onSuggestionClick={setInput} />
       <ChatInput {...inputProps} />
     </div>
   );
@@ -111,31 +115,53 @@ export function ChatBot() {
 function ChatHeader({
   onClose,
   onNewSession,
+  onLoadSession,
+  currentSessionId,
   chatDisplayMode,
   onToggleMode,
+  sessionTitle,
 }: {
   onClose: () => void;
   onNewSession: () => void;
+  onLoadSession: (sessionId: string) => void;
+  currentSessionId: string | null;
   chatDisplayMode: 'float' | 'sidebar';
   onToggleMode: () => void;
+  sessionTitle: string | null;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const displayTitle = sessionTitle
+    ? (sessionTitle.length > 30 ? sessionTitle.slice(0, 30) + '...' : sessionTitle)
+    : 'New chat';
+
   return (
     <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700 shrink-0">
-      <span className="text-sm font-medium text-zinc-200">Ask</span>
-      <div className="flex items-center gap-1">
+      <div className="relative flex items-center gap-1 min-w-0 flex-1">
+        <button
+          onClick={() => setPickerOpen(!pickerOpen)}
+          className="flex items-center gap-1 min-w-0 text-sm font-medium text-zinc-200 hover:text-white transition-colors"
+          title="Session history"
+        >
+          <span className="truncate">{displayTitle}</span>
+          <ChevronIcon open={pickerOpen} />
+        </button>
+        {pickerOpen && (
+          <SessionPicker
+            currentSessionId={currentSessionId}
+            onSelectSession={onLoadSession}
+            onNewSession={onNewSession}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={onToggleMode}
           title={chatDisplayMode === 'float' ? 'Dock as sidebar' : 'Float'}
           className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
         >
           {chatDisplayMode === 'float' ? <DockIcon /> : <UndockIcon />}
-        </button>
-        <button
-          onClick={onNewSession}
-          title="New session"
-          className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
-        >
-          <NewSessionIcon />
         </button>
         <button
           onClick={onClose}
@@ -149,23 +175,44 @@ function ChatHeader({
   );
 }
 
+const SUGGESTION_CHIPS = [
+  'What do I know about...',
+  'Summarize recent pages',
+  'Find connections between...',
+];
+
 function ChatMessages({
   messages,
   messagesEndRef,
   onNodeClick,
   sessionReady,
+  onSuggestionClick,
 }: {
   messages: ReturnType<typeof useChatSession>['messages'];
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onNodeClick: (nodeId: string) => void;
   sessionReady: boolean;
+  onSuggestionClick?: (text: string) => void;
 }) {
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-0">
-        <p className="text-zinc-500 text-sm">
-          {sessionReady ? 'Ask a question about your graph' : 'Restoring session...'}
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 gap-4 px-4">
+        <p className="text-zinc-500 text-sm text-center">
+          {sessionReady ? 'What would you like to know? Ask anything about your knowledge graph.' : 'Restoring session...'}
         </p>
+        {sessionReady && onSuggestionClick && (
+          <div className="flex flex-wrap gap-2 justify-center">
+            {SUGGESTION_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                onClick={() => onSuggestionClick(chip)}
+                className="px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-full hover:border-indigo-500/50 hover:text-zinc-200 transition-colors"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -234,9 +281,13 @@ const UndockIcon = () => (
   </svg>
 );
 
-const NewSessionIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M12 8v8" /><path d="M8 12h8" />
+const ChevronIcon = ({ open }: { open: boolean }) => (
+  <svg
+    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+    className="flex-shrink-0 transition-transform"
+    style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+  >
+    <path d="m6 9 6 6 6-6" />
   </svg>
 );
 

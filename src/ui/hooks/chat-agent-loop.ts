@@ -1,16 +1,23 @@
 import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
 import { nodes, edges, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
+import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
 
 export type { ChatAgentTurn };
+
+export interface ChatSubgraphData {
+  nodeIds: string[];
+  edgeIds: string[];
+}
 
 export interface ChatAgentProgress {
   type: 'text_chunk' | 'turn' | 'done' | 'error';
   textChunk?: string;
   turn?: ChatAgentTurn;
   finalText?: string;
+  subgraph?: ChatSubgraphData;
   error?: string;
 }
 
@@ -19,12 +26,23 @@ const TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
 
 const CHAT_AGENT_SYSTEM_PROMPT = `You are a helpful assistant integrated into a personal knowledge graph browser extension. You have access to tools that let you search, read, and modify the user's knowledge graph.
 
+## Citation Rules (MANDATORY)
+- When referencing information from the knowledge graph, you MUST cite the source URL using [Source: url] format.
+- When mentioning ANY entity from the graph, ALWAYS use the clickable format: [Entity Name](node:entity-id). The entity-id comes from the id field in tool results.
+- Every factual claim from the knowledge graph should be traceable to a source or entity.
+- If a tool result includes source URLs, cite them in your answer.
+
 ## Tool Usage Strategy
 
-**For questions about the graph:**
-1. Start with search_nodes to find relevant entities
-2. Use get_node_details, get_edges_for_node, or get_neighbors to explore connections
-3. Use search_sources or get_source_content if the user asks about original source material
+**For knowledge questions ("What do I know about X?", "Tell me about X"):**
+1. Start with search_knowledge — it finds entities, expands to connected neighbors, and retrieves source content in one call
+2. If you need more detail on a specific entity, follow up with get_node_details or get_neighbors
+3. If you need the full source text, use get_source_content
+
+**For graph exploration ("How does X connect to Y?", "What's related to X?"):**
+1. Use search_nodes to find starting entities
+2. Use get_neighbors or get_edges_for_node to trace connections
+3. Explain the paths you find
 
 **For requests to modify the graph:**
 1. First search to check if entities already exist (avoid duplicates)
@@ -37,10 +55,11 @@ const CHAT_AGENT_SYSTEM_PROMPT = `You are a helpful assistant integrated into a 
 - If the question doesn't relate to the graph, just respond normally
 
 ## Response Format
-- When mentioning entities from the graph, use [Entity Name](node:entity-id) for clickable links
-- Use markdown formatting
+- Use [Entity Name](node:entity-id) for EVERY entity you mention from the graph
+- Use [Source: url] for EVERY source you reference
+- Use markdown formatting (bold, lists, headers)
 - Be concise but thorough
-- If search returns no results, say so`;
+- If search returns no results, say so clearly`;
 
 export { CHAT_AGENT_SYSTEM_PROMPT };
 
@@ -73,6 +92,8 @@ export async function runChatAgent({
   ];
 
   let finalText = '';
+  const collectedNodeIds = new Set<string>();
+  const collectedEdgeIds = new Set<string>();
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // Send one LLM call with tools
@@ -99,7 +120,11 @@ export async function runChatAgent({
     // If no tool calls, we're done
     if (!toolCalls || toolCalls.length === 0) {
       finalText = textContent || '';
-      onProgress({ type: 'done', finalText });
+      onProgress({
+        type: 'done',
+        finalText,
+        subgraph: { nodeIds: [...collectedNodeIds], edgeIds: [...collectedEdgeIds] },
+      });
       return finalText;
     }
 
@@ -133,6 +158,8 @@ export async function runChatAgent({
       let isError = false;
       try {
         resultStr = await executeTool(tc.name, tc.input);
+        // Collect node/edge IDs from tool results for subgraph tracking
+        collectIdsFromToolResult(tc.name, resultStr, tc.input, collectedNodeIds, collectedEdgeIds);
       } catch (e: any) {
         resultStr = JSON.stringify({ error: e.message });
         isError = true;
@@ -158,7 +185,11 @@ export async function runChatAgent({
 
   // Max iterations reached
   finalText = 'I reached the maximum number of tool calls. Here is what I found so far.';
-  onProgress({ type: 'done', finalText });
+  onProgress({
+    type: 'done',
+    finalText,
+    subgraph: { nodeIds: [...collectedNodeIds], edgeIds: [...collectedEdgeIds] },
+  });
   return finalText;
 }
 
@@ -229,8 +260,19 @@ function sendChatLLMRequest(
 // Tool executor — runs locally in the UI thread against the DB client / graph store
 // ---------------------------------------------------------------------------
 
+// Store last RAG context for ID extraction (avoids parsing formatted text)
+let lastRAGNodeIds: string[] = [];
+let lastRAGEdgeIds: string[] = [];
+
 async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
   switch (name) {
+    case 'search_knowledge': {
+      const context = await retrieveRAGContext(input.query as string);
+      lastRAGNodeIds = context.relevantNodes.map((n) => n.id);
+      lastRAGEdgeIds = context.relevantEdges.map((e) => e.id);
+      return formatRAGPrompt(context);
+    }
+
     case 'search_nodes': {
       const results = await nodes.search(input.query as string, (input.limit as number) ?? 10);
       return JSON.stringify(
@@ -343,5 +385,62 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
 
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+}
+
+function collectIdsFromToolResult(
+  toolName: string,
+  resultStr: string,
+  input: Record<string, unknown>,
+  nodeIds: Set<string>,
+  edgeIds: Set<string>,
+) {
+  try {
+    if (toolName === 'search_knowledge') {
+      for (const id of lastRAGNodeIds) nodeIds.add(id);
+      for (const id of lastRAGEdgeIds) edgeIds.add(id);
+      return;
+    }
+
+    const data = JSON.parse(resultStr);
+    if (data?.error) return;
+
+    switch (toolName) {
+      case 'search_nodes':
+      case 'get_neighbors':
+        if (Array.isArray(data)) {
+          for (const item of data) if (item.id) nodeIds.add(item.id);
+        }
+        break;
+      case 'get_node_details':
+        if (data.id) nodeIds.add(data.id);
+        break;
+      case 'get_edges_for_node':
+        if (Array.isArray(data)) {
+          for (const e of data) {
+            if (e.id) edgeIds.add(e.id);
+            if (e.sourceId) nodeIds.add(e.sourceId);
+            if (e.targetId) nodeIds.add(e.targetId);
+          }
+        }
+        break;
+      case 'search_sources':
+        if (Array.isArray(data)) {
+          for (const s of data) if (s.nodeId) nodeIds.add(s.nodeId);
+        }
+        break;
+      case 'get_source_content':
+        if (input.nodeId) nodeIds.add(input.nodeId as string);
+        break;
+      case 'create_node':
+      case 'update_node':
+        if (data.id) nodeIds.add(data.id);
+        break;
+      case 'create_edge':
+        if (data.id) edgeIds.add(data.id);
+        break;
+    }
+  } catch {
+    // Non-JSON result or parse error — skip ID collection
   }
 }

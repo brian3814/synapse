@@ -462,6 +462,10 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       ensureInit();
       return { result: await chatQueries.getSessionMessages(params as string) };
     }
+    case 'chat.getAllSessions': {
+      ensureInit();
+      return { result: await chatQueries.getAllSessions() };
+    }
     case 'chat.getRecentMessages': {
       ensureInit();
       const p = params as { sessionId: string; limit?: number };
