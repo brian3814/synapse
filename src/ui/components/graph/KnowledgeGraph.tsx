@@ -26,6 +26,7 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const addNodesToSelection = useGraphStore((s) => s.addNodesToSelection);
   const selectEdge = useGraphStore((s) => s.selectEdge);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const forceActivePanel = useUIStore((s) => s.forceActivePanel);
   const types = useNodeTypeStore((s) => s.types);
 
   const adjacency = useGraphStore((s) => s.adjacency);
@@ -37,11 +38,11 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   useEffect(() => {
     setFocusNodeCallback((nodeId: string) => {
       selectNode(nodeId);
-      setActivePanel('nodeDetail');
+      forceActivePanel('nodeDetail');
       graphRef.current?.fitToView([nodeId]);
     });
     return () => setFocusNodeCallback(null);
-  }, [selectNode, setActivePanel, setFocusNodeCallback]);
+  }, [selectNode, forceActivePanel, setFocusNodeCallback]);
 
   // Check total node count to determine windowed mode
   useEffect(() => {
@@ -79,23 +80,24 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
       } else {
         selectNode(nodeId);
       }
-      setActivePanel('nodeDetail');
+      forceActivePanel('nodeDetail');
     },
-    [selectNode, toggleNodeSelection, setActivePanel]
+    [selectNode, toggleNodeSelection, forceActivePanel]
   );
 
   const handleEdgeClick = useCallback(
     (edgeId: string) => {
       selectEdge(edgeId);
-      setActivePanel('edgeDetail');
+      forceActivePanel('edgeDetail');
     },
-    [selectEdge, setActivePanel]
+    [selectEdge, forceActivePanel]
   );
 
   const handleCanvasClick = useCallback((modifiers: Modifiers) => {
     if (!modifiers.ctrl) {
       useGraphStore.getState().clearSelection();
     }
+    // Panel stays open — shows empty state instead of closing
   }, []);
 
   const handleLassoSelect = useCallback(
@@ -105,9 +107,9 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
       } else {
         selectNodes(nodeIds);
       }
-      if (nodeIds.size > 0) setActivePanel('nodeDetail');
+      if (nodeIds.size > 0) forceActivePanel('nodeDetail');
     },
-    [addNodesToSelection, selectNodes, setActivePanel]
+    [addNodesToSelection, selectNodes, forceActivePanel]
   );
 
   // Auto-compute shortest path when exactly 2 nodes selected

@@ -19,6 +19,7 @@ interface UIStore {
 
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
+  forceActivePanel: (panel: ActivePanel) => void;
   setLayoutType: (layout: LayoutType) => void;
   toggleClustering: () => void;
   incrementGraphKey: () => void;
@@ -36,8 +37,8 @@ export const useUIStore = create<UIStore>((set) => ({
   layoutType: 'forceDirected2d',
   clusteringEnabled: true,
   graphKey: 0,
-  chatOpen: false,
-  chatDisplayMode: 'float',
+  chatOpen: true,
+  chatDisplayMode: 'sidebar',
   panelWidth: 400,
   chatSidebarWidth: 400,
   focusNodeCallback: null,
@@ -47,6 +48,7 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({
       activePanel: state.activePanel === panel ? 'none' : panel,
     })),
+  forceActivePanel: (panel) => set({ activePanel: panel }),
   setLayoutType: (layout) => set({ layoutType: layout }),
   toggleClustering: () =>
     set((state) => ({ clusteringEnabled: !state.clusteringEnabled })),

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession';
 import { ChatToolCall } from './ChatToolCall';
+import { ChatReferencedEntities } from './ChatReferencedEntities';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -10,7 +11,7 @@ interface ChatMessageProps {
 export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" style={{ marginBottom: '0.75rem' }}>
         <div className="group relative max-w-[85%] bg-indigo-600/20 border border-indigo-500/30 text-zinc-200 text-sm px-3 py-2 rounded-lg">
           {message.content}
           <CopyButton text={message.content} position="bottom-1 right-1" />
@@ -20,7 +21,7 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
   }
 
   return (
-    <div className="flex justify-start">
+    <div className="flex justify-start" style={{ marginBottom: '0.75rem' }}>
       <div className="max-w-[95%] space-y-2">
         {message.status === 'streaming' && (
           <div className="group relative bg-zinc-800 border border-zinc-700 text-sm px-3 py-2 rounded-lg">
@@ -60,6 +61,9 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
               </div>
             )}
             <MarkdownContent content={message.content} onNodeClick={onNodeClick} />
+            {message.subgraph && message.subgraph.nodeIds.length > 0 && (
+              <ChatReferencedEntities subgraph={message.subgraph} onNodeClick={onNodeClick} />
+            )}
             <CopyButton text={message.content} position="bottom-1 left-1" />
           </div>
         )}
@@ -177,6 +181,8 @@ function processInline(text: string, onNodeClick?: (nodeId: string) => void): Re
     switch (earliest.type) {
       case 'source': {
         const url = earliest.match[1].trim();
+        let domain = 'source';
+        try { domain = new URL(url).hostname.replace('www.', ''); } catch {}
         parts.push(
           <a
             key={key++}
@@ -186,7 +192,7 @@ function processInline(text: string, onNodeClick?: (nodeId: string) => void): Re
             className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
             title={url}
           >
-            [source]
+            [{domain}]
           </a>
         );
         remaining = remaining.slice(idx + earliest.match[0].length);

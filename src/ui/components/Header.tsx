@@ -14,10 +14,10 @@ export function Header() {
   const isSidePanel = displayMode === 'sidePanel';
 
   return (
-    <header className="flex items-center justify-between px-3 py-2 bg-zinc-800 border-b border-zinc-700 shrink-0">
+    <header className="flex items-center justify-between px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
       <div className="flex items-center gap-2">
-        <h1 className="text-sm font-semibold text-zinc-100">Knowledge Graph</h1>
-        <span className="text-xs text-zinc-500">
+        <h1 className="font-semibold text-zinc-100" style={{ fontSize: '16px' }}>Knowledge Graph</h1>
+        <span className="text-zinc-500" style={{ fontSize: '12px' }}>
           {nodeCount}n · {edgeCount}e
         </span>
       </div>
