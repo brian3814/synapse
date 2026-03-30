@@ -21,6 +21,7 @@ export function ReadingListPanel() {
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [filterText, setFilterText] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('newest');
+  const [mergingUrl, setMergingUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setFilterText('');
@@ -32,8 +33,13 @@ export function ReadingListPanel() {
   const pending = itemList.filter(i => i.status === 'pending' || i.status === 'fetching' || i.status === 'extracting');
   const failed = itemList.filter(i => i.status === 'failed');
 
-  const handleMerge = (item: ReadingListItem) => {
-    startMerge(item);
+  const handleMerge = async (item: ReadingListItem) => {
+    setMergingUrl(item.url);
+    try {
+      await startMerge(item);
+    } finally {
+      setMergingUrl(null);
+    }
   };
 
   if (loading) {
@@ -151,6 +157,7 @@ export function ReadingListPanel() {
               selected={selectedUrl === item.url}
               onSelect={() => selectItem(selectedUrl === item.url ? null : item.url)}
               onMerge={handleMerge}
+              isMerging={mergingUrl === item.url}
             />
           ))
         )}
