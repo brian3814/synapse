@@ -3,6 +3,9 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { sourceContent } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
+import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
+
+type EditorTab = 'write' | 'preview';
 
 interface NoteEditorProps {
   nodeId: string | null; // null = new note
@@ -14,6 +17,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<EditorTab>('write');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const graphStore = useGraphStore();
 
@@ -147,13 +151,45 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600 font-medium"
       />
 
-      <textarea
-        ref={textareaRef}
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder="Write your note... Use [[Node Label]] to link to entities in your graph."
-        className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 placeholder-zinc-600 resize-none font-mono min-h-[200px]"
-      />
+      {/* Write / Preview tabs */}
+      <div className="flex border-b border-zinc-700 shrink-0">
+        <button
+          onClick={() => setActiveTab('write')}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
+            activeTab === 'write' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          Write
+          {activeTab === 'write' && <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-indigo-500 rounded-full" />}
+        </button>
+        <button
+          onClick={() => setActiveTab('preview')}
+          className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
+            activeTab === 'preview' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          Preview
+          {activeTab === 'preview' && <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-indigo-500 rounded-full" />}
+        </button>
+      </div>
+
+      {activeTab === 'write' ? (
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Write your note... Use [[Node Label]] to link to entities in your graph."
+          className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 placeholder-zinc-600 resize-none font-mono min-h-[200px]"
+        />
+      ) : (
+        <div className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 overflow-y-auto min-h-[200px]">
+          {content.trim() ? (
+            <NoteMarkdownPreview content={content} />
+          ) : (
+            <p className="text-zinc-600 text-sm italic">Nothing to preview</p>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <WikiLinkHints content={content} />
