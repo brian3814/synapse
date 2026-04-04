@@ -1,6 +1,7 @@
 import { registerContextMenus, handleContextMenuClick } from './context-menu';
 import { handleMessage } from './message-router';
 import { initReadingListSync } from './reading-list-handler';
+import { pruneOldRecords } from './usage-tracker';
 import { getDisplayMode } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
 
@@ -33,6 +34,9 @@ syncPanelBehavior();
 
 // Sync Chrome reading list → background extraction
 initReadingListSync();
+
+// Prune old usage records on startup
+pruneOldRecords().catch(console.warn);
 
 // Update behavior when display mode preference changes
 chrome.storage.onChanged.addListener((changes, areaName) => {

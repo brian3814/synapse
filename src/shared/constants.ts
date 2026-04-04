@@ -33,6 +33,18 @@ export const LLM_MODELS = {
   ],
 } as const;
 
+// Pricing per 1M tokens in USD
+export const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  'claude-sonnet-4-20250514': { inputPer1M: 3.00, outputPer1M: 15.00 },
+  'claude-haiku-4-20250414':  { inputPer1M: 0.80, outputPer1M: 4.00  },
+};
+
+/** Compute cost in cents from token counts and model ID */
+export function computeCostCents(model: string, inputTokens: number, outputTokens: number): number {
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['claude-sonnet-4-20250514'];
+  return ((inputTokens * pricing.inputPer1M + outputTokens * pricing.outputPer1M) / 1_000_000) * 100;
+}
+
 export const OFFSCREEN_KEEPALIVE_INTERVAL_MS = 20_000;
 
 export const DISPLAY_MODE_STORAGE_KEY = 'displayMode';

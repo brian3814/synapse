@@ -5,6 +5,12 @@ type ExtractionStatus = 'idle' | 'extracting' | 'extracted' | 'reviewing' | 'mer
 
 export type ExtractionTab = 'page' | 'text';
 
+export interface LastUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number;
+}
+
 interface LLMStore {
   status: ExtractionStatus;
   activeTab: ExtractionTab;
@@ -14,6 +20,9 @@ interface LLMStore {
   sourceUrl: string | null;
   agentRun: AgentRun | null;
   agentTurns: AgentTurn[];
+  lastUsage: LastUsage | null;
+  showPrivacyModal: boolean;
+  pendingAction: (() => void) | null;
 
   setStatus: (status: ExtractionStatus) => void;
   setActiveTab: (tab: ExtractionTab) => void;
@@ -21,6 +30,8 @@ interface LLMStore {
   setError: (error: string | null) => void;
   setInputText: (text: string) => void;
   setSourceUrl: (url: string | null) => void;
+  setLastUsage: (usage: LastUsage | null) => void;
+  setShowPrivacyModal: (show: boolean, pendingAction?: () => void) => void;
   toggleDiffItem: (index: number) => void;
   acceptAllDiff: () => void;
   rejectAllDiff: () => void;
@@ -48,6 +59,9 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   sourceUrl: null,
   agentRun: null,
   agentTurns: [],
+  lastUsage: null,
+  showPrivacyModal: false,
+  pendingAction: null,
 
   setStatus: (status) => set({ status }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -55,6 +69,8 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
   setInputText: (text) => set({ inputText: text }),
   setSourceUrl: (url) => set({ sourceUrl: url }),
+  setLastUsage: (usage) => set({ lastUsage: usage }),
+  setShowPrivacyModal: (show, pendingAction) => set({ showPrivacyModal: show, pendingAction: pendingAction ?? null }),
   toggleDiffItem: (index) =>
     set((state) => {
       if (!state.diff) return {};
@@ -89,6 +105,9 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
       sourceUrl: null,
       agentRun: null,
       agentTurns: [],
+      lastUsage: null,
+      showPrivacyModal: false,
+      pendingAction: null,
     }),
 
   startAgentRun: (stepDefs) => {

@@ -4,6 +4,7 @@ import { useExtractionReviewStore } from '../../../graph/store/extraction-review
 import { useLLMExtraction } from '../../hooks/useLLMExtraction';
 import { TextInput } from './TextInput';
 import { PromptInput } from './PromptInput';
+import { PrivacyDisclosure } from './PrivacyDisclosure';
 import { AgentTimeline } from './AgentTimeline';
 import { DiffView } from './DiffView';
 import { ExtractionReview } from './ExtractionReview';
@@ -102,12 +103,15 @@ export function LLMPanel() {
   const activeTab = useLLMStore((s) => s.activeTab);
   const setActiveTab = useLLMStore((s) => s.setActiveTab);
   const error = useLLMStore((s) => s.error);
+  const showPrivacyModal = useLLMStore((s) => s.showPrivacyModal);
+  const pendingAction = useLLMStore((s) => s.pendingAction);
   const resetLLM = useLLMStore((s) => s.reset);
   const resetReview = useExtractionReviewStore((s) => s.reset);
   const reset = () => { resetLLM(); resetReview(); };
   const { startExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview } = useLLMExtraction();
 
   const isIdle = status === 'idle' || status === 'error';
+  const isRunning = status === 'extracting' || status === 'agent-running';
 
   return (
     <div className="p-4 space-y-4">
@@ -148,7 +152,24 @@ export function LLMPanel() {
         </div>
       )}
 
-      {isIdle && activeTab === 'page' ? (
+      {isRunning && (
+        <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+          Sending to Anthropic
+        </span>
+      )}
+
+      {showPrivacyModal ? (
+        <PrivacyDisclosure
+          onAccept={() => {
+            useLLMStore.getState().setShowPrivacyModal(false);
+            pendingAction?.();
+          }}
+          onCancel={() => {
+            useLLMStore.getState().setShowPrivacyModal(false);
+          }}
+        />
+      ) : isIdle && activeTab === 'page' ? (
         <PromptInput onSubmit={startAgentExtraction} />
       ) : isIdle && activeTab === 'text' ? (
         <TextInput onSubmit={startExtraction} />

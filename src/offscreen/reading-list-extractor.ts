@@ -39,6 +39,9 @@ export async function extractReadingListItem(payload: {
   pageContent?: string;
   pageTitle?: string;
   error?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  model?: string;
 }> {
   const { url, title, apiKey, model } = payload;
 
@@ -94,6 +97,9 @@ export async function extractReadingListItem(payload: {
     return { url, success: false, error: 'Failed to parse API response as JSON' };
   }
 
+  const usageInputTokens: number = responseBody?.usage?.input_tokens ?? 0;
+  const usageOutputTokens: number = responseBody?.usage?.output_tokens ?? 0;
+
   const textBlock = responseBody?.content?.[0]?.text;
   if (!textBlock) {
     return { url, success: false, error: 'No text content in API response' };
@@ -130,5 +136,8 @@ export async function extractReadingListItem(payload: {
     edges: result.edges,
     pageContent,
     pageTitle: title,
+    inputTokens: usageInputTokens,
+    outputTokens: usageOutputTokens,
+    model,
   };
 }

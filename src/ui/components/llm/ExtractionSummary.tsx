@@ -1,12 +1,17 @@
 import { useLLMStore } from '../../../graph/store/llm-store';
 import type { ExtractionResult } from '../../../shared/types';
 
+function formatCost(cents: number): string {
+  return `$${(cents / 100).toFixed(cents < 1 ? 4 : 3)}`;
+}
+
 interface ExtractionSummaryProps {
   onProceed: () => void;
 }
 
 export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
   const diff = useLLMStore((s) => s.diff);
+  const lastUsage = useLLMStore((s) => s.lastUsage);
 
   if (!diff) return null;
 
@@ -59,6 +64,12 @@ export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
           </div>
         )}
       </div>
+
+      {lastUsage && (
+        <p className="text-[10px] text-zinc-500 text-right">
+          {lastUsage.inputTokens.toLocaleString()} input + {lastUsage.outputTokens.toLocaleString()} output tokens · {formatCost(lastUsage.costCents)}
+        </p>
+      )}
 
       <button
         onClick={onProceed}

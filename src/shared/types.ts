@@ -279,6 +279,9 @@ export interface AgentProgressEvent {
   toolError?: string;
   extractionResult?: ExtractionResult;
   error?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  model?: string;
 }
 
 export interface AgentTurn {

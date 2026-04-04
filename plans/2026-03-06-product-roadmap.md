@@ -1,145 +1,215 @@
-# Knowledge Graph Extension — Product Direction & Roadmap
+# Knowledge Graph Extension — Product Strategy & Roadmap
 
-## Context
+## Positioning
 
-This Chrome extension is a local-first knowledge graph with SQLite persistence, graph visualization, and LLM-powered entity extraction. It's feature-rich (agentic extraction, NL query, CRUD, 2D/3D viz) but needs strategic focus to become a tool people use daily.
+**For**: Curious readers who browse widely across topics but don't have the discipline to maintain a note-taking system.
 
-**Target user**: Curious learners / autodidacts who browse widely and want to remember and connect what they read.
+**Problem**: Obsidian, Roam, and Logseq require active writing and organizing. 90% of users abandon them. The real competitor isn't another tool — it's doing nothing.
 
-**Core positioning**: A personal knowledge graph that lives in your browser — extracts knowledge from what you read, lets you write your own notes, query everything you've learned, and surfaces connections as you browse. A structured thinking tool powered by graph intelligence.
+**Solution**: A Chrome extension that extracts and structures knowledge from pages you choose to read, with one click. No writing, no organizing, no context-switching. Your browser remembers what you learn, so you don't have to.
 
-**Key differentiator vs Obsidian/Heptabase**: Those require intentional note-taking. This tool reads for you and makes your accumulated knowledge queryable and interconnected. The Chrome extension form factor means zero context-switching — knowledge capture happens where you already are.
+**Core differentiators**:
+1. **One-click extraction** — eliminates writing/organizing effort, not the choice of what matters
+2. **Local-first** — SQLite in OPFS, zero server, nothing leaves the browser except the LLM API call the user explicitly triggers
+3. **Human-in-the-loop** — review before merge keeps quality high and user in control
+4. **Visual knowledge graph** — custom Three.js renderer makes connections tangible
+5. **Browser-native** — captures knowledge where you already are, no app switching
 
----
-
-## Value Hierarchy (user-ranked)
-
-1. **Queryable memory** — "What do I know about X?" across everything ever read
-2. **Instant understanding** — Real-time extraction turns articles into structured knowledge
-3. **Surprising connections** — Cross-source relationship discovery
-4. **Effortless capture** — Knowledge graph grows with minimal effort
-
-## Design Decisions
-
-- **Human-in-the-loop merging** — Review before entities merge into graph (keeps signal high)
-- **Graph-first, not RAG-first** — The graph structure IS the product, not just a retrieval index
-- **No vector embeddings needed initially** — FTS + graph traversal provides structured retrieval that's better than flat semantic search for this use case
+**The trust contract**: The user controls what gets extracted, what it costs, and what leaves their machine. Privacy and cost transparency aren't features — they're the foundation.
 
 ---
 
-## Phased Roadmap
+## What's Built (as of 2026-03-30)
 
-### Phase 1: Foundation — Source Content Storage & Entity Resolution
-**Why first**: Everything else depends on clean, linked data with retrievable source material.
-
-**Features:**
-- **Source content table** — Store cleaned page text/markdown alongside extracted entities. Currently raw content is discarded after extraction. Needed for smart query context.
-- **Entity resolution / deduplication** — When "Elon Musk" is extracted from two different articles, merge into one node. Fuzzy label matching + alias table (already exists: `entity_aliases`). LLM-assisted disambiguation for ambiguous cases.
-- **Improved extraction review** — Streamline the diff review UX. Show which entities already exist, which are new, which would merge. Keyboard shortcuts for approve/reject.
-
-**Key files to modify:**
-- `src/db/worker/migrations/` — New migration for source_content table
-- `src/db/worker/sqlite-engine.ts` — New queries for source content CRUD
-- `src/db/client/db-client.ts` — Client methods for source content
-- `src/graph/store/` — Store updates for entity resolution logic
-- `src/ui/` — Extraction review UX improvements
-
----
-
-### Phase 2: Markdown Folder Integration
-**Why second**: More knowledge sources early = more value from query and intelligence later. Also serves as fallback for sites that block AI extraction.
-
-**Features:**
-- **Folder picker** — User selects a local folder via File System Access API (`showDirectoryPicker()`). Persist access with `navigator.storage.getDirectory()` or re-prompt.
-- **Markdown indexing** — Read .md files, extract entities (LLM or lightweight parsing), store with source path as `source_url`.
-- **Change detection** — On extension open, check for new/modified files. Index incrementally.
-- **In-extension markdown editor** — User can write/edit markdown notes directly in the side panel or tab. Each note creates a `Note` type node in the graph that can be connected to resource nodes (extracted pages), other notes, or any entity. Supports linking to existing nodes via `[[node label]]` syntax or similar.
-- **Markdown file sync** — Notes are also persisted as .md files in the local folder, enabling editing in external editors (VS Code, Obsidian) and syncing back.
-
-**Technical notes:**
-- File System Access API works in Chrome extensions (side panel / tab context)
-- Need to handle permission re-grants across browser restarts
-- Consider watching for changes vs checking on open (watching is complex in extensions)
-
-**Key files to modify:**
-- New: `src/filesystem/` — File System Access API wrapper, markdown parser
-- `src/ui/` — Settings panel for folder selection, file browser, markdown editor
-- `src/db/worker/migrations/` — Track indexed files + last-modified timestamps
+| Feature | Status | Key Files |
+|---------|--------|-----------|
+| Three-class node system (Resource/Note/Concept) | Done | types.ts, migrations |
+| Tags (junction table, tag store, UI chips) | Done | tag-queries.ts, tag-store.ts, NodeDetailPanel |
+| Concept source tracking (concept_sources table) | Done | concept-source-queries.ts |
+| Entity resolution (exact/alias/fuzzy) | Done | entity-resolution-queries.ts |
+| Source content storage | Done | source-content-queries.ts, migration 003 |
+| Extraction review with undo/redo | Done | extraction-review-store.ts |
+| Agent page extraction (15-iteration tool loop) | Done | agent-loop.ts, agent-tools.ts |
+| Reading list with batch extract | Done | ReadingListPanel.tsx |
+| Graph visualization (Three.js InstancedMesh) | Done | renderer/ |
+| RAG query pipeline | Done | rag-pipeline.ts, chat |
+| Contextual relevance (browse-time suggestions) | Done | useContextualRelevance.ts |
+| Graph algorithms (clustering, centrality) | Done | graph-algorithms.ts |
+| Markdown folder sync | Done | indexed-file-queries.ts, settings |
+| NL query + DSL query | Done | query-engine/, QueryBuilder |
 
 ---
 
-### Phase 3: Smart Query — Graph-Aware Question Answering
-**Why third**: Daily utility feature. "What did I read about X?" is the most frequent user need. Requires source content (Phase 1) and benefits from more data (Phase 2).
+## Next Up: Cost & Trust (Phase 0)
 
-**Features:**
-- **RAG over knowledge graph** — Query pipeline:
-  1. User asks natural language question
-  2. Extract search terms + intent (lightweight LLM call or keyword extraction)
-  3. FTS query finds relevant nodes
-  4. Graph traversal expands to connected subgraph (1-2 hops)
-  5. Retrieve stored source content for matching nodes
-  6. Feed structured context (entities + relationships + source excerpts) to LLM
-  7. Return synthesized answer with inline `[Source: url]` citations
-- **Answer UI** — Rendered markdown answer with clickable source links. Expandable "context used" section showing which nodes/edges informed the answer.
-- **Keep existing DSL query** — As "advanced mode" for power users
-- **Query history** — Save past queries and answers for quick re-access
+**Why first**: Without cost transparency and privacy controls, users won't trust the tool enough to use it regularly. This is the foundation for everything else.
 
-**Key files to modify:**
-- `src/ui/components/` — New "Ask" query mode UI
-- `src/offscreen/` — RAG pipeline execution (long-running LLM calls)
-- `src/db/worker/sqlite-engine.ts` — Retrieval queries (FTS + graph traversal)
-- `src/shared/messages.ts` — New message types for RAG queries
+### Feature 0.1: Cost Estimation & Display
 
----
+Before extraction starts, show the user what it will cost.
 
-### Phase 4: Contextual Relevance — Browse-Time Suggestions
-**Why fourth**: The "Chrome extension killer feature." Passive, zero-effort, creates the engagement loop. Needs rich graph data to be valuable (Phases 1-3).
+- Token estimation: rough heuristic (chars / 4) with model-specific pricing
+- UI: show "Estimated cost: ~$0.003 (2.1k tokens)" before extraction
+- For agent extraction: show "up to $X" based on max iterations
 
-**Features:**
-- **Page analysis** — Content script extracts key terms from current page (title, headings, key phrases — lightweight, no LLM needed)
-- **Graph matching** — Match extracted terms against node labels/properties via FTS
-- **Side panel widget** — "Related in your graph" section showing matching nodes with relationship context. Clicking navigates to the node in the graph.
-- **Engagement loop** — Browse → see connections → extract more → richer connections next time
-- **Configurable** — Toggle on/off, sensitivity threshold, excluded domains
+### Feature 0.2: Usage Tracking & Budget Cap
 
-**Key files to modify:**
-- `src/content-script/` — Lightweight keyword/entity extraction
-- `src/service-worker/` — Route page analysis results to side panel
-- `src/ui/` — "Related" widget component
-- `src/db/worker/sqlite-engine.ts` — Fast term matching queries
+Track cumulative usage and let users set a monthly budget.
+
+- Service worker logs estimated tokens/cost on every LLM request
+- Stored in `chrome.storage.local` under `usageTracker`
+- Budget enforcement: disable extraction when budget reached
+- Settings UI: monthly budget input, current usage display, reset
+
+### Feature 0.3: Tiered Extraction
+
+Not every page needs a 15-iteration agent loop:
+
+- **Quick Extract** (default): single LLM call, ~2-5s, ~$0.002. Good for articles/blogs.
+- **Deep Extract**: full agent loop with tools, ~15-30s, ~$0.02. For complex/structured pages.
+- UI: toggle in LLMPanel with cost estimates per mode
+- Auto-suggest based on page complexity
+
+### Feature 0.4: Privacy Disclosure
+
+- One-time modal before first extraction: explain what data leaves the browser
+- Per-extraction indicator: "Sending to Anthropic" with lock icon
+- `chrome.storage.local` flag for accepted disclosure
 
 ---
 
-### Phase 5: Graph Intelligence — Patterns, Suggestions, Discovery
-**Why last**: Hardest to build, needs the most data to be meaningful. Builds on all prior phases.
+## Phase 1: Query Experience — Make "What do I know about X?" the Hero
 
-**Features:**
-- **Connection suggestions** — "Node A and B share 3 neighbors but aren't connected — should they be?" Based on structural patterns (common neighbors, shared types, co-occurrence in sources).
-- **Cluster detection** — Automatic topic clustering via graph community detection algorithms. Show "Your knowledge clusters: [AI Safety (23 nodes), Browser APIs (15 nodes), ...]"
-- **Gap analysis** — "These two clusters are disconnected — explore the bridge?" Identify structural holes in the knowledge graph.
-- **Pattern discovery** — "You've been reading a lot about X recently" / "These 5 entities from different sources all connect through Y"
+**Why next**: This is the daily utility feature — the thing no other tool does. NotebookLM answers within a single notebook. Obsidian requires you to have written notes. Your graph is the only place where months of extracted knowledge is queryable as a connected structure. The RAG pipeline is built; now make it feel like a research assistant who has read everything you've read.
 
-**Technical approach:**
-- Graph algorithms (community detection, centrality, common neighbors) can run in the DB worker or UI thread
-- LLM-assisted for natural language explanations of discovered patterns
-- Incremental computation — recompute on graph changes, not on every view
+- Polish chat citations: every answer cites specific sources with clickable links
+- Show the subgraph of entities involved in each answer (mini graph preview)
+- Improve retrieval: graph-hop expansion to pull in connected context, not just FTS hits
+- Query history: save past questions and answers for quick re-access
+- Make the chat the default landing experience (not the graph)
+
+### Feature 1.5: Pin to Graph (Close the Compounding Loop)
+
+Chat answers are currently ephemeral — the user learns something, then it evaporates. "Pin to Graph" saves a chat answer as a Note node, auto-linked to every entity the answer referenced (IDs already collected via `collectIdsFromToolResult`). One click turns Q&A into permanent, queryable knowledge.
+
+- "Pin" button on chat messages → creates Note node with answer content
+- Auto-creates `references` edges to all entity IDs cited in the response
+- Pinned answers become searchable via `search_knowledge` in future queries
+- The user's research compounds: question → answer → pinned note → richer context for next question
+
+### Feature 1.6: Research Sessions (Named, Queryable Q&A Trails)
+
+Upgrade chat sessions from throwaway conversations to named research threads. A session on "quantum computing" becomes a persistent, searchable trail the user can revisit and extend.
+
+- Name/rename sessions (auto-suggest from first query topic)
+- Cross-session search: "What did I research about X?" queries past Q&A, not just extracted knowledge
+- Session summary: auto-generate a brief of what was explored, key findings, open questions
+- Research sessions surfaced in contextual relevance when browsing related pages
+
+---
+
+## Phase 2: Extraction Speed — Remove Friction from Capture
+
+**Why**: For the "too lazy to take notes" user, each wait is an abandonment point. The Reading List → Extract → Review & Merge loop has 4-5 steps with waits. Make it feel instant.
+
+- Pre-resolve entities during extraction so "Review & Merge" opens immediately
+- Quick merge mode: auto-accept high-confidence matches, only surface ambiguous items for review
+- Background batch extraction: extract all pending reading list items without user babysitting
+- Reduce `proceedToReview` redundant entity resolution (currently runs twice)
+- Progress indicators throughout (partially done — spinner on Review & Merge button)
+
+---
+
+## Phase 3: Contextual Relevance — The Engagement Loop
+
+**Why**: This is the feature that makes the extension feel alive and that NotebookLM structurally cannot do — it doesn't live in your browser. No LLM call needed (just FTS matching), cheap to run, and creates the virtuous cycle: browse → see connections → extract more → richer connections next time.
+
+- Polish the existing `useContextualRelevance.ts`
+- Better keyword extraction from current page (headings, key phrases, named entities)
+- Related concepts with relationship context, not just label matches
+- "Extract this page" CTA when matches found
+- Configurable: sensitivity threshold, excluded domains
+
+### Feature 3.5: Contextual Synthesis Prompts
+
+Go beyond showing matching labels — synthesize what the user already knows. When browsing a page that matches their graph, show: *"You've read about X from 3 sources. Your graph connects it to Y through Z."* One click to deep-dive via chat.
+
+- Use graph-hop data (already fetched by relevance hook) to build a mini-narrative
+- Lightweight LLM call (or template-based for zero cost) to phrase the synthesis
+- "Ask about this" CTA pre-fills chat with a contextual question
+- Makes the graph feel alive — the browser knows what you know
+
+---
+
+## Phase 4: Discovery & Growth Feedback
+
+**Why**: After accumulating 50+ nodes, the graph should reward the user with insights they couldn't get otherwise. This drives retention for power users.
+
+### Feature 4.1: Cross-Page Pattern Discovery
+- Analyze concept co-occurrence across resources
+- Surface connections: "You've been exploring X and Y — they connect through Z"
+
+### Feature 4.2: Graph Growth Dashboard
+- Stats: total nodes/edges, nodes this week, most connected concepts
+- Mini sparkline of growth over time
+- "Your graph grew by 12 concepts this week from 4 sources"
+
+### Feature 4.3: LLM-Maintained Concept Summaries (Auto-Compile)
+
+When a Concept node accumulates 3+ source connections, auto-generate a synthesis summary. As new sources are added, the summary updates. This is the "compiled wiki article" — but the user never writes it.
+
+- Trigger: after extraction merges new edges to an existing concept with ≥3 sources
+- LLM reads all source excerpts for the concept → generates a 2-3 paragraph summary
+- Stored in `properties.summary` on the concept node
+- Displayed in Node Detail Panel as readable content (not just a label + edges)
+- `search_knowledge` returns summaries in RAG context → dramatically improves Q&A quality
+- Cost-gated: only runs if user has budget remaining (ties into Phase 0 budget system)
+
+### Feature 4.4: Graph Linting & Health Checks
+
+"Audit my graph" — an LLM-powered quality pass that uses existing graph algorithms (clustering, centrality from `graph-algorithms.ts`) to surface issues and opportunities.
+
+- Chat command or button triggers audit using existing agent tools
+- Detects: orphan nodes, near-duplicate concepts (fuzzy matches entity resolution missed), inconsistent relationships, sparse clusters with potential bridge concepts
+- Suggests: merges, new connections, missing data to extract
+- Prioritized report: "3 likely duplicates, 5 orphan concepts, 2 clusters that may connect through X"
+- User confirms each suggestion → applies as graph mutations via existing `update_node`/`create_edge` tools
+
+---
+
+## Phase 5: Wikilink Notes
+
+**Why later**: Valuable for users who want to add their own thoughts, but the core user is "too lazy to take notes." Ship the query and engagement loop first so users accumulate enough data to make notes worthwhile.
+
+- Note editor with `[[Concept Name]]` syntax
+- Wikilink resolution against existing concepts (fuzzy match)
+- Unresolved links: dashed underline, click to confirm → creates concept + edge
+- Autocomplete dropdown while typing `[[`
+
+---
+
+## Phase 6: Polish & Distribution
+
+### Feature 6.1: Onboarding Flow
+- First-run experience with demo extraction
+- Progressive disclosure (Quick Extract first, Deep after 5 extractions)
+
+### Feature 6.2: Export & Bidirectional Markdown Sync
+- JSON-LD, CSV, or Obsidian-compatible markdown vault
+- "Take your data with you" builds trust
+- **Bidirectional sync**: graph → `.md` folder, not just import. Auto-generate markdown files for concepts with summaries (Feature 4.3), linked sources, and `[[wikilinks]]` to related concepts. Users get the extension for capture + graph, Obsidian for reading + additional visualization (graph view, slides, etc.)
+- Write-back triggers on concept summary generation or manual export
+
+### Feature 6.3: Performance at Scale
+- Viewport-based rendering (partially built)
+- Lazy-load node details, prune suggestions
 
 ---
 
 ## Scope Boundaries
 
-- **Not a collaboration tool** — Personal, local-first, single-user
-- **Lightweight note-taking, not a full editor** — Supports markdown notes as graph nodes (type: `Note`), but not aiming to replace Obsidian's full editing experience. Notes are a way to capture thoughts and connect them to extracted knowledge.
-- **Not auto-capture** — Human-in-the-loop for quality; no background extraction without user action
-- **Not cloud-synced** — Local-first is a feature (privacy), not a limitation to fix later
-
----
-
-## Verification / Success Criteria
-
-Each phase should be usable independently:
-- **Phase 1**: Extract from two articles about the same topic → entities correctly deduplicate → source content retrievable
-- **Phase 2**: Point at a folder of .md files → entities extracted and merged into graph → write a note in the editor → it appears as a connected node + syncs to folder
-- **Phase 3**: Ask "what do I know about [topic]?" → get synthesized answer citing specific sources → answer is accurate and useful
-- **Phase 4**: Browse a related article → side panel shows "Related in your graph" with relevant nodes → clicking navigates to node
-- **Phase 5**: After 50+ nodes from diverse sources → see meaningful cluster suggestions and connection recommendations
+- **Not a collaboration tool** — personal, local-first, single-user
+- **Not a full editor** — notes connect thoughts, not replace a writing app
+- **Not auto-capture** — user explicitly triggers extraction (consent gesture)
+- **Not cloud-synced** — local-first is a feature, not a limitation
+- **Not a research IDE** — no CLI tools, custom output formats (slides, plots), or finetuning pipelines. Power-user researcher workflows belong in Obsidian/notebook environments; the extension feeds them via markdown sync (Feature 6.2)

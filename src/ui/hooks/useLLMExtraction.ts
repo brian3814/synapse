@@ -3,6 +3,7 @@ import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../../graph/store/extraction-review-store';
 import { extractionResultSchema } from '../../shared/schema';
+import { computeCostCents } from '../../shared/constants';
 import { entityResolution, sourceContent, conceptSources } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
@@ -18,10 +19,14 @@ function streamFromOffscreen(
 
     const listener = (message: any) => {
       if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-      const { chunk, done, content, error } = message.payload;
+      const { chunk, done, content, error, inputTokens, outputTokens, model } = message.payload;
       if (chunk) onChunk(chunk);
       if (done) {
         cleanup();
+        if (inputTokens != null && model) {
+          const costCents = computeCostCents(model, inputTokens, outputTokens ?? 0);
+          useLLMStore.getState().setLastUsage({ inputTokens, outputTokens: outputTokens ?? 0, costCents });
+        }
         resolve({ content, error });
       }
     };
@@ -78,6 +83,13 @@ export async function buildDiffItems(
 
 export function useLLMExtraction() {
   const startExtraction = useCallback(async (text: string, sourceUrl?: string) => {
+    // Privacy disclosure gate
+    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    if (!disc.privacyDisclosureAccepted) {
+      useLLMStore.getState().setShowPrivacyModal(true, () => startExtraction(text, sourceUrl));
+      return;
+    }
+
     const llm = useLLMStore.getState();
     llm.setInputText(text);
     llm.setSourceUrl(sourceUrl ?? null);
@@ -273,6 +285,13 @@ export function useLLMExtraction() {
   }, []);
 
   const startAgentExtraction = useCallback(async (prompt: string) => {
+    // Privacy disclosure gate
+    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    if (!disc.privacyDisclosureAccepted) {
+      useLLMStore.getState().setShowPrivacyModal(true, () => startAgentExtraction(prompt));
+      return;
+    }
+
     const llm = useLLMStore.getState();
     llm.setError(null);
     llm.clearAgentTurns();
@@ -346,6 +365,10 @@ export function useLLMExtraction() {
           break;
         case 'extraction_complete': {
           chrome.runtime.onMessage.removeListener(listener);
+          if (event.inputTokens != null && event.model) {
+            const costCents = computeCostCents(event.model, event.inputTokens, event.outputTokens ?? 0);
+            useLLMStore.getState().setLastUsage({ inputTokens: event.inputTokens, outputTokens: event.outputTokens ?? 0, costCents });
+          }
           if (event.extractionResult) {
             try {
               const validated = extractionResultSchema.parse(event.extractionResult);

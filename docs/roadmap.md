@@ -31,56 +31,144 @@
 
 ---
 
+## What's Shipped
+
+| Feature | Key Files |
+|---------|-----------|
+| Three-class node system (Resource/Note/Concept) | types.ts, migrations |
+| Tags (junction table, tag store, UI chips) | tag-queries.ts, tag-store.ts |
+| Concept source tracking (concept_sources table) | concept-source-queries.ts |
+| Entity resolution (exact/alias/fuzzy) | entity-resolution-queries.ts |
+| Source content storage | source-content-queries.ts |
+| Extraction review with undo/redo | extraction-review-store.ts |
+| Agent page extraction (15-iteration tool loop) | agent-loop.ts, agent-tools.ts |
+| Reading list with batch extract | ReadingListPanel.tsx |
+| Graph visualization (Three.js InstancedMesh) | renderer/ |
+| Chat agent with RAG query pipeline | rag-pipeline.ts, chat-agent-loop.ts |
+| Contextual relevance (browse-time suggestions) | useContextualRelevance.ts |
+| Graph algorithms (clustering, centrality) | graph-algorithms.ts |
+| Markdown folder sync (import) | indexed-file-queries.ts |
+| NL query + DSL query engine | query-engine/, QueryBuilder |
+
+---
+
 ## Roadmap
 
-### Phase 1 — Reduce Friction, Surface Existing Value
+### Phase 0 — Cost & Trust (parallel track, gates Phases 2+)
 
-**Goal:** Make the current feature set stickier and lower the barrier to building a useful graph.
+**Goal:** Without cost transparency and privacy controls, users won't trust the tool enough to use it regularly. Gates any feature that spends tokens without explicit user action.
 
-#### 1.1 Auto-accept thresholds for extraction review
-- High-confidence extractions (exact entity matches, unambiguous relationships) merge automatically
-- Surface only ambiguous merges and new entity types for review
-- Three configurable tiers: auto-merge / quick-approve / full-review
+- **Cost estimation**: show "Estimated cost: ~$0.003" before extraction, "up to $X" for agent mode
+- **Usage tracking & budget cap**: service worker logs tokens/cost, monthly budget with enforcement
+- **Tiered extraction**: Quick Extract (single call, ~$0.002) vs Deep Extract (agent loop, ~$0.02), auto-suggest based on page complexity
+- **Privacy disclosure**: one-time modal before first extraction, per-extraction "Sending to [provider]" indicator
 
-#### 1.2 Cross-page entity dossiers
-- Entity profile view aggregating all properties and relationships across every page the entity appeared on
-- Source attribution: which page contributed which properties
-- Timeline of when each piece of information was encountered
+---
 
-#### 1.3 Export
+### Phase 1 — Close the Loop
+
+**Goal:** Make Q&A and research compound into the knowledge graph instead of evaporating. The key insight: ingest → query → **file back** → richer queries next time.
+
+#### 1.1 Pin to Graph
+
+Chat answers are ephemeral — the user learns something, then it disappears. "Pin to Graph" saves a chat answer as a Note node, auto-linked to every entity the answer referenced.
+
+- "Pin" button on chat messages → creates Note node with answer content
+- Auto-creates `references` edges to all entity IDs cited in the response (already collected via `collectIdsFromToolResult`)
+- Pinned answers become searchable via `search_knowledge` in future queries
+- The user's research compounds: question → answer → pinned note → richer context next time
+
+#### 1.2 Research Sessions
+
+Upgrade chat sessions from throwaway conversations to named research threads that persist as searchable, revisitable trails.
+
+- Name/rename sessions (auto-suggest from first query topic)
+- Cross-session search: "What did I research about X?" queries past Q&A, not just extracted knowledge
+- Session summary: auto-generate a brief of what was explored, key findings, open questions
+- Research sessions surfaced in contextual relevance when browsing related pages
+
+---
+
+### Phase 2 — Compound Knowledge (requires Phase 0 budget system)
+
+**Goal:** The LLM maintains and improves the knowledge base over time. The user's graph goes from a collection of extracted entities to a curated, readable knowledge base.
+
+#### 2.1 Auto-Compile Concept Summaries
+
+When a Concept node accumulates 3+ source connections, auto-generate a synthesis summary. As new sources are added, the summary updates. This is the "compiled wiki article" — but the user never writes it.
+
+- Trigger: after extraction merges new edges to a concept with ≥3 sources
+- LLM reads all source excerpts → generates 2-3 paragraph summary
+- Stored in `properties.summary` on the concept node
+- Displayed in Node Detail Panel as readable content (not just a label + edges)
+- `search_knowledge` returns summaries in RAG context → dramatically improves Q&A quality
+- Cost-gated: only runs if user has budget remaining
+
+#### 2.2 Graph Linting & Health Checks
+
+"Audit my graph" — an LLM-powered quality pass that uses existing graph algorithms (clustering, centrality) to surface issues and opportunities.
+
+- Chat command or button triggers audit using existing agent tools
+- Detects: orphan nodes, near-duplicate concepts (fuzzy matches entity resolution missed), inconsistent relationships, sparse clusters with potential bridge concepts
+- Suggests: merges, new connections, missing data to extract
+- Prioritized report: "3 likely duplicates, 5 orphan concepts, 2 clusters that may connect through X"
+- User confirms each suggestion → applies via existing `update_node`/`create_edge` tools
+
+---
+
+### Phase 3 — Engagement
+
+**Goal:** The extension feels alive. It rewards the user for accumulating knowledge and drives the virtuous cycle of browsing → extraction → richer connections.
+
+#### 3.1 Contextual Synthesis Prompts
+
+Go beyond showing matching labels when browsing — synthesize what the user already knows. *"You've read about X from 3 sources. Your graph connects it to Y through Z."*
+
+- Use graph-hop data (already fetched by relevance hook) to build a mini-narrative
+- Lightweight LLM call or template-based (zero cost) phrasing
+- "Ask about this" CTA pre-fills chat with a contextual question
+- Makes the graph feel alive — the browser knows what you know
+
+#### 3.2 Growth Dashboard
+
+After accumulating 50+ nodes, reward the user with visible progress.
+
+- Stats: total nodes/edges, nodes this week, most connected concepts
+- Mini sparkline of growth over time
+- "Your graph grew by 12 concepts this week from 4 sources"
+- Cross-page pattern discovery: concept co-occurrence analysis
+
+---
+
+### Phase 4 — Platform & Interop
+
+**Goal:** Open the knowledge base to external tools and make a fully offline workflow possible.
+
+#### 4.1 Export & Bidirectional Markdown Sync
+
 - Obsidian vault export (markdown + `[[wikilinks]]`)
 - JSON-LD / RDF for semantic web interoperability
 - CSV and Neo4j-compatible formats for power users
+- **Bidirectional sync**: graph → `.md` folder (not just import). Auto-generate markdown files for concepts with summaries, linked sources, and wikilinks. Extension for capture + graph, Obsidian for reading + visualization.
+
+#### 4.2 Local LLM Support
+
+- WebLLM (in-browser) or Ollama (local server) as alternatives to cloud APIs
+- Enables a credible "fully offline" claim
+- Graceful degradation: smaller local models for extraction, cloud for complex queries
 
 ---
 
-### Phase 2 — Passive Growth & Querying
+### Future (opt-in, post-trust)
 
-**Goal:** Transform the extension from an on-demand tool into a continuously growing knowledge base that users can interrogate.
+Features that add value but require strong cost/trust foundations and user opt-in.
 
-#### 2.1 Passive background extraction
-- Auto-extract entities when dwell time exceeds a configurable threshold (e.g., 30s)
-- Queue extracted entities for lightweight batch review
-- Daily digest in the side panel: "You browsed 12 pages today — 47 new entities to review"
-
-#### 2.2 Graph querying
-- Natural language queries over the local graph ("What do I know about Company X?", "How are these two people connected?")
-- Basic queries via graph traversal over SQLite (no LLM needed)
-- Complex queries via local GraphRAG over entity store
-
----
-
-### Phase 3 — Complete the Privacy Story
-
-**Goal:** Make a fully offline, zero-network-request workflow possible for privacy-conscious users.
-
-#### 3.1 Local LLM support
-- WebLLM (in-browser) or Ollama (local server) as alternatives to cloud LLM APIs
-- Even partial support enables a credible "fully offline" claim
-- Graceful degradation: smaller local models for extraction, cloud models for complex queries
+- **Passive background extraction** — auto-extract when dwell time exceeds threshold, queue for batch review, daily digest. Opt-in only; conflicts with "not auto-capture" principle unless user explicitly enables.
+- **Auto-accept thresholds** — high-confidence extractions merge automatically, surface only ambiguous items. Human-in-the-loop is a core differentiator; only offer as an opt-in for power users with large graphs.
+- **Cross-page entity dossiers** — aggregated profile view per entity across all sources, with attribution and timeline.
 
 ---
 
 ## Strategic Thesis
 
-The entity resolution engine is the moat. Every roadmap item — passive extraction, querying, dossiers — widens that moat. Competitors that appear similar on the surface (Recall, InfraNodus) cannot do cross-page entity merging because they lack the architecture for it. The priority is to make that advantage visible and valuable to users as quickly as possible.
+The entity resolution engine and human-in-the-loop review are the moat. Competitors (Recall, InfraNodus) cannot do cross-page entity merging because they lack the architecture. But extraction alone isn't enough — the knowledge must **compound**. Pin to Graph closes the loop between querying and accumulating. Auto-compile summaries turn raw entities into readable knowledge. The priority is to make the graph feel like it gets smarter the more you use it.

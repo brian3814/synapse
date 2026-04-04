@@ -64,11 +64,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (done) return; // handled below in .then()
       buffer.add(chunk);
     })
-      .then(({ content }) => {
+      .then(({ content, inputTokens, outputTokens }) => {
         buffer.drain();
         chrome.runtime.sendMessage({
           type: 'LLM_STREAM_CHUNK',
-          payload: { requestId, chunk: '', done: true, content },
+          payload: { requestId, chunk: '', done: true, content, inputTokens, outputTokens, model: message.payload.model },
         }).catch(() => {});
       })
       .catch((e) => {
@@ -144,11 +144,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     streamAnthropicWithTools(apiKey, model, systemPrompt, messages, tools, (text) => {
       buffer.add(text);
     })
-      .then(({ textContent, toolCalls, stopReason }) => {
+      .then(({ textContent, toolCalls, stopReason, inputTokens, outputTokens }) => {
         buffer.drain();
         chrome.runtime.sendMessage({
           type: 'CHAT_LLM_STREAM',
-          payload: { requestId, done: true, textContent, toolCalls, stopReason },
+          payload: { requestId, done: true, textContent, toolCalls, stopReason, inputTokens, outputTokens, model },
         }).catch(() => {});
       })
       .catch((e) => {

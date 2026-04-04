@@ -26,7 +26,7 @@ Rules:
 export async function executeLLMRequestStreaming(
   payload: LLMRequestWithKeyMessage['payload'],
   onChunk: (text: string, done: boolean) => void
-): Promise<{ content: string }> {
+): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   return await streamAnthropic(payload.apiKey, payload.model, payload.prompt, onChunk, payload.systemPrompt, payload.messages);
 }
 
@@ -37,7 +37,7 @@ async function streamAnthropic(
   onChunk: (text: string, done: boolean) => void,
   customSystemPrompt?: string,
   priorMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
-): Promise<{ content: string }> {
+): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   const systemPrompt = customSystemPrompt ?? EXTRACTION_SYSTEM_PROMPT;
   const userContent = customSystemPrompt
     ? userPrompt
@@ -77,6 +77,8 @@ async function streamAnthropic(
   const decoder = new TextDecoder();
   let accumulated = '';
   let buffer = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -93,9 +95,13 @@ async function streamAnthropic(
 
       try {
         const parsed = JSON.parse(data);
-        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+        if (parsed.type === 'message_start' && parsed.message?.usage) {
+          inputTokens = parsed.message.usage.input_tokens ?? 0;
+        } else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
           accumulated += parsed.delta.text;
           onChunk(parsed.delta.text, false);
+        } else if (parsed.type === 'message_delta' && parsed.usage) {
+          outputTokens = parsed.usage.output_tokens ?? 0;
         }
       } catch {
         // skip malformed JSON lines
@@ -104,7 +110,7 @@ async function streamAnthropic(
   }
 
   onChunk('', true);
-  return { content: accumulated };
+  return { content: accumulated, inputTokens, outputTokens };
 }
 
 export interface AnthropicMessage {
@@ -121,6 +127,8 @@ export interface AnthropicToolsResult {
   textContent: string;
   toolCalls: ToolCall[];
   stopReason: string;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export async function streamAnthropicWithTools(
@@ -161,6 +169,8 @@ export async function streamAnthropicWithTools(
   let textContent = '';
   const toolCalls: ToolCall[] = [];
   let stopReason = 'end_turn';
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   // Track tool_use blocks being built
   let currentToolId = '';
@@ -184,6 +194,12 @@ export async function streamAnthropicWithTools(
         const parsed = JSON.parse(data);
 
         switch (parsed.type) {
+          case 'message_start': {
+            if (parsed.message?.usage) {
+              inputTokens = parsed.message.usage.input_tokens ?? 0;
+            }
+            break;
+          }
           case 'content_block_start': {
             if (parsed.content_block?.type === 'tool_use') {
               currentToolId = parsed.content_block.id;
@@ -218,6 +234,9 @@ export async function streamAnthropicWithTools(
             if (parsed.delta?.stop_reason) {
               stopReason = parsed.delta.stop_reason;
             }
+            if (parsed.usage?.output_tokens) {
+              outputTokens = parsed.usage.output_tokens;
+            }
             break;
           }
         }
@@ -227,5 +246,5 @@ export async function streamAnthropicWithTools(
     }
   }
 
-  return { textContent, toolCalls, stopReason };
+  return { textContent, toolCalls, stopReason, inputTokens, outputTokens };
 }

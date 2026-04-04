@@ -52,6 +52,9 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
     { role: 'user', content: userPrompt },
   ];
 
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
   for (let i = 0; i < maxIter; i++) {
     onProgress({ type: 'llm_start' });
 
@@ -70,11 +73,14 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
       return;
     }
 
+    totalInputTokens += result.inputTokens;
+    totalOutputTokens += result.outputTokens;
+
     onProgress({ type: 'llm_end', text: result.textContent });
 
     // No tool calls — LLM finished without calling save_entities
     if (result.toolCalls.length === 0) {
-      onProgress({ type: 'done' });
+      onProgress({ type: 'done', inputTokens: totalInputTokens, outputTokens: totalOutputTokens, model });
       return;
     }
 
@@ -102,8 +108,8 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
       // Check for terminal tool
       if (tc.name === 'save_entities') {
         const extractionResult = tc.input as unknown as ExtractionResult;
-        onProgress({ type: 'extraction_complete', extractionResult });
-        onProgress({ type: 'done' });
+        onProgress({ type: 'extraction_complete', extractionResult, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, model });
+        onProgress({ type: 'done', inputTokens: totalInputTokens, outputTokens: totalOutputTokens, model });
         return;
       }
 

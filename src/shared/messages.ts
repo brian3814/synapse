@@ -91,6 +91,9 @@ export interface LLMStreamChunkMessage extends ExtensionMessage {
     done: boolean;
     content?: string;
     error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
   };
 }
 
@@ -225,6 +228,9 @@ export interface ReadingListExtractionResultMessage extends ExtensionMessage {
     pageContent?: string;
     pageTitle?: string;
     error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
   };
 }
 
@@ -275,6 +281,9 @@ export interface ChatLLMStreamMessage extends ExtensionMessage {
     toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     stopReason?: string;
     error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
   };
 }
 
