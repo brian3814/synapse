@@ -4,6 +4,7 @@ import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../../graph/store/extraction-review-store';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
+import { QUICK_EXTRACT_SYSTEM_PROMPT } from '../../shared/quick-extract-prompt';
 import { entityResolution, sourceContent, conceptSources } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
@@ -164,6 +165,91 @@ export function useLLMExtraction() {
       const items = await buildDiffItems(validated);
 
       // Complete parse step
+      useLLMStore.getState().completeCurrentStep();
+      useLLMStore.getState().setDiff({ items });
+      useLLMStore.getState().setStatus('extracted');
+    } catch (e: any) {
+      const llmState = useLLMStore.getState();
+      llmState.failCurrentStep(e.message);
+      llmState.setError(e.message);
+    }
+  }, []);
+
+  const startQuickExtraction = useCallback(async (prompt: string) => {
+    // Privacy disclosure gate
+    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    if (!disc.privacyDisclosureAccepted) {
+      useLLMStore.getState().setShowPrivacyModal(true, () => startQuickExtraction(prompt));
+      return;
+    }
+
+    const llm = useLLMStore.getState();
+    llm.setError(null);
+
+    // Get LLM config
+    const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+    const config = result.llmConfig;
+    if (!config?.apiKey) {
+      llm.setError('No API key configured. Go to Settings to add one.');
+      return;
+    }
+
+    // Fetch page content via content script
+    let pageContent: { title: string; url: string; content: string };
+    try {
+      pageContent = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT_QUICK' }) as any;
+      if (!pageContent?.content) throw new Error('No page content received');
+    } catch (e: any) {
+      llm.setError(`Failed to get page content: ${e.message}`);
+      return;
+    }
+
+    llm.setInputText(pageContent.content);
+    llm.setSourceUrl(pageContent.url);
+
+    const requestId = llm.startAgentRun([
+      { id: 'extract', label: 'Quick extracting entities via LLM' },
+      { id: 'parse', label: 'Parsing response' },
+    ]);
+
+    llm.setStatus('extracting');
+
+    try {
+      const userContent = prompt
+        ? `${prompt}\n\n---\n\nPage content:\n\n${pageContent.content}`
+        : `Extract entities and relationships from the following web page:\n\n${pageContent.content}`;
+
+      chrome.runtime.sendMessage({
+        type: 'LLM_REQUEST',
+        requestId,
+        payload: {
+          provider: config.provider,
+          model: config.model,
+          prompt: userContent,
+          systemPrompt: QUICK_EXTRACT_SYSTEM_PROMPT,
+        },
+      });
+
+      const streamResult = await streamFromOffscreen(requestId, (chunk) => {
+        useLLMStore.getState().appendToCurrentStep(chunk);
+      });
+
+      if (streamResult.error) throw new Error(streamResult.error);
+
+      useLLMStore.getState().completeCurrentStep();
+      useLLMStore.getState().advanceStep();
+
+      const content = streamResult.content
+        ?? useLLMStore.getState().agentRun?.steps[0]?.output
+        ?? '';
+
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON found in LLM response');
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const validated = extractionResultSchema.parse(parsed);
+      const items = await buildDiffItems(validated);
+
       useLLMStore.getState().completeCurrentStep();
       useLLMStore.getState().setDiff({ items });
       useLLMStore.getState().setStatus('extracted');
@@ -633,5 +719,5 @@ export function useLLMExtraction() {
     }
   }, []);
 
-  return { startExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview };
+  return { startExtraction, startQuickExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview };
 }

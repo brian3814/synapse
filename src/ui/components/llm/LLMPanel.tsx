@@ -131,8 +131,9 @@ export function LLMPanel() {
   const rateLimitWait = useLLMStore((s) => s.rateLimitWait);
   const resetLLM = useLLMStore((s) => s.reset);
   const resetReview = useExtractionReviewStore((s) => s.reset);
+  const extractionMode = useLLMStore((s) => s.extractionMode);
   const reset = () => { resetLLM(); resetReview(); };
-  const { startExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview } = useLLMExtraction();
+  const { startExtraction, startQuickExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview } = useLLMExtraction();
 
   const isIdle = status === 'idle' || status === 'error';
   const isRunning = status === 'extracting' || status === 'agent-running';
@@ -198,7 +199,7 @@ export function LLMPanel() {
           }}
         />
       ) : isIdle && activeTab === 'page' ? (
-        <PromptInput onSubmit={startAgentExtraction} />
+        <PromptInput onSubmit={extractionMode === 'deep' ? startAgentExtraction : startQuickExtraction} />
       ) : isIdle && activeTab === 'text' ? (
         <TextInput onSubmit={startExtraction} />
       ) : status === 'agent-running' ? (

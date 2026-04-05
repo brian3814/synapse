@@ -4,6 +4,7 @@ import type { ExtractionDiff, AgentRun, AgentStep, AgentTurn } from '../../share
 type ExtractionStatus = 'idle' | 'extracting' | 'extracted' | 'reviewing' | 'merging' | 'error' | 'agent-running';
 
 export type ExtractionTab = 'page' | 'text';
+export type ExtractionMode = 'quick' | 'deep';
 
 export interface LastUsage {
   inputTokens: number;
@@ -21,6 +22,7 @@ export interface RateLimitWait {
 interface LLMStore {
   status: ExtractionStatus;
   activeTab: ExtractionTab;
+  extractionMode: ExtractionMode;
   diff: ExtractionDiff | null;
   error: string | null;
   inputText: string;
@@ -34,6 +36,7 @@ interface LLMStore {
 
   setStatus: (status: ExtractionStatus) => void;
   setActiveTab: (tab: ExtractionTab) => void;
+  setExtractionMode: (mode: ExtractionMode) => void;
   setDiff: (diff: ExtractionDiff | null) => void;
   setError: (error: string | null) => void;
   setInputText: (text: string) => void;
@@ -62,6 +65,7 @@ interface LLMStore {
 export const useLLMStore = create<LLMStore>((set, get) => ({
   status: 'idle',
   activeTab: 'page' as ExtractionTab,
+  extractionMode: 'quick' as ExtractionMode,
   diff: null,
   error: null,
   inputText: '',
@@ -75,6 +79,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
 
   setStatus: (status) => set({ status }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setExtractionMode: (mode) => set({ extractionMode: mode }),
   setDiff: (diff) => set({ diff }),
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
   setInputText: (text) => set({ inputText: text }),
@@ -110,6 +115,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   reset: () =>
     set({
       status: 'idle',
+      extractionMode: 'quick' as ExtractionMode,
       diff: null,
       error: null,
       inputText: '',

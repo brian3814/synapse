@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLLMStore } from '../../../graph/store/llm-store';
 import { estimateExtractionCost } from '../../../shared/cost-estimator';
+import type { PageComplexity } from '../../../shared/types';
 
 interface PromptInputProps {
   onSubmit: (prompt: string) => void;
@@ -11,20 +13,33 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
   const [configError, setConfigError] = useState<string | null>(null);
   const [model, setModel] = useState<string>('');
   const [budgetExceeded, setBudgetExceeded] = useState(false);
+  const [complexity, setComplexity] = useState<PageComplexity | null>(null);
+
+  const extractionMode = useLLMStore((s) => s.extractionMode);
+  const setExtractionMode = useLLMStore((s) => s.setExtractionMode);
+
+  const suggestedMode = useMemo(() => {
+    if (!complexity) return null;
+    if (complexity.tableCount > 2 || complexity.wordCount > 5000 || complexity.jsonLdCount > 0) {
+      return 'deep' as const;
+    }
+    return 'quick' as const;
+  }, [complexity]);
 
   const costEstimate = useMemo(() => {
     if (!model) return null;
-    // Default 10k chars for page content (actual size unknown before extraction)
+    if (extractionMode === 'quick') {
+      const inputChars = complexity ? complexity.wordCount * 5 : 10_000;
+      return estimateExtractionCost({ mode: 'simple', inputChars, model });
+    }
     return estimateExtractionCost({ mode: 'agent', inputChars: 10_000, model });
-  }, [model]);
+  }, [model, extractionMode, complexity]);
 
   useEffect(() => {
-    // Get current tab URL
     chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
       setTabUrl(tabs[0]?.url ?? null);
     });
 
-    // Check for Anthropic config
     chrome.storage.local.get('llmConfig').then((result: Record<string, any>) => {
       const config = result.llmConfig;
       if (!config?.apiKey) {
@@ -35,7 +50,6 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
       if (config?.model) setModel(config.model);
     });
 
-    // Check budget
     chrome.storage.local.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
       const budget = result.usageBudget;
       if (!budget?.monthlyLimitCents || budget.monthlyLimitCents <= 0) return;
@@ -46,6 +60,11 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
         .filter((r: any) => r.timestamp >= monthStart)
         .reduce((sum: number, r: any) => sum + (r.costCents ?? 0), 0);
       if (totalCents >= budget.monthlyLimitCents) setBudgetExceeded(true);
+    }).catch(() => {});
+
+    // Analyze page complexity for auto-suggestion
+    chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }).then((response: any) => {
+      if (response?.complexity) setComplexity(response.complexity);
     }).catch(() => {});
   }, []);
 
@@ -65,6 +84,38 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
           </svg>
           <span className="truncate">{tabUrl}</span>
         </div>
+      )}
+
+      {/* Quick / Deep mode toggle */}
+      <div className="flex gap-1 bg-zinc-800 rounded p-0.5">
+        <button
+          type="button"
+          onClick={() => setExtractionMode('quick')}
+          className={`flex-1 text-xs py-1.5 rounded transition-colors ${
+            extractionMode === 'quick'
+              ? 'bg-zinc-600 text-zinc-100'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          Quick
+        </button>
+        <button
+          type="button"
+          onClick={() => setExtractionMode('deep')}
+          className={`flex-1 text-xs py-1.5 rounded transition-colors ${
+            extractionMode === 'deep'
+              ? 'bg-zinc-600 text-zinc-100'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          Deep
+        </button>
+      </div>
+
+      {suggestedMode && suggestedMode !== extractionMode && (
+        <p className="text-[10px] text-amber-400">
+          Suggested: {suggestedMode === 'deep' ? 'Deep Extract (complex page)' : 'Quick Extract (simple page)'}
+        </p>
       )}
 
       <div>
@@ -90,7 +141,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
         disabled={!prompt.trim() || !!configError || budgetExceeded}
         className="w-full bg-indigo-600 text-white text-sm py-2 rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Extract from Page
+        {extractionMode === 'deep' ? 'Deep Extract' : 'Quick Extract'}
       </button>
 
       {costEstimate && !configError && (
