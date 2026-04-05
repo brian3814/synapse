@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import type { ExtractionResult } from '../../../shared/types';
 
@@ -12,6 +13,13 @@ interface ExtractionSummaryProps {
 export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
   const diff = useLLMStore((s) => s.diff);
   const lastUsage = useLLMStore((s) => s.lastUsage);
+  const [showsCost, setShowsCost] = useState(true);
+
+  useEffect(() => {
+    chrome.storage.local.get('usageBackendType').then((result: Record<string, any>) => {
+      setShowsCost(result.usageBackendType !== 'managed');
+    }).catch(() => {});
+  }, []);
 
   if (!diff) return null;
 
@@ -67,7 +75,8 @@ export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
 
       {lastUsage && (
         <p className="text-[10px] text-zinc-500 text-right">
-          {lastUsage.inputTokens.toLocaleString()} input + {lastUsage.outputTokens.toLocaleString()} output tokens · {formatCost(lastUsage.costCents)}
+          {lastUsage.inputTokens.toLocaleString()} input + {lastUsage.outputTokens.toLocaleString()} output tokens
+          {showsCost && ` · ${formatCost(lastUsage.costCents)}`}
         </p>
       )}
 

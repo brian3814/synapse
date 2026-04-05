@@ -152,13 +152,15 @@ function UsageSection() {
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [budgetDollars, setBudgetDollars] = useState('5.00');
   const [savedBudget, setSavedBudget] = useState(false);
+  const [backendShowsCost, setBackendShowsCost] = useState(true);
 
   useEffect(() => {
-    chrome.storage.local.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
+    chrome.storage.local.get(['usageRecords', 'usageBudget', 'usageBackendType']).then((result: Record<string, any>) => {
       if (result.usageRecords) setRecords(result.usageRecords);
       if (result.usageBudget?.monthlyLimitCents != null) {
         setBudgetDollars((result.usageBudget.monthlyLimitCents / 100).toFixed(2));
       }
+      if (result.usageBackendType === 'managed') setBackendShowsCost(false);
     }).catch(() => {});
   }, []);
 
@@ -191,21 +193,25 @@ function UsageSection() {
 
   return (
     <div className="border-t border-zinc-700 pt-4 mt-4">
-      <h4 className="text-xs font-medium text-zinc-400 mb-2">Usage This Month</h4>
+      <h4 className="text-xs font-medium text-zinc-400 mb-2">
+        {backendShowsCost ? 'Usage This Month' : 'Token Usage This Month'}
+      </h4>
 
       <div className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <span className={`text-sm font-medium ${overBudget ? 'text-red-400' : 'text-zinc-200'}`}>
-            ${(totalCents / 100).toFixed(3)}
-          </span>
-          {budgetCents > 0 && (
-            <span className="text-xs text-zinc-500">
-              / ${(budgetCents / 100).toFixed(2)} budget
+        {backendShowsCost && (
+          <div className="flex items-baseline justify-between">
+            <span className={`text-sm font-medium ${overBudget ? 'text-red-400' : 'text-zinc-200'}`}>
+              ${(totalCents / 100).toFixed(3)}
             </span>
-          )}
-        </div>
+            {budgetCents > 0 && (
+              <span className="text-xs text-zinc-500">
+                / ${(budgetCents / 100).toFixed(2)} budget
+              </span>
+            )}
+          </div>
+        )}
 
-        {budgetCents > 0 && (
+        {backendShowsCost && budgetCents > 0 && (
           <div className="w-full bg-zinc-700 rounded-full h-1.5">
             <div
               className={`h-1.5 rounded-full transition-all ${overBudget ? 'bg-red-500' : 'bg-indigo-500'}`}
@@ -219,32 +225,36 @@ function UsageSection() {
             {[...breakdown.entries()].map(([path, { calls, cents }]) => (
               <div key={path} className="flex justify-between text-[10px] text-zinc-500">
                 <span>{PATH_LABELS[path] ?? path}: {calls} {calls === 1 ? 'call' : 'calls'}</span>
-                <span>${(cents / 100).toFixed(3)}</span>
+                {backendShowsCost && <span>${(cents / 100).toFixed(3)}</span>}
               </div>
             ))}
           </div>
         )}
 
-        <div className="flex gap-1 items-end mt-2">
-          <div className="flex-1">
-            <label className="text-[10px] text-zinc-500 block mb-0.5">Monthly budget ($)</label>
-            <input
-              type="number"
-              step="0.50"
-              min="0"
-              value={budgetDollars}
-              onChange={(e) => setBudgetDollars(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-            />
-          </div>
-          <button
-            onClick={handleSaveBudget}
-            className="px-3 py-1 bg-zinc-700 text-zinc-200 text-xs rounded hover:bg-zinc-600"
-          >
-            {savedBudget ? 'Saved!' : 'Set'}
-          </button>
-        </div>
-        <p className="text-[10px] text-zinc-600">Set to 0 for unlimited. Extractions are blocked when budget is reached.</p>
+        {backendShowsCost && (
+          <>
+            <div className="flex gap-1 items-end mt-2">
+              <div className="flex-1">
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Monthly budget ($)</label>
+                <input
+                  type="number"
+                  step="0.50"
+                  min="0"
+                  value={budgetDollars}
+                  onChange={(e) => setBudgetDollars(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                />
+              </div>
+              <button
+                onClick={handleSaveBudget}
+                className="px-3 py-1 bg-zinc-700 text-zinc-200 text-xs rounded hover:bg-zinc-600"
+              >
+                {savedBudget ? 'Saved!' : 'Set'}
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-600">Set to 0 for unlimited. Extractions are blocked when budget is reached.</p>
+          </>
+        )}
       </div>
     </div>
   );
