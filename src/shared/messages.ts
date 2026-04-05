@@ -291,6 +291,15 @@ export interface ChatLLMStreamMessage extends ExtensionMessage {
   };
 }
 
+// Page analysis messages (UI → SW → content script)
+export interface AnalyzePageMessage extends ExtensionMessage {
+  type: 'ANALYZE_PAGE';
+}
+
+export interface GetPageContentQuickMessage extends ExtensionMessage {
+  type: 'GET_PAGE_CONTENT_QUICK';
+}
+
 // Rate-limit retry messages
 export interface RateLimitWaitMessage extends ExtensionMessage {
   type: 'RATE_LIMIT_WAIT';
@@ -350,6 +359,8 @@ export type RuntimeMessage =
   | ReadingListExtractionResultMessage
   | ReadingListRemoveMessage
   | ReadingListRetryMessage
+  | AnalyzePageMessage
+  | GetPageContentQuickMessage
   | RateLimitWaitMessage
   | OAuthStartMessage
   | OAuthRevokeMessage

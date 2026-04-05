@@ -97,6 +97,25 @@ export function extractPageTerms(): { url: string; title: string; terms: string[
   return { url, title, terms: Array.from(terms).slice(0, 50) };
 }
 
+export interface PageComplexity {
+  wordCount: number;
+  headingCount: number;
+  tableCount: number;
+  listCount: number;
+  jsonLdCount: number;
+}
+
+export function analyzePageComplexity(): PageComplexity {
+  const text = document.body.innerText ?? '';
+  return {
+    wordCount: text.split(/\s+/).filter(Boolean).length,
+    headingCount: document.querySelectorAll('h1, h2, h3, h4').length,
+    tableCount: document.querySelectorAll('table').length,
+    listCount: document.querySelectorAll('ul, ol').length,
+    jsonLdCount: document.querySelectorAll('script[type="application/ld+json"]').length,
+  };
+}
+
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
   'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'has', 'have',

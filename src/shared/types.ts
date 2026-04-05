@@ -1,3 +1,12 @@
+// Page complexity metrics (from content script)
+export interface PageComplexity {
+  wordCount: number;
+  headingCount: number;
+  tableCount: number;
+  listCount: number;
+  jsonLdCount: number;
+}
+
 // Database row types
 export interface DbNode {
   id: string;

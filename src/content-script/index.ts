@@ -1,4 +1,4 @@
-import { extractPageContent, getSelectedText, extractPageTerms } from './page-extractor';
+import { extractPageContent, getSelectedText, extractPageTerms, analyzePageComplexity } from './page-extractor';
 import { executeTool } from './tool-executor';
 
 // Listen for messages from the service worker
@@ -53,6 +53,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now(),
       });
       sendResponse({ success: true });
+      break;
+    }
+
+    case 'ANALYZE_PAGE': {
+      const complexity = analyzePageComplexity();
+      sendResponse({ complexity });
+      break;
+    }
+
+    case 'GET_PAGE_CONTENT_QUICK': {
+      const result = executeTool('get_page_content', { format: 'markdown' });
+      sendResponse(JSON.parse(result)); // { title, url, content }
       break;
     }
 

@@ -175,6 +175,22 @@ async function handleMessageAsync(
       }
     }
 
+    case 'ANALYZE_PAGE': {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) throw new Error('No active tab');
+      await ensureContentScript(tabId);
+      return await chrome.tabs.sendMessage(tabId, { type: 'ANALYZE_PAGE' });
+    }
+
+    case 'GET_PAGE_CONTENT_QUICK': {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) throw new Error('No active tab');
+      await ensureContentScript(tabId);
+      return await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTENT_QUICK' });
+    }
+
     case 'KEEPALIVE': {
       return { alive: true };
     }
