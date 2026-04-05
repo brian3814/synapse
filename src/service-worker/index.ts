@@ -1,7 +1,7 @@
 import { registerContextMenus, handleContextMenuClick } from './context-menu';
 import { handleMessage } from './message-router';
 import { initReadingListSync } from './reading-list-handler';
-import { pruneOldRecords } from './usage-tracker';
+import { getApiKeyBackend } from './api-key-backend';
 import { getDisplayMode } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
 
@@ -35,8 +35,10 @@ syncPanelBehavior();
 // Sync Chrome reading list → background extraction
 initReadingListSync();
 
-// Prune old usage records on startup
-pruneOldRecords().catch(console.warn);
+// Prune old usage records and publish backend type on startup
+const usageBackend = getApiKeyBackend();
+usageBackend.pruneOldRecords().catch(console.warn);
+chrome.storage.local.set({ usageBackendType: usageBackend.type }).catch(console.warn);
 
 // Update behavior when display mode preference changes
 chrome.storage.onChanged.addListener((changes, areaName) => {

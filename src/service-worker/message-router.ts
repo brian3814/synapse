@@ -1,10 +1,16 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
 import { getAccessToken, startOAuthFlow, revokeTokens, isAuthenticated } from './oauth';
 import { handleExtractionResult, removeFromReadingList, triggerExtraction } from './reading-list-handler';
-import { recordUsage, isBudgetExceeded } from './usage-tracker';
+import { getApiKeyBackend } from './api-key-backend';
+import type { UsageBackend } from './usage-backend';
 import { openSidePanel } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
 import type { RuntimeMessage } from '../shared/messages';
+
+function getUsageBackend(): UsageBackend {
+  // Future: return different backend based on auth method (managed/subscription vs API key)
+  return getApiKeyBackend();
+}
 
 export function handleMessage(
   message: RuntimeMessage,
@@ -15,21 +21,21 @@ export function handleMessage(
   if (message.type === 'LLM_STREAM_CHUNK') {
     const p = (message as any).payload;
     if (p?.done && p?.inputTokens != null && p?.model) {
-      recordUsage('simple', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
+      getUsageBackend().recordUsage('simple', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
     }
     return false;
   }
   if (message.type === 'AGENT_PROGRESS') {
     const p = (message as any).payload;
     if (p?.event?.type === 'done' && p?.event?.inputTokens != null && p?.event?.model) {
-      recordUsage('agent', p.event.model, p.event.inputTokens, p.event.outputTokens ?? 0).catch(console.warn);
+      getUsageBackend().recordUsage('agent', p.event.model, p.event.inputTokens, p.event.outputTokens ?? 0).catch(console.warn);
     }
     return false;
   }
   if (message.type === 'CHAT_LLM_STREAM') {
     const p = (message as any).payload;
     if (p?.done && p?.inputTokens != null && p?.model) {
-      recordUsage('chat', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
+      getUsageBackend().recordUsage('chat', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
     }
     return false;
   }
@@ -39,7 +45,7 @@ export function handleMessage(
     handleExtractionResult((message as any).payload);
     const p = (message as any).payload;
     if (p?.inputTokens != null && p?.model) {
-      recordUsage('reading-list', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
+      getUsageBackend().recordUsage('reading-list', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
     }
     return false; // Let UI also receive the broadcast
   }
@@ -72,7 +78,7 @@ async function handleMessageAsync(
     }
 
     case 'LLM_REQUEST': {
-      if (await isBudgetExceeded()) {
+      if (await getUsageBackend().isBudgetExceeded()) {
         throw new Error('Monthly usage budget exceeded. Adjust in Settings > Usage.');
       }
       // Offscreen documents cannot access chrome.storage (see Pitfall #13 in ARCHITECTURE.md).
@@ -101,7 +107,7 @@ async function handleMessageAsync(
     }
 
     case 'AGENT_RUN_START': {
-      if (await isBudgetExceeded()) {
+      if (await getUsageBackend().isBudgetExceeded()) {
         throw new Error('Monthly usage budget exceeded. Adjust in Settings > Usage.');
       }
       // Same pattern as LLM_REQUEST — SW injects apiKey (Pitfall #13: offscreen lacks chrome.storage)
@@ -113,7 +119,7 @@ async function handleMessageAsync(
     }
 
     case 'CHAT_LLM_REQUEST': {
-      if (await isBudgetExceeded()) {
+      if (await getUsageBackend().isBudgetExceeded()) {
         throw new Error('Monthly usage budget exceeded. Adjust in Settings > Usage.');
       }
       await ensureOffscreenDocument();
