@@ -1,6 +1,7 @@
 import { executeLLMRequestStreaming, streamAnthropicWithTools } from './llm-executor';
 import { runAgentLoop } from './agent-loop';
 import { extractReadingListItem } from './reading-list-extractor';
+import { LLMApiError } from '../shared/llm-errors';
 
 // Chunk buffer to reduce IPC overhead
 class ChunkBuffer {
@@ -73,9 +74,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })
       .catch((e) => {
         buffer.drain();
+        const errorPayload = e instanceof LLMApiError
+          ? { error: e.message, errorType: e.errorType, retryAfterMs: e.retryAfterMs }
+          : { error: e.message };
         chrome.runtime.sendMessage({
           type: 'LLM_STREAM_CHUNK',
-          payload: { requestId, chunk: '', done: true, error: e.message },
+          payload: { requestId, chunk: '', done: true, ...errorPayload },
         }).catch(() => {});
       });
 
@@ -117,9 +121,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       },
     }).catch((e) => {
       chunkBuffer.drain();
+      const event = e instanceof LLMApiError
+        ? { type: 'error' as const, error: e.message, errorType: e.errorType, retryAfterMs: e.retryAfterMs }
+        : { type: 'error' as const, error: e?.message ?? 'Agent loop failed unexpectedly' };
       chrome.runtime.sendMessage({
         type: 'AGENT_PROGRESS',
-        payload: { runId, event: { type: 'error', error: e?.message ?? 'Agent loop failed unexpectedly' } },
+        payload: { runId, event },
       }).catch(() => {});
     });
 
@@ -153,9 +160,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })
       .catch((e) => {
         buffer.drain();
+        const errorPayload = e instanceof LLMApiError
+          ? { error: e.message, errorType: e.errorType, retryAfterMs: e.retryAfterMs }
+          : { error: e.message };
         chrome.runtime.sendMessage({
           type: 'CHAT_LLM_STREAM',
-          payload: { requestId, done: true, error: e.message },
+          payload: { requestId, done: true, ...errorPayload },
         }).catch(() => {});
       });
 

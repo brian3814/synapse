@@ -1,5 +1,6 @@
 import type { LLMRequestWithKeyMessage } from '../shared/messages';
 import type { ToolCall } from '../shared/types';
+import { LLMApiError } from '../shared/llm-errors';
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a knowledge graph extraction assistant. Given text, extract entities (nodes) and relationships (edges) and return them as structured JSON.
 
@@ -69,8 +70,7 @@ async function streamAnthropic(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${error}`);
+    throw await buildApiError(response);
   }
 
   const reader = response.body!.getReader();
@@ -159,8 +159,7 @@ export async function streamAnthropicWithTools(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${error}`);
+    throw await buildApiError(response);
   }
 
   const reader = response.body!.getReader();
@@ -247,4 +246,21 @@ export async function streamAnthropicWithTools(
   }
 
   return { textContent, toolCalls, stopReason, inputTokens, outputTokens };
+}
+
+async function buildApiError(response: Response): Promise<LLMApiError> {
+  const errorText = await response.text();
+  let errorType: LLMApiError['errorType'] = 'api_error';
+  let retryAfterMs: number | undefined;
+
+  if (response.status === 429) {
+    errorType = 'rate_limit';
+    const retryHeader = response.headers.get('retry-after');
+    retryAfterMs = retryHeader ? parseInt(retryHeader, 10) * 1000 : 30_000;
+  } else if (response.status === 529) {
+    errorType = 'overloaded';
+    retryAfterMs = 30_000;
+  }
+
+  return new LLMApiError(errorType, response.status, errorText, retryAfterMs);
 }

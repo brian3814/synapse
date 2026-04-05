@@ -91,6 +91,8 @@ export interface LLMStreamChunkMessage extends ExtensionMessage {
     done: boolean;
     content?: string;
     error?: string;
+    errorType?: import('./llm-errors').LLMErrorType;
+    retryAfterMs?: number;
     inputTokens?: number;
     outputTokens?: number;
     model?: string;
@@ -281,6 +283,8 @@ export interface ChatLLMStreamMessage extends ExtensionMessage {
     toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     stopReason?: string;
     error?: string;
+    errorType?: import('./llm-errors').LLMErrorType;
+    retryAfterMs?: number;
     inputTokens?: number;
     outputTokens?: number;
     model?: string;
