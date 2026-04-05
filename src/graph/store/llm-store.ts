@@ -11,6 +11,13 @@ export interface LastUsage {
   costCents: number;
 }
 
+export interface RateLimitWait {
+  retryAfterMs: number;
+  startedAt: number;
+  retryCount: number;
+  maxRetries: number;
+}
+
 interface LLMStore {
   status: ExtractionStatus;
   activeTab: ExtractionTab;
@@ -21,6 +28,7 @@ interface LLMStore {
   agentRun: AgentRun | null;
   agentTurns: AgentTurn[];
   lastUsage: LastUsage | null;
+  rateLimitWait: RateLimitWait | null;
   showPrivacyModal: boolean;
   pendingAction: (() => void) | null;
 
@@ -31,6 +39,7 @@ interface LLMStore {
   setInputText: (text: string) => void;
   setSourceUrl: (url: string | null) => void;
   setLastUsage: (usage: LastUsage | null) => void;
+  setRateLimitWait: (wait: RateLimitWait | null) => void;
   setShowPrivacyModal: (show: boolean, pendingAction?: () => void) => void;
   toggleDiffItem: (index: number) => void;
   acceptAllDiff: () => void;
@@ -60,6 +69,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   agentRun: null,
   agentTurns: [],
   lastUsage: null,
+  rateLimitWait: null,
   showPrivacyModal: false,
   pendingAction: null,
 
@@ -70,6 +80,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   setInputText: (text) => set({ inputText: text }),
   setSourceUrl: (url) => set({ sourceUrl: url }),
   setLastUsage: (usage) => set({ lastUsage: usage }),
+  setRateLimitWait: (wait) => set({ rateLimitWait: wait }),
   setShowPrivacyModal: (show, pendingAction) => set({ showPrivacyModal: show, pendingAction: pendingAction ?? null }),
   toggleDiffItem: (index) =>
     set((state) => {
@@ -106,6 +117,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
       agentRun: null,
       agentTurns: [],
       lastUsage: null,
+      rateLimitWait: null,
       showPrivacyModal: false,
       pendingAction: null,
     }),

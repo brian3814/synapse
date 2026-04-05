@@ -3,6 +3,7 @@ import { getAccessToken, startOAuthFlow, revokeTokens, isAuthenticated } from '.
 import { handleExtractionResult, removeFromReadingList, triggerExtraction } from './reading-list-handler';
 import { getApiKeyBackend } from './api-key-backend';
 import type { UsageBackend } from './usage-backend';
+import { shouldRetry, registerRequest, clearRequest, attemptRetry } from './retry-handler';
 import { openSidePanel } from './sidepanel-manager';
 import { openExtensionTab } from './tab-manager';
 import type { RuntimeMessage } from '../shared/messages';
@@ -17,11 +18,24 @@ export function handleMessage(
   sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void
 ): boolean {
-  // Broadcast messages from offscreen — record usage, then let UI receive them
+  // Broadcast messages from offscreen — record usage and handle retries
   if (message.type === 'LLM_STREAM_CHUNK') {
     const p = (message as any).payload;
     if (p?.done && p?.inputTokens != null && p?.model) {
+      clearRequest(p.requestId);
       getUsageBackend().recordUsage('simple', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
+    }
+    // Retry rate-limited simple extraction requests
+    if (p?.done && p?.error && shouldRetry(p.errorType)) {
+      attemptRetry(p.requestId, p.retryAfterMs, p.errorType).then(retried => {
+        if (!retried) {
+          // Retries exhausted — send synthetic terminal error (no errorType so UI resolves)
+          chrome.runtime.sendMessage({
+            type: 'LLM_STREAM_CHUNK',
+            payload: { requestId: p.requestId, chunk: '', done: true, error: 'Rate limit: all retries exhausted. Try again later.' },
+          }).catch(() => {});
+        }
+      }).catch(console.warn);
     }
     return false;
   }
@@ -35,7 +49,19 @@ export function handleMessage(
   if (message.type === 'CHAT_LLM_STREAM') {
     const p = (message as any).payload;
     if (p?.done && p?.inputTokens != null && p?.model) {
+      clearRequest(p.requestId);
       getUsageBackend().recordUsage('chat', p.model, p.inputTokens, p.outputTokens ?? 0).catch(console.warn);
+    }
+    // Retry rate-limited chat requests
+    if (p?.done && p?.error && shouldRetry(p.errorType)) {
+      attemptRetry(p.requestId, p.retryAfterMs, p.errorType).then(retried => {
+        if (!retried) {
+          chrome.runtime.sendMessage({
+            type: 'CHAT_LLM_STREAM',
+            payload: { requestId: p.requestId, done: true, error: 'Rate limit: all retries exhausted. Try again later.' },
+          }).catch(() => {});
+        }
+      }).catch(console.warn);
     }
     return false;
   }
@@ -86,7 +112,9 @@ async function handleMessageAsync(
       // UI messages intentionally omit the key to prevent leakage via runtime broadcast.
       await ensureOffscreenDocument();
       const apiKey = await getAuthToken();
-      const withKey = { type: 'LLM_REQUEST_WITH_KEY', requestId: (message as any).requestId, payload: { ...(message as any).payload, apiKey } };
+      const requestId = (message as any).requestId;
+      const withKey = { type: 'LLM_REQUEST_WITH_KEY', requestId, payload: { ...(message as any).payload, apiKey } };
+      registerRequest(requestId, withKey);
       const response = await chrome.runtime.sendMessage(withKey);
       return response;
     }
@@ -124,10 +152,12 @@ async function handleMessageAsync(
       }
       await ensureOffscreenDocument();
       const chatApiKey = await getAuthToken();
+      const chatRequestId = (message as any).payload?.requestId;
       const chatWithKey = {
         type: 'CHAT_LLM_REQUEST_WITH_KEY',
         payload: { ...(message as any).payload, apiKey: chatApiKey },
       };
+      if (chatRequestId) registerRequest(chatRequestId, chatWithKey);
       await chrome.runtime.sendMessage(chatWithKey);
       return { acknowledged: true };
     }

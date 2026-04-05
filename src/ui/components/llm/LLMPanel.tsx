@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
+import type { RateLimitWait } from '../../../graph/store/llm-store';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 import { useLLMExtraction } from '../../hooks/useLLMExtraction';
 import { TextInput } from './TextInput';
@@ -93,6 +94,28 @@ function StepTimeline() {
   );
 }
 
+function RateLimitCountdown({ wait }: { wait: RateLimitWait }) {
+  const [remaining, setRemaining] = React.useState('');
+
+  React.useEffect(() => {
+    const update = () => {
+      const elapsed = Date.now() - wait.startedAt;
+      const left = Math.max(0, Math.ceil((wait.retryAfterMs - elapsed) / 1000));
+      setRemaining(`${left}s`);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [wait.startedAt, wait.retryAfterMs]);
+
+  return (
+    <span className="text-[10px] text-amber-400 flex items-center gap-1">
+      <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+      Rate limited. Retrying in {remaining} (attempt {wait.retryCount}/{wait.maxRetries})
+    </span>
+  );
+}
+
 const TABS: { key: ExtractionTab; label: string }[] = [
   { key: 'page', label: 'From Page' },
   { key: 'text', label: 'From Text' },
@@ -105,6 +128,7 @@ export function LLMPanel() {
   const error = useLLMStore((s) => s.error);
   const showPrivacyModal = useLLMStore((s) => s.showPrivacyModal);
   const pendingAction = useLLMStore((s) => s.pendingAction);
+  const rateLimitWait = useLLMStore((s) => s.rateLimitWait);
   const resetLLM = useLLMStore((s) => s.reset);
   const resetReview = useExtractionReviewStore((s) => s.reset);
   const reset = () => { resetLLM(); resetReview(); };
@@ -153,10 +177,14 @@ export function LLMPanel() {
       )}
 
       {isRunning && (
-        <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-          Sending to Anthropic
-        </span>
+        rateLimitWait ? (
+          <RateLimitCountdown wait={rateLimitWait} />
+        ) : (
+          <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+            Sending to Anthropic
+          </span>
+        )
       )}
 
       {showPrivacyModal ? (

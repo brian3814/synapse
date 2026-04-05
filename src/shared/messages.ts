@@ -291,6 +291,17 @@ export interface ChatLLMStreamMessage extends ExtensionMessage {
   };
 }
 
+// Rate-limit retry messages
+export interface RateLimitWaitMessage extends ExtensionMessage {
+  type: 'RATE_LIMIT_WAIT';
+  payload: {
+    requestId: string;
+    retryAfterMs: number;
+    retryCount: number;
+    maxRetries: number;
+  };
+}
+
 // OAuth messages
 export interface OAuthStartMessage extends ExtensionMessage {
   type: 'OAUTH_START';
@@ -339,6 +350,7 @@ export type RuntimeMessage =
   | ReadingListExtractionResultMessage
   | ReadingListRemoveMessage
   | ReadingListRetryMessage
+  | RateLimitWaitMessage
   | OAuthStartMessage
   | OAuthRevokeMessage
   | OAuthCheckMessage

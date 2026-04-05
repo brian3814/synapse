@@ -18,11 +18,25 @@ function streamFromOffscreen(
     }, 120_000);
 
     const listener = (message: any) => {
+      if (message.type === 'RATE_LIMIT_WAIT' && message.payload?.requestId === requestId) {
+        useLLMStore.getState().setRateLimitWait({
+          retryAfterMs: message.payload.retryAfterMs,
+          startedAt: Date.now(),
+          retryCount: message.payload.retryCount,
+          maxRetries: message.payload.maxRetries,
+        });
+        return;
+      }
+
       if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-      const { chunk, done, content, error, inputTokens, outputTokens, model } = message.payload;
+      const { chunk, done, content, error, errorType, inputTokens, outputTokens, model } = message.payload;
       if (chunk) onChunk(chunk);
       if (done) {
+        // Rate-limit errors are retried by the service worker — don't resolve yet
+        if (error && (errorType === 'rate_limit' || errorType === 'overloaded')) return;
+
         cleanup();
+        useLLMStore.getState().setRateLimitWait(null);
         if (inputTokens != null && model) {
           const costCents = computeCostCents(model, inputTokens, outputTokens ?? 0);
           useLLMStore.getState().setLastUsage({ inputTokens, outputTokens: outputTokens ?? 0, costCents });
