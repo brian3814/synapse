@@ -18,3 +18,7 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Tooling artifacts
+.superpowers/
+.playwright-mcp/

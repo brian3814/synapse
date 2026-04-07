@@ -144,12 +144,12 @@ After accumulating 50+ nodes, reward the user with visible progress.
 
 **Goal:** Open the knowledge base to external tools and make a fully offline workflow possible.
 
-#### 4.1 Export & Bidirectional Markdown Sync
+#### 4.1 Export & Interop
 
-- Obsidian vault export (markdown + `[[wikilinks]]`)
+- One-click export to Obsidian-compatible .md vault (one-direction: DB → files, never reads back)
 - JSON-LD / RDF for semantic web interoperability
 - CSV and Neo4j-compatible formats for power users
-- **Bidirectional sync**: graph → `.md` folder (not just import). Auto-generate markdown files for concepts with summaries, linked sources, and wikilinks. Extension for capture + graph, Obsidian for reading + visualization.
+- Export renders Karpathy-style folder hierarchy: `resources/`, `entities/<type>/`, `notes/<user-hierarchy>/`, `index.md`, `log.md`
 
 #### 4.2 Local LLM Support
 
