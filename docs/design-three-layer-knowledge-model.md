@@ -200,7 +200,7 @@ The LLM-generated Summary is cached in a `summary` column on the `nodes` table t
 
 **When an entity gets a .md file on export:**
 - Resource nodes: always (digest)
-- Entity nodes: when they have >= 2 notes OR the user explicitly requests it
+- Entity nodes: when they have >= 2 `about` notes OR the user explicitly requests it (mentions don't count — prevents broad entities from generating low-value pages from incidental references alone)
 - Note nodes: always (the .md IS the note content)
 
 **Authority:** The database is authoritative for all entity layer structure and content. The .md file is a rendered export. Editing an entity .md externally has no effect on the graph.
@@ -231,6 +231,11 @@ CREATE UNIQUE INDEX idx_unique_note_name ON nodes(name) WHERE type = 'note';
 ```
 
 This mirrors Obsidian's behavior (filenames are globally unique in a vault) and keeps wikilink resolution simple and deterministic.
+
+**Collision mitigation for LLM-generated notes:** Auto-generated note titles risk collisions (e.g., "Architecture Overview" from two different articles). Three defenses:
+1. **Prompt design:** The system prompt instructs source-specific titles — "Notion's SharedWorker architecture for multi-tab SQLite" not "Architecture Overview."
+2. **Auto-suffix on collision:** If a title collides, the system appends the source domain: `"Architecture Overview (notion.com)"`. Deterministic, no user interaction.
+3. **Existing title context:** The LLM receives a sample of recent note titles (~20) to avoid collisions naturally. Marginal token cost.
 
 ### Note folder hierarchy (S3-style)
 
@@ -346,6 +351,32 @@ Every note tracks its provenance:
 | `extracted_from` | This note was generated from this resource during extraction |
 
 User-created notes (filed chat answers, manual writing) have no `extracted_from` edge — their provenance is the user.
+
+### Note attachments (images)
+
+Notes extracted from articles may reference images — diagrams, charts, screenshots. A note about a SharedWorker architecture is a weaker prose unit if the architecture diagram from the source article isn't visible alongside it.
+
+**Storage:** Image binaries are stored in OPFS under an `attachments/` directory, separate from wa-sqlite's database file. The UI thread accesses this via the async OPFS API (`navigator.storage.getDirectory()` → `attachments/`), which coexists with the DB worker's synchronous OPFS access to the `.db` file without conflict.
+
+**Metadata table:**
+
+```sql
+CREATE TABLE note_attachments (
+    id          TEXT PRIMARY KEY,
+    note_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    filename    TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    source_url  TEXT,           -- original URL of the image (for re-fetch)
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_note_attachments_note ON note_attachments(note_id);
+```
+
+**Acquisition:** The offscreen document fetches images by URL (extracted by the content script). No cross-context binary transport needed — the content script sends image URLs as strings, the offscreen fetches the binary directly.
+
+**Note content references:** Standard markdown image syntax: `![Architecture diagram](attachments/notion-sharedworker-arch.png)`. Obsidian renders this natively.
+
+**Export:** When export-connected, the export renderer copies image files from OPFS to `<export-folder>/attachments/` via `FileSystemFileHandle` — the same API used for `.md` file export, just with binary content (`writable.write(blob)`).
 
 ### Note .md files
 
@@ -465,22 +496,24 @@ Answer: Note₁ "Multi-head attention mechanism", extracted from "Attention Is A
 - A resource can have many notes extracted from it
 - A note has at most one `extracted_from` resource (none if user-created)
 
-### Node provenance: `concept_sources`
+### Node provenance: `entity_sources`
 
-The existing `concept_sources` table is preserved as a denormalized cache for fast RAG lookups and ranking:
+The existing `concept_sources` table is renamed to `entity_sources` (matching the `type = 'entity'` model) and redesigned as a denormalized cache for fast RAG lookups and ranking:
 
 ```sql
-concept_sources (
-  concept_id      TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+entity_sources (
+  entity_id       TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   resource_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-  relation_type   TEXT DEFAULT 'about',  -- 'about' | 'mention'
-  PRIMARY KEY (concept_id, resource_id)
+  relation_type   TEXT NOT NULL DEFAULT 'about',  -- 'about' | 'mention'
+  PRIMARY KEY (entity_id, resource_id, relation_type)
 )
 ```
 
+The PK includes `relation_type` so the same entity-resource pair can have both an `about` and a `mention` row — one note may be *about* entity X from resource R while another *mentions* it. Both rows survive independently.
+
 **Why keep the table:** While the two-hop JOIN is possible, a materialized view with `relation_type` allows the RAG pipeline to perform **weighted retrieval** in a single indexed query. The table is maintained automatically via SQLite triggers or the extraction merge logic:
-- Note → Resource (`extracted_from`) + Note → Entity (`about`) => `concept_sources(entity, resource, 'about')`
-- Note → Resource (`extracted_from`) + Note → Entity (`mention`) => `concept_sources(entity, resource, 'mention')`
+- Note → Resource (`extracted_from`) + Note → Entity (`about`) => `entity_sources(entity, resource, 'about')`
+- Note → Resource (`extracted_from`) + Note → Entity (`mention`) => `entity_sources(entity, resource, 'mention')`
 
 Both relation types are tracked. The distinction drives ranking, not inclusion:
 
@@ -488,10 +521,10 @@ Both relation types are tracked. The distinction drives ranking, not inclusion:
 |---|---|---|
 | Entity index "Notes" section | Listed prominently | Listed in collapsed "Also referenced in" |
 | RAG query relevance | Weight: 1.0 | Weight: 0.5 |
-| Entity page generation threshold | Counted toward "≥ 2 notes" | Counted toward "≥ 2 notes" |
+| Entity page generation threshold | Counted toward "≥ 2 `about` notes" | **Not counted** |
 | Resource count display | Shown in primary count | Shown in secondary count or combined total |
 
-This ensures provenance is never lossy. An entity frequently mentioned but rarely primary still accumulates lineage, qualifies for page generation, and surfaces in queries — just at lower priority than entities a note is directly about.
+This ensures provenance is never lossy. An entity frequently mentioned but rarely primary still accumulates lineage and surfaces in queries — just at lower priority than entities a note is directly about. However, only `about` notes count toward the page generation threshold, preventing broad entities from generating low-value pages from incidental references alone.
 
 ### Edge provenance: `edge_sources`
 
@@ -499,12 +532,13 @@ Entity-to-entity edges (e.g., `subfield_of`, `created_by`) need their own proven
 
 ```sql
 CREATE TABLE edge_sources (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
     edge_id      TEXT NOT NULL REFERENCES edges(id) ON DELETE CASCADE,
-    source_type  TEXT NOT NULL,  -- 'note' | 'extraction' | 'user'
+    source_type  TEXT NOT NULL CHECK(source_type IN ('note', 'extraction', 'user')),
     source_id    TEXT,           -- node ID of the note (for 'note' type)
     resource_id  TEXT,           -- resource node ID (for 'extraction' type, notes OFF)
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (edge_id, COALESCE(source_id, resource_id, 'user'))
+    UNIQUE(edge_id, source_type, source_id, resource_id)
 );
 CREATE INDEX idx_edge_sources_edge ON edge_sources(edge_id);
 CREATE INDEX idx_edge_sources_note ON edge_sources(source_id) WHERE source_id IS NOT NULL;
@@ -804,7 +838,7 @@ This is applied during `proceedToReview()` so near-duplicate edges are visible i
 | **Querying** | Search wiki text | RAG + graph traversal + FTS | RAG + graph traversal + FTS |
 | **Graph algorithms** | Not possible (no formal graph) | Centrality, clustering, paths | Centrality, clustering, paths (on entity layer) |
 | **User editing** | Edit .md directly | Edit through extension UI | Edit through extension UI. Export reflects edits. |
-| **Data lineage** | Implicit (source pages exist) | concept_sources table | Full chain: Entity ← Note ← Resource (two-hop edge traversal) |
+| **Data lineage** | Implicit (source pages exist) | entity_sources table | Full chain: Entity ← Note ← Resource (two-hop edge traversal) |
 | **Portability** | .md files ARE the data | Export required | One-click export to Obsidian-compatible vault |
 | **Note organization** | Flat or manual folders | N/A | S3-style folder hierarchy, user-controlled |
 
@@ -826,9 +860,10 @@ This design is additive against the existing schema. Key changes:
 | Add `folder_path` column to `nodes` | Migration | `TEXT NOT NULL DEFAULT ''`. S3-style prefix for note hierarchy. |
 | Add unique note name index | Migration | `CREATE UNIQUE INDEX idx_unique_note_name ON nodes(name) WHERE type = 'note'` |
 | Add `note_folders` table | Migration | Zero-byte markers for empty user-created folders. `path TEXT PRIMARY KEY`. |
-| Add `edge_sources` table | Migration | Edge provenance tracking. Maps edges to notes, resources, or user actions. Replaces `edges.source_url`. |
+| Rename `concept_sources` → `entity_sources` | Migration | PK changed to `(entity_id, resource_id, relation_type)` to allow both `about` and `mention` rows per pair. Column `concept_id` → `entity_id`. |
+| Add `edge_sources` table | Migration | Edge provenance tracking. Surrogate INTEGER PK + UNIQUE(edge_id, source_type, source_id, resource_id). Maps edges to notes, resources, or user actions. Replaces `edges.source_url`. |
 | Version `source_content` snapshots | Migration | Change unique key from `url` to `(url, extracted_at)`. `INSERT` instead of `INSERT OR REPLACE`. |
-| Add `note_attachments` table | Migration | Image attachment metadata. `id`, `note_id`, `filename`, `mime_type`, `source_url`. Binary data stored in OPFS `attachments/` directory. |
+| Add `note_attachments` table | Migration | Image attachment metadata. `id`, `note_id`, `filename`, `mime_type`, `source_url`. Binary data in OPFS `attachments/` directory (async API, separate from DB worker's sync OPFS). Exported to `<export-folder>/attachments/` via FSFH. |
 | System-owned resource creation | Code | `applyReview()` deterministically creates resource node before entity/edge passes. LLM prompts must NOT output resource nodes. |
 | Edge `label` vs `type` semantics | Convention | `label` = canonical relationship name (drives dedup/queries). `type` = auto-derived category for visualization (from `ontology_edge_types`). |
 | `about` / `mention` edge labels | Convention | Used on note-to-entity edges, assigned during extraction |
@@ -844,7 +879,7 @@ This design is additive against the existing schema. Key changes:
 | # | Decision | Resolution | Rationale |
 |---|---|---|---|
 | 1 | Entity Summary generation | Threshold-based: auto at ≥3 `about` notes, template-only below | Controls LLM cost. Quick Extract stays cheap. Summaries are cached in `nodes.summary`. |
-| 2 | `concept_sources` table | Keep as materialized view with `relation_type`. | Enables weighted RAG retrieval in a single indexed query. Maintained by triggers or merge logic. |
+| 2 | `entity_sources` table (was `concept_sources`) | Renamed. PK `(entity_id, resource_id, relation_type)` — allows both `about` and `mention` rows per entity-resource pair. | Prevents lossy collapse when the same entity is `about` in one note and `mention` in another from the same resource. Enables weighted RAG retrieval in a single indexed query. |
 | 3 | Quick Extract notes | Togglable. Off = current schema. On = adds `notes[]` to LLM output. | Gives users immediate prose output without forcing token cost on every extraction. Cross-cutting: touches ~8 files. |
 | 4 | Wikilink parser edge creation | Exact + alias matches only. Fuzzy → pending queue. | Fuzzy at 0.7 creates wrong edges silently (e.g., "Transfer Learning" ↔ "Transformer"). Preserves entity layer review guarantee. |
 | 5 | `source` vs `resource` naming | Keep `resource`. | Zero migration. Already seeded in `ontology_node_types`. |
@@ -860,5 +895,7 @@ This design is additive against the existing schema. Key changes:
 | 15 | Wikilink parser scope | Content → edges only. Triggered by note creation/editing in extension. | No file → DB direction (export-only). Parser still creates the note graph from `[[wikilinks]]` in note content. |
 | 16 | Note folder UI | Simple tree view in side panel. Create/rename/delete folders, drag-to-organize. | Independent from graph view. Folder hierarchy is organizational, not topological. |
 | 17 | Node `type` vs `label` | `type` = structural layer (3 fixed values: `resource`, `entity`, `note`). `label` = semantic categorization (user-extensible). | Clean separation. Layer checks are `WHERE type = 'entity'` (stable). Labels are a customization surface. Graph viz uses `label` for color, `type` for layer toggling. |
-| 18 | Edge provenance | `edge_sources` table tracking notes, extractions, and user actions per edge. Replaces `edges.source_url`. | Many-to-many: multiple notes/extractions can confirm the same edge. Enables edge confidence signals and full provenance queries. |
-| 19 | Image attachments | Metadata in `note_attachments` table, binary data in OPFS `attachments/` directory. | OPFS is the right store for binary assets (not SQLite BLOBs). Exported to `attachments/` folder via FSFH. |
+| 18 | Edge provenance | `edge_sources` table with surrogate INTEGER PK + UNIQUE constraint. Tracks notes, extractions, and user actions per edge. Replaces `edges.source_url`. | Surrogate key avoids SQLite's no-expression-PK limitation. Many-to-many: multiple notes/extractions can confirm the same edge. Enables edge confidence signals and full provenance queries. |
+| 19 | Image attachments | Metadata in `note_attachments` table, binary data in OPFS `attachments/` directory (async API, separate from DB worker's sync OPFS). | Notes referencing source article images are incomplete prose units without them. OPFS is the right store for binary assets (not SQLite BLOBs). Exported to `attachments/` folder via FSFH. |
+| 20 | Entity page generation threshold | Only `about` notes count toward "≥ 2 notes" Tier 1 threshold. Mentions do not count. | Prevents broad entities (e.g., "Machine Learning") from generating low-value pages from incidental references alone. Preserves the `about`/`mention` distinction's noise-reduction purpose. |
+| 21 | Note title collision mitigation | Unique constraint kept. LLM prompted for source-specific titles. Auto-suffix with domain on collision. | Uniqueness is load-bearing for wikilink resolution. Collision risk manageable with prompt design + deterministic fallback. |
