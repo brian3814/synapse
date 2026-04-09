@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../graph/store/node-type-store';
+import { useUIStore } from '../../graph/store/ui-store';
 import { useExtractionReviewStore } from '../../graph/store/extraction-review-store';
 import { graphDataToRender } from '../../graph/transforms/db-to-render';
 import { reviewNodesToOverlayRender, reviewEdgesToOverlayRender } from '../../graph/transforms/review-to-render';
@@ -11,6 +12,7 @@ export function useGraphData() {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const types = useNodeTypeStore((s) => s.types);
+  const visibleLayers = useUIStore((s) => s.visibleLayers);
 
   const reviewActive = useExtractionReviewStore((s) => s.active);
   const reviewViewMode = useExtractionReviewStore((s) => s.viewMode);
@@ -25,8 +27,27 @@ export function useGraphData() {
     return map;
   }, [types]);
 
+  // Filter nodes by visible structural layers (Phase 6). Drop edges whose
+  // endpoints are no longer in the visible set.
+  const filtered = useMemo(() => {
+    const filteredNodes = nodes.filter((n) =>
+      visibleLayers.has(n.type as 'entity' | 'note' | 'resource')
+    );
+    // Apply size hints by layer: notes are smaller, resources slightly smaller.
+    const sized = filteredNodes.map((n) => {
+      if (n.type === 'note') return { ...n, size: n.size * 0.6 };
+      if (n.type === 'resource') return { ...n, size: n.size * 0.8 };
+      return n;
+    });
+    const visibleIds = new Set(sized.map((n) => n.id));
+    const filteredEdges = edges.filter(
+      (e) => visibleIds.has(e.sourceId) && visibleIds.has(e.targetId)
+    );
+    return { nodes: sized, edges: filteredEdges };
+  }, [nodes, edges, visibleLayers]);
+
   const renderData = useMemo(() => {
-    const base = graphDataToRender(nodes, edges, typeColorMap);
+    const base = graphDataToRender(filtered.nodes, filtered.edges, typeColorMap);
 
     // Only merge review data in overlay mode
     if (!reviewActive || reviewViewMode !== 'overlay') {
@@ -48,7 +69,7 @@ export function useGraphData() {
       nodes: [...greyedNodes, ...overlayNodes],
       edges: [...base.edges, ...overlayEdges],
     };
-  }, [nodes, edges, typeColorMap, reviewActive, reviewViewMode, reviewNodes, reviewEdges]);
+  }, [filtered, typeColorMap, reviewActive, reviewViewMode, reviewNodes, reviewEdges]);
 
   return renderData;
 }

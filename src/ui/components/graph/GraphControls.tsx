@@ -8,7 +8,11 @@ interface GraphControlsProps {
 }
 
 export function GraphControls({ graphRef }: GraphControlsProps) {
-  const { layoutType, setLayoutType, displayMode } = useUIStore();
+  const layoutType = useUIStore((s) => s.layoutType);
+  const setLayoutType = useUIStore((s) => s.setLayoutType);
+  const displayMode = useUIStore((s) => s.displayMode);
+  const visibleLayers = useUIStore((s) => s.visibleLayers);
+  const toggleLayer = useUIStore((s) => s.toggleLayer);
   const isSidePanel = displayMode === 'sidePanel';
   const [forceActive, setForceActive] = useState(false);
 
@@ -56,8 +60,41 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
     ? LAYOUT_OPTIONS.filter((l) => !l.id.includes('3d'))
     : LAYOUT_OPTIONS;
 
+  const layerButton = (
+    layer: 'entity' | 'note' | 'resource',
+    label: string,
+    color: string
+  ) => {
+    const active = visibleLayers.has(layer);
+    return (
+      <button
+        key={layer}
+        onClick={() => toggleLayer(layer)}
+        className={`flex items-center gap-1 text-[10px] px-1.5 py-1 rounded border transition-colors ${
+          active
+            ? 'bg-zinc-700 text-zinc-100 border-zinc-500'
+            : 'bg-zinc-800/50 text-zinc-500 border-zinc-700 hover:text-zinc-300'
+        }`}
+        title={`${active ? 'Hide' : 'Show'} ${label} layer`}
+      >
+        <span
+          className="w-1.5 h-1.5 rounded-full"
+          style={{ backgroundColor: active ? color : '#52525b' }}
+        />
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="absolute bottom-3 left-3 flex flex-col gap-2">
+      {/* Layer toggles (three-layer model: Phase 6) */}
+      <div className="flex gap-1 bg-zinc-900/80 border border-zinc-700 rounded p-1 backdrop-blur-sm">
+        {layerButton('entity', 'Entities', '#7C3AED')}
+        {layerButton('note', 'Notes', '#0EA5E9')}
+        {layerButton('resource', 'Resources', '#059669')}
+      </div>
+
       {/* Layout selector */}
       <select
         value={layoutType}
