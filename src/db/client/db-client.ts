@@ -215,6 +215,30 @@ export const tags = {
     sendRequest('tags.getAllTags') as Promise<string[]>,
 };
 
+// Note folder operations (S3-style hierarchy)
+export const noteFolders = {
+  getAll: () =>
+    sendRequest('noteFolders.getAll') as Promise<
+      Array<{ path: string; created_at: string }>
+    >,
+  create: (path: string) =>
+    sendRequest('noteFolders.create', path) as Promise<{ success: boolean }>,
+  rename: (oldPath: string, newPath: string) =>
+    sendRequest('noteFolders.rename', { oldPath, newPath }) as Promise<{ success: boolean }>,
+  delete: (path: string) =>
+    sendRequest('noteFolders.delete', path) as Promise<{ success: boolean }>,
+  moveNote: (nodeId: string, folderPath: string) =>
+    sendRequest('noteFolders.moveNote', { nodeId, folderPath }) as Promise<{ success: boolean }>,
+  getNotesInFolder: (path: string) =>
+    sendRequest('noteFolders.getNotesInFolder', path) as Promise<
+      Array<{ id: string; name: string; folder_path: string }>
+    >,
+  getNotesRecursive: (prefix: string) =>
+    sendRequest('noteFolders.getNotesRecursive', prefix) as Promise<
+      Array<{ id: string; name: string; folder_path: string }>
+    >,
+};
+
 // Edge provenance operations (edge_sources table).
 // Edges can originate from three kinds of sources in the three-layer model:
 //   - 'note':       the edge was inferred from a note's prose (source_id = note node ID)

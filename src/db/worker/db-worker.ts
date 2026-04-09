@@ -15,6 +15,7 @@ import * as readingListQueries from './queries/reading-list-queries';
 import * as tagQueries from './queries/tag-queries';
 import * as entitySourceQueries from './queries/entity-source-queries';
 import * as edgeSourceQueries from './queries/edge-source-queries';
+import * as noteFolderQueries from './queries/note-folder-queries';
 import * as chatQueries from './queries/chat-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
@@ -342,6 +343,42 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'edgeSources.getEdgesFromNote': {
       ensureInit();
       return { result: await edgeSourceQueries.getEdgesFromNote(params as string) };
+    }
+
+    // Note folder operations (S3-style hierarchy for note organization)
+    case 'noteFolders.getAll': {
+      ensureInit();
+      return { result: await noteFolderQueries.getAllFolders() };
+    }
+    case 'noteFolders.create': {
+      ensureInit();
+      await noteFolderQueries.createFolder(params as string);
+      return { result: { success: true } };
+    }
+    case 'noteFolders.rename': {
+      ensureInit();
+      const p = params as { oldPath: string; newPath: string };
+      await noteFolderQueries.renameFolder(p.oldPath, p.newPath);
+      return { result: { success: true } };
+    }
+    case 'noteFolders.delete': {
+      ensureInit();
+      await noteFolderQueries.deleteFolder(params as string);
+      return { result: { success: true } };
+    }
+    case 'noteFolders.moveNote': {
+      ensureInit();
+      const p = params as { nodeId: string; folderPath: string };
+      await noteFolderQueries.moveNote(p.nodeId, p.folderPath);
+      return { result: { success: true } };
+    }
+    case 'noteFolders.getNotesInFolder': {
+      ensureInit();
+      return { result: await noteFolderQueries.getNotesInFolder(params as string) };
+    }
+    case 'noteFolders.getNotesRecursive': {
+      ensureInit();
+      return { result: await noteFolderQueries.getNotesRecursive(params as string) };
     }
 
     // Indexed file operations

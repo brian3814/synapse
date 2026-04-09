@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
-import { sourceContent } from '../../../db/client/db-client';
+import { sourceContent, noteFolders } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
@@ -15,6 +15,8 @@ interface NoteEditorProps {
 export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [folderPath, setFolderPath] = useState('');
+  const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>('write');
@@ -28,6 +30,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     const node = graphStore.nodes.find((n) => n.id === nodeId);
     if (node) {
       setTitle(node.name);
+      setFolderPath(node.folderPath ?? '');
       // Load content from source_content or properties
       if (typeof node.properties?.content === 'string') {
         setContent(node.properties.content);
@@ -41,6 +44,23 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       }).catch(() => {});
     }
   }, [nodeId]);
+
+  // Load the set of folder choices (distinct folder_paths from notes + markers).
+  useEffect(() => {
+    (async () => {
+      try {
+        const markers = await noteFolders.getAll();
+        const noteFolderPaths = new Set<string>(['']);
+        for (const n of useGraphStore.getState().nodes) {
+          if (n.type === 'note' && n.folderPath) noteFolderPaths.add(n.folderPath);
+        }
+        for (const m of markers) noteFolderPaths.add(m.path);
+        setFolderOptions([...noteFolderPaths].sort());
+      } catch {
+        setFolderOptions(['']);
+      }
+    })();
+  }, []);
 
   // Auto-focus textarea
   useEffect(() => {
@@ -60,6 +80,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         await graphStore.updateNode({
           id: nodeId,
           name: title,
+          folderPath,
           properties,
         });
 
@@ -75,6 +96,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         const node = await graphStore.createNode({
           name: title,
           type: 'note',
+          folderPath,
           properties,
         });
 
@@ -150,6 +172,26 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         placeholder="Note title..."
         className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600 font-medium"
       />
+
+      {/* Folder selection (three-layer model: Phase 5) */}
+      <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <span className="shrink-0">Folder:</span>
+        <select
+          value={folderPath}
+          onChange={(e) => setFolderPath(e.target.value)}
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-200 outline-none focus:border-indigo-500"
+        >
+          {folderOptions.map((opt) => (
+            <option key={opt || '__root__'} value={opt}>
+              {opt === '' ? '(root)' : opt}
+            </option>
+          ))}
+          {/* Allow typing a brand-new path by always listing the current value */}
+          {!folderOptions.includes(folderPath) && folderPath && (
+            <option value={folderPath}>{folderPath}</option>
+          )}
+        </select>
+      </div>
 
       {/* Write / Preview tabs */}
       <div className="flex border-b border-zinc-700 shrink-0">
