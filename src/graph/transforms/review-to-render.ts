@@ -7,6 +7,21 @@ const MERGE_PENDING_COLOR = '#D97706'; // amber
 const MERGE_ACCEPTED_COLOR = '#059669'; // emerald (accepted merge)
 const EXISTING_NODE_COLOR = '#3f3f46'; // zinc-700 (greyed out)
 
+/**
+ * Color lookup for a review node in the three-layer model.
+ * Entities use their label color; structural types use the type color.
+ */
+function reviewColorFor(
+  type: string,
+  label: string | undefined | null,
+  typeColorMap?: Map<string, string>
+): string | undefined {
+  if (type === 'entity' && label) {
+    return typeColorMap?.get(label);
+  }
+  return typeColorMap?.get(type);
+}
+
 export function reviewNodesToRender(
   nodes: ReviewNode[],
   typeColorMap?: Map<string, string>
@@ -14,7 +29,8 @@ export function reviewNodesToRender(
   return nodes
     .filter((n) => !n.removed)
     .map((node) => {
-      let color = typeColorMap?.get(node.type) ?? REVIEW_NODE_COLOR;
+      let color =
+        reviewColorFor(node.type, (node as any).label, typeColorMap) ?? REVIEW_NODE_COLOR;
       if (node.mergeRecommendation?.status === 'pending') {
         color = MERGE_PENDING_COLOR;
       } else if (node.mergeRecommendation?.status === 'accepted') {
@@ -92,7 +108,7 @@ export function reviewNodesToOverlayRender(
     .map((node) => {
       const color = node.mergeRecommendation?.status === 'pending'
         ? MERGE_PENDING_COLOR
-        : typeColorMap?.get(node.type) ?? REVIEW_NODE_COLOR;
+        : (reviewColorFor(node.type, (node as any).label, typeColorMap) ?? REVIEW_NODE_COLOR);
 
       return {
         id: node.tempId,

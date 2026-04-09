@@ -3,7 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
-import { tags, conceptSources } from '../../../db/client/db-client';
+import { tags, entitySources, type EntityRelationType } from '../../../db/client/db-client';
 
 export function NodeDetailPanel() {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
@@ -29,7 +29,9 @@ export function NodeDetailPanel() {
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [nodeTags, setNodeTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [sources, setSources] = useState<{ resourceIdentifier: string; createdAt: string }[]>([]);
+  const [sources, setSources] = useState<
+    { resourceId: string; relationType: EntityRelationType; createdAt: string }[]
+  >([]);
 
   useEffect(() => {
     if (node) {
@@ -42,9 +44,9 @@ export function NodeDetailPanel() {
       // Load tags
       tags.getForNode(node.id).then(setNodeTags).catch(() => setNodeTags([]));
 
-      // Load concept sources
-      if (node.type === 'concept') {
-        conceptSources.getForConcept(node.id).then(setSources).catch(() => setSources([]));
+      // Load entity sources (about/mention provenance for entity nodes)
+      if (node.type === 'entity') {
+        entitySources.getForEntity(node.id).then(setSources).catch(() => setSources([]));
       } else {
         setSources([]);
       }
@@ -249,18 +251,26 @@ export function NodeDetailPanel() {
         )}
       </div>
 
-      {/* Sources (concept nodes only) */}
-      {node.type === 'concept' && sources.length > 0 && (
+      {/* Sources (entity nodes only) — lists resource nodes this entity was extracted from */}
+      {node.type === 'entity' && sources.length > 0 && (
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">
             Sources ({sources.length})
           </label>
           <div className="space-y-1">
-            {sources.map((src) => (
-              <div key={src.resourceIdentifier} className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1">
-                {src.resourceIdentifier}
-              </div>
-            ))}
+            {sources.map((src) => {
+              const resourceNode = nodes.find((n) => n.id === src.resourceId);
+              const display = resourceNode?.name ?? resourceNode?.sourceUrl ?? src.resourceId;
+              return (
+                <div
+                  key={`${src.resourceId}-${src.relationType}`}
+                  className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1 flex justify-between gap-2"
+                >
+                  <span className="truncate">{display}</span>
+                  <span className="text-zinc-500 shrink-0">{src.relationType}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

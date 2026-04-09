@@ -1,7 +1,7 @@
 export const version = 5;
-export const description = 'Add note node type to ontology';
+export const description = 'Note node type (seeded in 001 as part of three-layer model)';
 
-export const up = `
-INSERT OR IGNORE INTO ontology_node_types (type, description, color) VALUES
-    ('note', 'A user-written note or thought', '#0EA5E9')
-`;
+// No-op: the 'note' structural type is now seeded directly in migration 001
+// as part of the three-layer knowledge model (resource/entity/note).
+// This migration is kept as a no-op to preserve schema_version history.
+export const up = `SELECT 1;`;

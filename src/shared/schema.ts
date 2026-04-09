@@ -32,7 +32,9 @@ export type ReadingListExtractionResult = z.infer<typeof readingListExtractionSc
 // Node input validation
 export const createNodeInputSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  type: z.string().min(1).default('concept'),
+  type: z.string().min(1).default('entity'),
+  label: z.string().min(1).optional(),
+  folderPath: z.string().optional(),
   properties: z.record(z.string(), z.unknown()).optional().default({}),
   color: z.string().optional(),
   size: z.number().positive().optional().default(1.0),
@@ -43,6 +45,9 @@ export const updateNodeInputSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
+  label: z.string().min(1).optional(),
+  summary: z.string().optional(),
+  folderPath: z.string().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
   x: z.number().optional(),
   y: z.number().optional(),

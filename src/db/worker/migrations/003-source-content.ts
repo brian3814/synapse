@@ -14,5 +14,6 @@ CREATE TABLE IF NOT EXISTS source_content (
 );
 CREATE INDEX IF NOT EXISTS idx_source_content_node ON source_content(node_id);
 CREATE INDEX IF NOT EXISTS idx_source_content_url ON source_content(url);
-CREATE INDEX IF NOT EXISTS idx_source_content_hash ON source_content(content_hash)
+CREATE INDEX IF NOT EXISTS idx_source_content_hash ON source_content(content_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_content_url_time ON source_content(url, extracted_at)
 `;

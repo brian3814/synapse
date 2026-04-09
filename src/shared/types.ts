@@ -8,11 +8,23 @@ export interface PageComplexity {
 }
 
 // Database row types
+
+/**
+ * Structural layer of a node in the three-layer knowledge model.
+ * - resource: an ingested webpage (immutable input, system-created)
+ * - entity:   a domain object (concept, person, technology, etc.)
+ * - note:     a granular prose unit about entities
+ */
+export type StructuralNodeType = 'resource' | 'entity' | 'note';
+
 export interface DbNode {
   id: string;
   identifier: string | null;
   name: string;
-  type: string;
+  type: string; // StructuralNodeType: 'resource' | 'entity' | 'note'
+  label: string | null; // entity semantic label (e.g., 'concept', 'person'); null for resource/note
+  summary: string | null; // cached LLM-generated entity summary
+  folder_path: string; // S3-style folder prefix for notes; empty string for non-notes
   properties: string; // JSON string
   x: number | null;
   y: number | null;
@@ -68,6 +80,40 @@ export interface DbSourceContent {
   created_at: string;
 }
 
+// Edge provenance row from edge_sources table
+export interface DbEdgeSource {
+  id: number;
+  edge_id: string;
+  source_type: 'note' | 'extraction' | 'user';
+  source_id: string | null; // note node ID (when source_type='note')
+  resource_id: string | null; // resource node ID (when source_type='extraction')
+  created_at: string;
+}
+
+// Entity-to-resource provenance row from entity_sources table
+export interface DbEntitySource {
+  entity_id: string;
+  resource_id: string;
+  relation_type: 'about' | 'mention';
+  created_at: string;
+}
+
+// Note folder marker row (zero-byte folder markers for empty user-created folders)
+export interface DbNoteFolder {
+  path: string;
+  created_at: string;
+}
+
+// Note attachment metadata (binary stored in OPFS attachments/)
+export interface DbNoteAttachment {
+  id: string;
+  note_id: string;
+  filename: string;
+  mime_type: string;
+  source_url: string | null;
+  created_at: string;
+}
+
 export interface DbIndexedFile {
   id: string;
   file_path: string;
@@ -84,6 +130,8 @@ export interface DbNodeSlim {
   identifier: string | null;
   name: string;
   type: string;
+  label: string | null;
+  folder_path: string;
   color: string | null;
   size: number;
   source_url: string | null;
@@ -106,7 +154,10 @@ export interface GraphNode {
   id: string;
   identifier: string | null;
   name: string;
-  type: string;
+  type: string; // StructuralNodeType: 'resource' | 'entity' | 'note'
+  label?: string | null; // entity semantic label
+  summary?: string | null; // cached LLM-generated entity summary
+  folderPath?: string; // S3-style folder prefix for notes
   properties: Record<string, unknown>;
   tags?: string[];
   x?: number;
@@ -142,6 +193,8 @@ export interface GraphData {
 export interface CreateNodeInput {
   name: string;
   type?: string;
+  label?: string;
+  folderPath?: string;
   identifier?: string;
   properties?: Record<string, unknown>;
   tags?: string[];
@@ -154,6 +207,9 @@ export interface UpdateNodeInput {
   id: string;
   name?: string;
   type?: string;
+  label?: string;
+  summary?: string;
+  folderPath?: string;
   properties?: Record<string, unknown>;
   tags?: string[];
   x?: number;
@@ -211,6 +267,7 @@ export interface ExtractionResult {
   nodes: Array<{
     name: string;
     type: string;
+    label?: string; // entity semantic label (concept, person, technology, ...)
     properties?: Record<string, unknown>;
     tags?: string[];
   }>;
@@ -234,11 +291,16 @@ export interface ExtractionDiff {
   items: DiffItem[];
 }
 
-// Node type (from ontology_node_types table)
+// Node type (from ontology_node_types table).
+// In the three-layer model, this table stores both structural types and entity labels:
+// - category='structural': the three fixed layer types (resource, entity, note)
+// - category='entity_label': user-extensible semantic categorization for entities
 export interface NodeType {
   type: string;
   description: string | null;
   color: string | null;
+  category: 'structural' | 'entity_label';
+  isDefault: boolean;
 }
 
 // Agent step types

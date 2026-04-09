@@ -168,8 +168,12 @@ export const edges = {
 // Node type operations
 export const nodeTypes = {
   getAll: () => sendRequest('nodeTypes.getAll') as Promise<any[]>,
-  create: (input: { type: string; description?: string; color?: string }) =>
-    sendRequest('nodeTypes.create', input) as Promise<any>,
+  create: (input: {
+    type: string;
+    description?: string;
+    color?: string;
+    category?: 'structural' | 'entity_label';
+  }) => sendRequest('nodeTypes.create', input) as Promise<any>,
   delete: (type: string) => sendRequest('nodeTypes.delete', type) as Promise<boolean>,
 };
 
@@ -211,18 +215,26 @@ export const tags = {
     sendRequest('tags.getAllTags') as Promise<string[]>,
 };
 
-// Concept source operations
-export const conceptSources = {
-  getForConcept: (conceptId: string) =>
-    sendRequest('conceptSources.getForConcept', conceptId) as Promise<{ resourceIdentifier: string; createdAt: string }[]>,
-  addSource: (conceptId: string, resourceIdentifier: string) =>
-    sendRequest('conceptSources.addSource', { conceptId, resourceIdentifier }) as Promise<{ success: boolean }>,
-  removeSource: (conceptId: string, resourceIdentifier: string) =>
-    sendRequest('conceptSources.removeSource', { conceptId, resourceIdentifier }) as Promise<boolean>,
-  removeAllForResource: (resourceIdentifier: string) =>
-    sendRequest('conceptSources.removeAllForResource', resourceIdentifier) as Promise<number>,
-  getConceptsForResource: (resourceIdentifier: string) =>
-    sendRequest('conceptSources.getConceptsForResource', resourceIdentifier) as Promise<string[]>,
+// Entity source operations (entity → resource provenance with about/mention distinction)
+export type EntityRelationType = 'about' | 'mention';
+
+export const entitySources = {
+  getForEntity: (entityId: string) =>
+    sendRequest('entitySources.getForEntity', entityId) as Promise<
+      { resourceId: string; relationType: EntityRelationType; createdAt: string }[]
+    >,
+  add: (entityId: string, resourceId: string, relationType: EntityRelationType = 'about') =>
+    sendRequest('entitySources.add', { entityId, resourceId, relationType }) as Promise<{
+      success: boolean;
+    }>,
+  remove: (entityId: string, resourceId: string, relationType?: EntityRelationType) =>
+    sendRequest('entitySources.remove', { entityId, resourceId, relationType }) as Promise<boolean>,
+  removeAllForResource: (resourceId: string) =>
+    sendRequest('entitySources.removeAllForResource', resourceId) as Promise<number>,
+  getEntitiesForResource: (resourceId: string) =>
+    sendRequest('entitySources.getEntitiesForResource', resourceId) as Promise<
+      { entityId: string; relationType: EntityRelationType }[]
+    >,
 };
 
 // Indexed file operations

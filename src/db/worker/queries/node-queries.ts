@@ -10,7 +10,7 @@ export async function getAllNodes(): Promise<DbNode[]> {
 /** Slim projection for bulk graph loading — skips properties, timestamps */
 export async function getAllNodesSlim(): Promise<DbNodeSlim[]> {
   const { rows } = await executeQuery<DbNodeSlim>(
-    'SELECT id, identifier, name, type, color, size, source_url, x, y FROM nodes;'
+    'SELECT id, identifier, name, type, label, folder_path, color, size, source_url, x, y FROM nodes;'
   );
   return rows;
 }
@@ -23,6 +23,8 @@ export async function getNodeById(id: string): Promise<DbNode | null> {
 export async function createNode(input: {
   name: string;
   type?: string;
+  label?: string;
+  folderPath?: string;
   identifier?: string;
   properties?: string;
   color?: string;
@@ -30,8 +32,10 @@ export async function createNode(input: {
   sourceUrl?: string;
 }): Promise<DbNode> {
   const id = generateId();
-  const type = input.type ?? 'concept';
-  const identifier = input.identifier ?? generateIdentifier(type, input.name, input.sourceUrl);
+  const type = input.type ?? 'entity';
+  const label = input.label ?? (type === 'entity' ? 'concept' : null);
+  const folderPath = input.folderPath ?? '';
+  const identifier = input.identifier ?? generateIdentifier(type, input.name, input.sourceUrl, label);
 
   // Return existing node if identifier already exists (common during extraction
   // when the same entity appears across multiple pages or re-extractions)
@@ -42,14 +46,16 @@ export async function createNode(input: {
   if (existing.length > 0) return existing[0];
 
   const { rows } = await executeQuery<DbNode>(
-    `INSERT INTO nodes (id, identifier, name, type, properties, color, size, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, color, size, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *;`,
     [
       id,
       identifier,
       input.name,
       type,
+      label,
+      folderPath,
       input.properties ?? '{}',
       input.color ?? null,
       input.size ?? 1.0,
@@ -63,6 +69,9 @@ export async function updateNode(input: {
   id: string;
   name?: string;
   type?: string;
+  label?: string;
+  summary?: string;
+  folderPath?: string;
   properties?: string;
   x?: number;
   y?: number;
@@ -80,6 +89,18 @@ export async function updateNode(input: {
   if (input.type !== undefined) {
     sets.push('type = ?');
     params.push(input.type);
+  }
+  if (input.label !== undefined) {
+    sets.push('label = ?');
+    params.push(input.label);
+  }
+  if (input.summary !== undefined) {
+    sets.push('summary = ?');
+    params.push(input.summary);
+  }
+  if (input.folderPath !== undefined) {
+    sets.push('folder_path = ?');
+    params.push(input.folderPath);
   }
   if (input.properties !== undefined) {
     sets.push('properties = ?');
@@ -224,7 +245,12 @@ export async function matchTerms(
   return rows;
 }
 
-export function generateIdentifier(type: string, name: string, sourceUrl?: string): string {
+export function generateIdentifier(
+  type: string,
+  name: string,
+  sourceUrl?: string,
+  label?: string | null
+): string {
   if (type === 'resource' && sourceUrl) {
     const slug = sourceUrl
       .replace(/^https?:\/\//, '')
@@ -239,6 +265,11 @@ export function generateIdentifier(type: string, name: string, sourceUrl?: strin
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  // For entities, use the label in the identifier slug (e.g., 'person/jane-doe')
+  // so semantically distinct entities with the same name don't collide.
+  if (type === 'entity' && label) {
+    return `${label.toLowerCase()}/${slug}`;
+  }
   return `${type.toLowerCase()}/${slug}`;
 }
 

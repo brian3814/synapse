@@ -13,7 +13,7 @@ import * as stressTestQueries from './queries/stress-test-queries';
 import * as spatialQueries from './queries/spatial-queries';
 import * as readingListQueries from './queries/reading-list-queries';
 import * as tagQueries from './queries/tag-queries';
-import * as conceptSourceQueries from './queries/concept-source-queries';
+import * as entitySourceQueries from './queries/entity-source-queries';
 import * as chatQueries from './queries/chat-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
@@ -289,29 +289,39 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       return { result: await tagQueries.getAllTags() };
     }
 
-    // Concept source operations
-    case 'conceptSources.getForConcept': {
+    // Entity source operations (entity_sources table — denormalized provenance cache)
+    case 'entitySources.getForEntity': {
       ensureInit();
-      return { result: await conceptSourceQueries.getSourcesForConcept(params as string) };
+      return { result: await entitySourceQueries.getSourcesForEntity(params as string) };
     }
-    case 'conceptSources.addSource': {
+    case 'entitySources.add': {
       ensureInit();
-      const p = params as { conceptId: string; resourceIdentifier: string };
-      await conceptSourceQueries.addSource(p.conceptId, p.resourceIdentifier);
+      const p = params as {
+        entityId: string;
+        resourceId: string;
+        relationType?: 'about' | 'mention';
+      };
+      await entitySourceQueries.addEntitySource(p.entityId, p.resourceId, p.relationType);
       return { result: { success: true } };
     }
-    case 'conceptSources.removeSource': {
+    case 'entitySources.remove': {
       ensureInit();
-      const p = params as { conceptId: string; resourceIdentifier: string };
-      return { result: await conceptSourceQueries.removeSource(p.conceptId, p.resourceIdentifier) };
+      const p = params as {
+        entityId: string;
+        resourceId: string;
+        relationType?: 'about' | 'mention';
+      };
+      return {
+        result: await entitySourceQueries.removeEntitySource(p.entityId, p.resourceId, p.relationType),
+      };
     }
-    case 'conceptSources.removeAllForResource': {
+    case 'entitySources.removeAllForResource': {
       ensureInit();
-      return { result: await conceptSourceQueries.removeAllForResource(params as string) };
+      return { result: await entitySourceQueries.removeAllForResource(params as string) };
     }
-    case 'conceptSources.getConceptsForResource': {
+    case 'entitySources.getEntitiesForResource': {
       ensureInit();
-      return { result: await conceptSourceQueries.getConceptsForResource(params as string) };
+      return { result: await entitySourceQueries.getEntitiesForResource(params as string) };
     }
 
     // Indexed file operations

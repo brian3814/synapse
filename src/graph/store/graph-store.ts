@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, conceptSources } from '../../db/client/db-client';
+import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources } from '../../db/client/db-client';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
@@ -10,6 +10,9 @@ function dbNodeToGraphNode(row: DbNode): GraphNode {
     identifier: row.identifier,
     name: row.name,
     type: row.type,
+    label: row.label,
+    summary: row.summary,
+    folderPath: row.folder_path,
     properties: JSON.parse(row.properties || '{}'),
     x: row.x ?? undefined,
     y: row.y ?? undefined,
@@ -45,6 +48,8 @@ function slimNodeToGraphNode(row: DbNodeSlim): GraphNode {
     identifier: row.identifier,
     name: row.name,
     type: row.type,
+    label: row.label,
+    folderPath: row.folder_path,
     properties: {},
     x: row.x ?? undefined,
     y: row.y ?? undefined,
@@ -128,6 +133,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
       const row = await dbNodes.create({
         name: input.name,
         type: input.type,
+        label: input.label,
+        folderPath: input.folderPath,
         properties: JSON.stringify(input.properties ?? {}),
         color: input.color,
         size: input.size,
@@ -149,6 +156,9 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
         id: input.id,
         name: input.name,
         type: input.type,
+        label: input.label,
+        summary: input.summary,
+        folderPath: input.folderPath,
         properties: input.properties ? JSON.stringify(input.properties) : undefined,
         x: input.x,
         y: input.y,
@@ -188,9 +198,10 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
           };
         });
 
-        // Best-effort cleanup: remove concept_sources for deleted resource nodes
-        if (node?.type === 'resource' && node.identifier) {
-          conceptSources.removeAllForResource(node.identifier).catch(() => {
+        // Best-effort cleanup: remove entity_sources for deleted resource nodes.
+        // entity_sources uses the resource node's ID (not identifier) as the FK.
+        if (node?.type === 'resource') {
+          entitySources.removeAllForResource(node.id).catch(() => {
             // Best-effort cleanup
           });
         }

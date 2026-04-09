@@ -13,7 +13,15 @@ export const TYPE_COLOR_PALETTE = [
   '#0D9488', // teal
 ];
 
-export const DEFAULT_NODE_TYPE = 'concept';
+/** Default structural node type for newly created nodes */
+export const DEFAULT_NODE_TYPE = 'entity';
+
+/** Default entity label when the LLM omits one */
+export const DEFAULT_ENTITY_LABEL = 'concept';
+
+/** The three fixed structural layer types in the three-layer model */
+export const STRUCTURAL_NODE_TYPES = ['resource', 'entity', 'note'] as const;
+
 export const FALLBACK_TYPE_COLOR = '#6B7280'; // gray
 
 export const DEFAULT_NODE_SIZE = 1.0;

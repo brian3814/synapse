@@ -5,7 +5,7 @@ import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../.
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
 import { QUICK_EXTRACT_SYSTEM_PROMPT } from '../../shared/quick-extract-prompt';
-import { entityResolution, sourceContent, conceptSources } from '../../db/client/db-client';
+import { entityResolution, sourceContent, entitySources } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
 function streamFromOffscreen(
@@ -349,27 +349,28 @@ export function useLLMExtraction() {
         }
       }
 
-      // Link concept nodes to their source resource (parallelized per Pitfall #20)
+      // Link entity nodes to their source resource (parallelized per Pitfall #20).
+      // The three-layer model tracks this in entity_sources with a relation_type
+      // distinction (about/mention). Direct extraction without notes defaults to 'about'.
       if (llm.sourceUrl) {
         const resourceNode = useGraphStore.getState().nodes.find(
           (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
         );
-        const resourceIdentifier = resourceNode?.identifier;
-        if (resourceIdentifier) {
-          const conceptNodeIds: string[] = [];
+        if (resourceNode) {
+          const entityNodeIds: string[] = [];
           for (const item of diff.items) {
             if (!item.accepted || item.type !== 'node') continue;
             const extracted = item.extracted as { name: string; type: string };
-            if (extracted.type === 'concept') {
+            if (extracted.type === 'entity' || extracted.type === 'concept') {
               const realId = nodeIdMap.get(extracted.name.toLowerCase())
                 ?? item.existingMatch?.id;
-              if (realId) conceptNodeIds.push(realId);
+              if (realId) entityNodeIds.push(realId);
             }
           }
-          if (conceptNodeIds.length > 0) {
+          if (entityNodeIds.length > 0) {
             await Promise.all(
-              conceptNodeIds.map((id) =>
-                conceptSources.addSource(id, resourceIdentifier).catch(() => {
+              entityNodeIds.map((id) =>
+                entitySources.add(id, resourceNode.id, 'about').catch(() => {
                   // Best-effort: source link may already exist
                 })
               )
@@ -686,24 +687,25 @@ export function useLLMExtraction() {
         }
       }
 
-      // Link concept nodes to their source resource (parallelized per Pitfall #20)
+      // Link entity nodes to their source resource (parallelized per Pitfall #20).
+      // The three-layer model tracks this in entity_sources with a relation_type
+      // distinction (about/mention). Direct review apply without notes defaults to 'about'.
       if (llm.sourceUrl) {
         const resourceNode = useGraphStore.getState().nodes.find(
           (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
         );
-        const resourceIdentifier = resourceNode?.identifier;
-        if (resourceIdentifier) {
-          const conceptNodeIds: string[] = [];
+        if (resourceNode) {
+          const entityNodeIds: string[] = [];
           for (const node of activeNodes) {
-            if (node.type === 'concept') {
+            if (node.type === 'entity' || node.type === 'concept') {
               const realId = tempIdToRealId.get(node.tempId);
-              if (realId) conceptNodeIds.push(realId);
+              if (realId) entityNodeIds.push(realId);
             }
           }
-          if (conceptNodeIds.length > 0) {
+          if (entityNodeIds.length > 0) {
             await Promise.all(
-              conceptNodeIds.map((id) =>
-                conceptSources.addSource(id, resourceIdentifier).catch(() => {
+              entityNodeIds.map((id) =>
+                entitySources.add(id, resourceNode.id, 'about').catch(() => {
                   // Best-effort: source link may already exist
                 })
               )
