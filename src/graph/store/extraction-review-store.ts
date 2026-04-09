@@ -30,12 +30,31 @@ export interface ReviewEdge {
   removed: boolean;
 }
 
+/**
+ * A prose note candidate emitted by the LLM when the extraction notes toggle
+ * is enabled. Notes are granular units (3-10 sentences) that attach to entities
+ * via `about` / `mention` edges during applyReview.
+ */
+export interface ReviewNote {
+  tempId: TempId;
+  title: string;
+  content: string;
+  /** Entity review temp IDs this note is primarily about (1-3 typical) */
+  about: TempId[];
+  /** Entity review temp IDs this note only mentions incidentally */
+  mentions: TempId[];
+  removed: boolean;
+}
+
 export type ReviewCommand =
   | { type: 'edit-node'; tempId: TempId; before: Partial<ReviewNode>; after: Partial<ReviewNode> }
   | { type: 'edit-edge'; tempId: TempId; before: Partial<ReviewEdge>; after: Partial<ReviewEdge> }
+  | { type: 'edit-note'; tempId: TempId; before: Partial<ReviewNote>; after: Partial<ReviewNote> }
   | { type: 'add-edge'; edge: ReviewEdge }
   | { type: 'remove-edge'; edge: ReviewEdge }
   | { type: 'remove-node'; node: ReviewNode; removedEdges: ReviewEdge[] }
+  | { type: 'remove-note'; note: ReviewNote }
+  | { type: 'toggle-note-binding'; tempId: TempId; entityTempId: TempId; from: 'about' | 'mentions'; to: 'about' | 'mentions' }
   | {
       type: 'convert-to-property';
       node: ReviewNode;
@@ -63,9 +82,10 @@ export interface PendingConversion {
 interface ExtractionReviewStore {
   nodes: ReviewNode[];
   edges: ReviewEdge[];
+  notes: ReviewNote[];
   viewMode: 'extracted' | 'overlay';
   selectedTempId: TempId | null;
-  selectedType: 'node' | 'edge' | null;
+  selectedType: 'node' | 'edge' | 'note' | null;
   undoStack: ReviewCommand[];
   redoStack: ReviewCommand[];
   sourceUrl: string | null;
@@ -73,12 +93,17 @@ interface ExtractionReviewStore {
   pendingConversion: PendingConversion | null;
 
   // Lifecycle
-  initialize(nodes: ReviewNode[], edges: ReviewEdge[], sourceUrl: string | null): void;
+  initialize(
+    nodes: ReviewNode[],
+    edges: ReviewEdge[],
+    notes: ReviewNote[],
+    sourceUrl: string | null
+  ): void;
   reset(): void;
 
   // View
   setViewMode(mode: 'extracted' | 'overlay'): void;
-  select(tempId: TempId | null, type: 'node' | 'edge' | null): void;
+  select(tempId: TempId | null, type: 'node' | 'edge' | 'note' | null): void;
 
   // Edits
   editNode(
@@ -86,9 +111,15 @@ interface ExtractionReviewStore {
     changes: Partial<Pick<ReviewNode, 'name' | 'type' | 'label' | 'properties' | 'tags'>>
   ): void;
   editEdge(tempId: TempId, changes: Partial<Pick<ReviewEdge, 'label' | 'type'>>): void;
+  editNote(
+    tempId: TempId,
+    changes: Partial<Pick<ReviewNote, 'title' | 'content'>>
+  ): void;
+  toggleNoteBinding(noteTempId: TempId, entityTempId: TempId): void;
   addEdge(sourceTempId: TempId, targetTempId: TempId, label: string, type?: string): void;
   removeEdge(tempId: TempId): void;
   removeNode(tempId: TempId): void;
+  removeNote(tempId: TempId): void;
 
   // Convert-to-property (two-step)
   prepareConvertToProperty(nodeTempId: TempId): Promise<void>;
@@ -107,6 +138,7 @@ interface ExtractionReviewStore {
   // Computed helpers
   activeNodes(): ReviewNode[];
   activeEdges(): ReviewEdge[];
+  activeNotes(): ReviewNote[];
 }
 
 function findNode(nodes: ReviewNode[], tempId: TempId): ReviewNode | undefined {
@@ -125,19 +157,32 @@ function updateEdge(edges: ReviewEdge[], tempId: TempId, patch: Partial<ReviewEd
   return edges.map((e) => (e.tempId === tempId ? { ...e, ...patch } : e));
 }
 
+function findNote(notes: ReviewNote[], tempId: TempId): ReviewNote | undefined {
+  return notes.find((n) => n.tempId === tempId);
+}
+
+function updateNoteFn(notes: ReviewNote[], tempId: TempId, patch: Partial<ReviewNote>): ReviewNote[] {
+  return notes.map((n) => (n.tempId === tempId ? { ...n, ...patch } : n));
+}
+
 function getConnectedEdges(edges: ReviewEdge[], nodeTempId: TempId): ReviewEdge[] {
   return edges.filter(
     (e) => !e.removed && (e.sourceTempId === nodeTempId || e.targetTempId === nodeTempId)
   );
 }
 
-function applyCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, cmd: ReviewCommand): Pick<ExtractionReviewStore, 'nodes' | 'edges'> {
+type ReviewCollections = Pick<ExtractionReviewStore, 'nodes' | 'edges' | 'notes'>;
+
+function applyCommand(state: ReviewCollections, cmd: ReviewCommand): ReviewCollections {
   switch (cmd.type) {
     case 'edit-node':
       return { ...state, nodes: updateNode(state.nodes, cmd.tempId, cmd.after) };
 
     case 'edit-edge':
       return { ...state, edges: updateEdge(state.edges, cmd.tempId, cmd.after) };
+
+    case 'edit-note':
+      return { ...state, notes: updateNoteFn(state.notes, cmd.tempId, cmd.after) };
 
     case 'add-edge':
       return { ...state, edges: [...state.edges, cmd.edge] };
@@ -147,15 +192,33 @@ function applyCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, cmd
 
     case 'remove-node': {
       let { nodes, edges } = state;
+      const { notes } = state;
       nodes = updateNode(nodes, cmd.node.tempId, { removed: true });
       for (const re of cmd.removedEdges) {
         edges = updateEdge(edges, re.tempId, { removed: true });
       }
-      return { nodes, edges };
+      return { nodes, edges, notes };
+    }
+
+    case 'remove-note':
+      return { ...state, notes: updateNoteFn(state.notes, cmd.note.tempId, { removed: true }) };
+
+    case 'toggle-note-binding': {
+      const note = findNote(state.notes, cmd.tempId);
+      if (!note) return state;
+      const fromList = cmd.from === 'about' ? note.about : note.mentions;
+      const toList = cmd.to === 'about' ? note.about : note.mentions;
+      const patch: Partial<ReviewNote> = {};
+      patch[cmd.from] = fromList.filter((id) => id !== cmd.entityTempId);
+      if (!toList.includes(cmd.entityTempId)) {
+        patch[cmd.to] = [...toList, cmd.entityTempId];
+      }
+      return { ...state, notes: updateNoteFn(state.notes, cmd.tempId, patch) };
     }
 
     case 'convert-to-property': {
       let { nodes, edges } = state;
+      const { notes } = state;
       // Mark the node as removed
       nodes = updateNode(nodes, cmd.node.tempId, { removed: true });
       // Mark connected edges as removed
@@ -177,7 +240,7 @@ function applyCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, cmd
           });
         }
       }
-      return { nodes, edges };
+      return { nodes, edges, notes };
     }
 
     case 'accept-merge':
@@ -207,13 +270,16 @@ function applyCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, cmd
   }
 }
 
-function reverseCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, cmd: ReviewCommand): Pick<ExtractionReviewStore, 'nodes' | 'edges'> {
+function reverseCommand(state: ReviewCollections, cmd: ReviewCommand): ReviewCollections {
   switch (cmd.type) {
     case 'edit-node':
       return { ...state, nodes: updateNode(state.nodes, cmd.tempId, cmd.before) };
 
     case 'edit-edge':
       return { ...state, edges: updateEdge(state.edges, cmd.tempId, cmd.before) };
+
+    case 'edit-note':
+      return { ...state, notes: updateNoteFn(state.notes, cmd.tempId, cmd.before) };
 
     case 'add-edge':
       return { ...state, edges: state.edges.filter((e) => e.tempId !== cmd.edge.tempId) };
@@ -223,15 +289,34 @@ function reverseCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, c
 
     case 'remove-node': {
       let { nodes, edges } = state;
+      const { notes } = state;
       nodes = updateNode(nodes, cmd.node.tempId, { removed: false });
       for (const re of cmd.removedEdges) {
         edges = updateEdge(edges, re.tempId, { removed: false });
       }
-      return { nodes, edges };
+      return { nodes, edges, notes };
+    }
+
+    case 'remove-note':
+      return { ...state, notes: updateNoteFn(state.notes, cmd.note.tempId, { removed: false }) };
+
+    case 'toggle-note-binding': {
+      // Reverse by swapping from/to
+      const note = findNote(state.notes, cmd.tempId);
+      if (!note) return state;
+      const fromList = cmd.to === 'about' ? note.about : note.mentions;
+      const toList = cmd.from === 'about' ? note.about : note.mentions;
+      const patch: Partial<ReviewNote> = {};
+      patch[cmd.to] = fromList.filter((id) => id !== cmd.entityTempId);
+      if (!toList.includes(cmd.entityTempId)) {
+        patch[cmd.from] = [...toList, cmd.entityTempId];
+      }
+      return { ...state, notes: updateNoteFn(state.notes, cmd.tempId, patch) };
     }
 
     case 'convert-to-property': {
       let { nodes, edges } = state;
+      const { notes } = state;
       // Restore the node
       nodes = updateNode(nodes, cmd.node.tempId, { removed: false });
       // Restore edges
@@ -244,7 +329,7 @@ function reverseCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, c
           properties: { ...assignment.beforeProps },
         });
       }
-      return { nodes, edges };
+      return { nodes, edges, notes };
     }
 
     case 'accept-merge':
@@ -271,6 +356,7 @@ function reverseCommand(state: Pick<ExtractionReviewStore, 'nodes' | 'edges'>, c
 export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get) => ({
   nodes: [],
   edges: [],
+  notes: [],
   viewMode: 'extracted',
   selectedTempId: null,
   selectedType: null,
@@ -280,10 +366,11 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
   active: false,
   pendingConversion: null,
 
-  initialize: (nodes, edges, sourceUrl) =>
+  initialize: (nodes, edges, notes, sourceUrl) =>
     set({
       nodes,
       edges,
+      notes,
       viewMode: 'extracted',
       selectedTempId: null,
       selectedType: null,
@@ -298,6 +385,7 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
     set({
       nodes: [],
       edges: [],
+      notes: [],
       viewMode: 'extracted',
       selectedTempId: null,
       selectedType: null,
@@ -377,6 +465,59 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
       node: { ...node },
       removedEdges: connectedEdges.map((e) => ({ ...e })),
     };
+    const result = applyCommand(get(), cmd);
+    set({
+      ...result,
+      undoStack: [...get().undoStack, cmd],
+      redoStack: [],
+      selectedTempId: get().selectedTempId === tempId ? null : get().selectedTempId,
+      selectedType: get().selectedTempId === tempId ? null : get().selectedType,
+    });
+  },
+
+  editNote: (tempId, changes) => {
+    const note = findNote(get().notes, tempId);
+    if (!note) return;
+
+    const before: Partial<ReviewNote> = {};
+    const after: Partial<ReviewNote> = {};
+    for (const key of Object.keys(changes) as (keyof typeof changes)[]) {
+      (before as any)[key] = note[key];
+      (after as any)[key] = changes[key];
+    }
+
+    const cmd: ReviewCommand = { type: 'edit-note', tempId, before, after };
+    const result = applyCommand(get(), cmd);
+    set({ ...result, undoStack: [...get().undoStack, cmd], redoStack: [] });
+  },
+
+  toggleNoteBinding: (noteTempId, entityTempId) => {
+    const note = findNote(get().notes, noteTempId);
+    if (!note) return;
+
+    const isAbout = note.about.includes(entityTempId);
+    const isMention = note.mentions.includes(entityTempId);
+    if (!isAbout && !isMention) return;
+
+    const from: 'about' | 'mentions' = isAbout ? 'about' : 'mentions';
+    const to: 'about' | 'mentions' = isAbout ? 'mentions' : 'about';
+
+    const cmd: ReviewCommand = {
+      type: 'toggle-note-binding',
+      tempId: noteTempId,
+      entityTempId,
+      from,
+      to,
+    };
+    const result = applyCommand(get(), cmd);
+    set({ ...result, undoStack: [...get().undoStack, cmd], redoStack: [] });
+  },
+
+  removeNote: (tempId) => {
+    const note = findNote(get().notes, tempId);
+    if (!note || note.removed) return;
+
+    const cmd: ReviewCommand = { type: 'remove-note', note: { ...note } };
     const result = applyCommand(get(), cmd);
     set({
       ...result,
@@ -616,6 +757,8 @@ Return JSON like: {"has_framework": "written_in"}`;
   },
 
   activeNodes: () => get().nodes.filter((n) => !n.removed),
+
+  activeNotes: () => get().notes.filter((n) => !n.removed),
 
   activeEdges: () => {
     const { nodes, edges } = get();

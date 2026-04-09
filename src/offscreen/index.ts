@@ -108,6 +108,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       apiKey: message.payload.apiKey,
       model: message.payload.model,
       maxIterations: message.payload.maxIterations,
+      notesEnabled: message.payload.notesEnabled,
       onProgress: (event) => {
         if (event.type === 'llm_chunk') {
           chunkBuffer.add(event.text ?? '');

@@ -7,6 +7,8 @@ interface PromptInputProps {
   onSubmit: (prompt: string) => void;
 }
 
+const EXTRACTION_NOTES_KEY = 'extractionNotesEnabled';
+
 export function PromptInput({ onSubmit }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
   const [tabUrl, setTabUrl] = useState<string | null>(null);
@@ -14,6 +16,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
   const [model, setModel] = useState<string>('');
   const [budgetExceeded, setBudgetExceeded] = useState(false);
   const [complexity, setComplexity] = useState<PageComplexity | null>(null);
+  const [notesEnabled, setNotesEnabled] = useState(false);
 
   const extractionMode = useLLMStore((s) => s.extractionMode);
   const setExtractionMode = useLLMStore((s) => s.setExtractionMode);
@@ -66,7 +69,22 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
     chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }).then((response: any) => {
       if (response?.complexity) setComplexity(response.complexity);
     }).catch(() => {});
+
+    // Load the notes toggle setting (three-layer model: Phase 4)
+    chrome.storage.local.get(EXTRACTION_NOTES_KEY).then((result: Record<string, any>) => {
+      setNotesEnabled(Boolean(result[EXTRACTION_NOTES_KEY]));
+    }).catch(() => {});
   }, []);
+
+  const toggleNotes = async (next: boolean) => {
+    setNotesEnabled(next);
+    try {
+      await chrome.storage.local.set({ [EXTRACTION_NOTES_KEY]: next });
+    } catch {
+      // Storage may be unavailable; revert optimistic state.
+      setNotesEnabled(!next);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,6 +135,21 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
           Suggested: {suggestedMode === 'deep' ? 'Deep Extract (complex page)' : 'Quick Extract (simple page)'}
         </p>
       )}
+
+      {/* Notes toggle (three-layer model: Phase 4). When on, the LLM also
+          produces short prose notes attached to entities via about/mention. */}
+      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={notesEnabled}
+          onChange={(e) => toggleNotes(e.target.checked)}
+          className="accent-indigo-500"
+        />
+        <span>Generate notes</span>
+        <span className="text-[10px] text-zinc-600">
+          {notesEnabled ? '(prose units with wikilinks)' : ''}
+        </span>
+      </label>
 
       <div>
         <textarea

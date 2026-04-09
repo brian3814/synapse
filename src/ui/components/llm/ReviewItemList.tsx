@@ -3,15 +3,18 @@ import { useExtractionReviewStore } from '../../../graph/store/extraction-review
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { ReviewNodeItem } from './ReviewNodeItem';
 import { ReviewEdgeItem } from './ReviewEdgeItem';
+import { ReviewNoteItem } from './ReviewNoteItem';
 import { AddEdgeForm } from './AddEdgeForm';
 
 export function ReviewItemList() {
   const nodes = useExtractionReviewStore((s) => s.nodes);
   const edges = useExtractionReviewStore((s) => s.edges);
+  const notes = useExtractionReviewStore((s) => s.notes);
   const graphNodes = useGraphStore((s) => s.nodes);
   const [showAddEdge, setShowAddEdge] = useState(false);
 
   const activeNodes = nodes.filter((n) => !n.removed);
+  const activeNotes = notes.filter((n) => !n.removed);
 
   // Build a combined label map: review nodes + existing graph nodes
   const labelMap = useMemo(() => {
@@ -71,6 +74,21 @@ export function ReviewItemList() {
           </div>
         )}
       </div>
+
+      {/* Notes section (three-layer model: Phase 4) — only present when the
+          notes toggle was on during extraction */}
+      {activeNotes.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-zinc-400 mb-2">
+            Notes ({activeNotes.length})
+          </h4>
+          <div className="space-y-1">
+            {activeNotes.map((note) => (
+              <ReviewNoteItem key={note.tempId} note={note} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add edge — always available as long as there's at least 1 review node (can connect to existing) */}
       {showAddEdge ? (

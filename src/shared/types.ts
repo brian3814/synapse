@@ -293,8 +293,21 @@ export interface DiffItem {
   accepted: boolean;
 }
 
+/**
+ * Prose note candidate emitted by the LLM when the extractionNotesEnabled
+ * toggle is on. Stored alongside node/edge diff items so they can be
+ * carried into the review store in proceedToReview().
+ */
+export interface ExtractedNoteCandidate {
+  title: string;
+  content: string;
+  about: string[]; // entity names (resolved to review temp IDs later)
+  mentions: string[];
+}
+
 export interface ExtractionDiff {
   items: DiffItem[];
+  notes?: ExtractedNoteCandidate[];
 }
 
 // Node type (from ontology_node_types table).

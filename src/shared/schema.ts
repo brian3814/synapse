@@ -21,9 +21,22 @@ export const extractedEdgeSchema = z.object({
   type: z.string().optional(),
 });
 
+/**
+ * LLM-generated prose note. Emitted only when the extraction notes toggle
+ * is enabled. `about` names are resolved to ReviewNode temp IDs at review
+ * time; `mentions` likewise.
+ */
+export const extractedNoteSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().min(1),
+  about: z.array(z.string()).optional().default([]),
+  mentions: z.array(z.string()).optional().default([]),
+});
+
 export const extractionResultSchema = z.object({
   nodes: z.array(extractedNodeSchema),
   edges: z.array(extractedEdgeSchema),
+  notes: z.array(extractedNoteSchema).optional().default([]),
 });
 
 export const readingListExtractionSchema = z.object({
@@ -97,4 +110,5 @@ export const searchQuerySchema = z.object({
 
 export type ExtractedNode = z.infer<typeof extractedNodeSchema>;
 export type ExtractedEdge = z.infer<typeof extractedEdgeSchema>;
+export type ExtractedNote = z.infer<typeof extractedNoteSchema>;
 export type ExtractionResultParsed = z.infer<typeof extractionResultSchema>;

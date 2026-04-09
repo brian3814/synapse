@@ -1,12 +1,24 @@
 import { useCallback } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
-import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../../graph/store/extraction-review-store';
+import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
-import { QUICK_EXTRACT_SYSTEM_PROMPT } from '../../shared/quick-extract-prompt';
+import { getQuickExtractSystemPrompt } from '../../shared/quick-extract-prompt';
+
+const EXTRACTION_NOTES_ENABLED_KEY = 'extractionNotesEnabled';
+
+/** Read the persisted notes-toggle setting. Defaults to false (off). */
+async function isNotesEnabled(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.local.get(EXTRACTION_NOTES_ENABLED_KEY) as Record<string, any>;
+    return Boolean(stored[EXTRACTION_NOTES_ENABLED_KEY]);
+  } catch {
+    return false;
+  }
+}
 import { entityResolution, sourceContent, entitySources, edgeSources } from '../../db/client/db-client';
-import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
+import type { DiffItem, ExtractedNoteCandidate, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
 function streamFromOffscreen(
   requestId: string,
@@ -152,8 +164,14 @@ export async function buildDiffItems(
       tags?: string[];
     }>;
     edges: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
+    notes?: Array<{
+      title: string;
+      content: string;
+      about?: string[];
+      mentions?: string[];
+    }>;
   }
-): Promise<DiffItem[]> {
+): Promise<{ items: DiffItem[]; notes: ExtractedNoteCandidate[] }> {
   const graph = useGraphStore.getState();
 
   // Normalize first, filter out resource nodes (system-created).
@@ -194,7 +212,14 @@ export async function buildDiffItems(
     accepted: true,
   }));
 
-  return [...nodeItems, ...edgeItems];
+  const notes: ExtractedNoteCandidate[] = (validated.notes ?? []).map((n) => ({
+    title: n.title,
+    content: n.content,
+    about: n.about ?? [],
+    mentions: n.mentions ?? [],
+  }));
+
+  return { items: [...nodeItems, ...edgeItems], notes };
 }
 
 export function useLLMExtraction() {
@@ -226,6 +251,8 @@ export function useLLMExtraction() {
         throw new Error('No API key configured. Go to Settings to add one.');
       }
 
+      const notesOn = await isNotesEnabled();
+
       // Send LLM_REQUEST with requestId — offscreen reads apiKey from storage directly
       chrome.runtime.sendMessage({
         type: 'LLM_REQUEST',
@@ -234,6 +261,8 @@ export function useLLMExtraction() {
           provider: config.provider,
           model: config.model,
           prompt: text,
+          systemPrompt: getQuickExtractSystemPrompt(notesOn),
+          notesEnabled: notesOn,
         },
       });
 
@@ -263,11 +292,11 @@ export function useLLMExtraction() {
       const parsed = JSON.parse(jsonMatch[0]);
       const validated = extractionResultSchema.parse(parsed);
 
-      const items = await buildDiffItems(validated);
+      const { items, notes } = await buildDiffItems(validated);
 
       // Complete parse step
       useLLMStore.getState().completeCurrentStep();
-      useLLMStore.getState().setDiff({ items });
+      useLLMStore.getState().setDiff({ items, notes });
       useLLMStore.getState().setStatus('extracted');
     } catch (e: any) {
       const llmState = useLLMStore.getState();
@@ -315,6 +344,8 @@ export function useLLMExtraction() {
 
     llm.setStatus('extracting');
 
+    const notesOn = await isNotesEnabled();
+
     try {
       const userContent = prompt
         ? `${prompt}\n\n---\n\nPage content:\n\n${pageContent.content}`
@@ -327,7 +358,8 @@ export function useLLMExtraction() {
           provider: config.provider,
           model: config.model,
           prompt: userContent,
-          systemPrompt: QUICK_EXTRACT_SYSTEM_PROMPT,
+          systemPrompt: getQuickExtractSystemPrompt(notesOn),
+          notesEnabled: notesOn,
         },
       });
 
@@ -349,10 +381,10 @@ export function useLLMExtraction() {
 
       const parsed = JSON.parse(jsonMatch[0]);
       const validated = extractionResultSchema.parse(parsed);
-      const items = await buildDiffItems(validated);
+      const { items, notes } = await buildDiffItems(validated);
 
       useLLMStore.getState().completeCurrentStep();
-      useLLMStore.getState().setDiff({ items });
+      useLLMStore.getState().setDiff({ items, notes });
       useLLMStore.getState().setStatus('extracted');
     } catch (e: any) {
       const llmState = useLLMStore.getState();
@@ -522,6 +554,8 @@ export function useLLMExtraction() {
     llm.setStatus('agent-running');
     llm.setSourceUrl(tab.url ?? null);
 
+    const notesOn = await isNotesEnabled();
+
     // Send AGENT_RUN_START — offscreen reads apiKey from storage directly
     chrome.runtime.sendMessage({
       type: 'AGENT_RUN_START',
@@ -531,6 +565,7 @@ export function useLLMExtraction() {
         tabId: tab.id,
         provider: config.provider,
         model: config.model,
+        notesEnabled: notesOn,
       },
     });
 
@@ -574,8 +609,8 @@ export function useLLMExtraction() {
           if (event.extractionResult) {
             try {
               const validated = extractionResultSchema.parse(event.extractionResult);
-              const items = await buildDiffItems(validated);
-              useLLMStore.getState().setDiff({ items });
+              const { items, notes } = await buildDiffItems(validated);
+              useLLMStore.getState().setDiff({ items, notes });
               useLLMStore.getState().setStatus('extracted');
             } catch (e: any) {
               useLLMStore.getState().setError(`Failed to parse extraction result: ${e.message}`);
@@ -689,7 +724,36 @@ export function useLLMExtraction() {
       });
     }
 
-    useExtractionReviewStore.getState().initialize(reviewNodes, reviewEdges, llm.sourceUrl);
+    // Convert extracted notes → ReviewNotes, resolving entity names to
+    // review temp IDs via the nameToTempId map built above.
+    const reviewNotes: ReviewNote[] = [];
+    for (const extractedNote of diff.notes ?? []) {
+      const about: string[] = [];
+      const mentions: string[] = [];
+      for (const entityName of extractedNote.about) {
+        const tempId = nameToTempId.get(entityName.toLowerCase());
+        if (tempId) about.push(tempId);
+      }
+      for (const entityName of extractedNote.mentions) {
+        const tempId = nameToTempId.get(entityName.toLowerCase());
+        if (tempId && !about.includes(tempId)) mentions.push(tempId);
+      }
+      // Skip notes that bind to no entities (nothing to attach to)
+      if (about.length === 0 && mentions.length === 0) continue;
+
+      reviewNotes.push({
+        tempId: `temp-${crypto.randomUUID()}`,
+        title: extractedNote.title,
+        content: extractedNote.content,
+        about,
+        mentions,
+        removed: false,
+      });
+    }
+
+    useExtractionReviewStore
+      .getState()
+      .initialize(reviewNodes, reviewEdges, reviewNotes, llm.sourceUrl);
     useLLMStore.getState().setStatus('reviewing');
   }, []);
 
@@ -699,7 +763,15 @@ export function useLLMExtraction() {
     const activeNodes = reviewStore.activeNodes();
     const activeEdges = reviewStore.activeEdges();
 
-    if (activeNodes.length === 0 && activeEdges.length === 0) return;
+    const activeReviewNotes = reviewStore.activeNotes();
+
+    if (
+      activeNodes.length === 0 &&
+      activeEdges.length === 0 &&
+      activeReviewNotes.length === 0
+    ) {
+      return;
+    }
 
     llm.setStatus('merging');
 
@@ -805,10 +877,9 @@ export function useLLMExtraction() {
         }
       }
 
-      // Record edge provenance. Without notes, every LLM-produced edge is
-      // attributed to the extraction with the resource node as its anchor.
-      // With notes (Phase 4), a future branch will use source_type='note'
-      // and set source_id to the emitting note's ID.
+      // Record edge provenance. Every LLM-emitted edge is attributed to the
+      // extraction with the resource node as its anchor. Notes (below) can
+      // additionally source edges via source_type='note'.
       if (createdEdgeIds.length > 0 && resourceNode) {
         await Promise.all(
           createdEdgeIds.map((edgeId) =>
@@ -821,6 +892,127 @@ export function useLLMExtraction() {
             })
           )
         );
+      }
+
+      // Third pass: create note nodes and their about/mention/extracted_from edges.
+      // Notes have globally-unique names; on collision we auto-suffix with the
+      // source domain. If that still collides we suffix with a timestamp.
+      const noteCreatedIds: string[] = [];
+      const domainSuffix = resourceNode
+        ? (() => {
+            try {
+              return new URL(resourceNode.sourceUrl).hostname;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+
+      for (const note of activeReviewNotes) {
+        // Map about/mention temp IDs to real entity node IDs.
+        const aboutIds: string[] = [];
+        const mentionIds: string[] = [];
+        for (const eTempId of note.about) {
+          const realId = tempIdToRealId.get(eTempId);
+          if (realId) aboutIds.push(realId);
+        }
+        for (const eTempId of note.mentions) {
+          const realId = tempIdToRealId.get(eTempId);
+          if (realId) mentionIds.push(realId);
+        }
+        if (aboutIds.length === 0 && mentionIds.length === 0) continue;
+
+        // Create the note node. Handle name collision via unique index on
+        // nodes.name WHERE type='note'. Retry with a disambiguating suffix.
+        let noteNodeId: string | null = null;
+        let candidateName = note.title;
+        for (let attempt = 0; attempt < 3 && !noteNodeId; attempt++) {
+          try {
+            const created = await useGraphStore.getState().createNode({
+              name: candidateName,
+              type: 'note',
+              properties: { content: note.content },
+              sourceUrl: llm.sourceUrl ?? undefined,
+            });
+            if (created) {
+              noteNodeId = created.id;
+              noteCreatedIds.push(created.id);
+            } else {
+              break;
+            }
+          } catch {
+            if (attempt === 0 && domainSuffix) {
+              candidateName = `${note.title} (${domainSuffix})`;
+            } else {
+              candidateName = `${note.title} (${Date.now()})`;
+            }
+          }
+        }
+        if (!noteNodeId) continue;
+
+        // Edges from note → entity (about / mention) and note → resource (extracted_from).
+        const noteEdgeIds: string[] = [];
+
+        for (const entityId of aboutIds) {
+          const createdEdge = await useGraphStore.getState().createEdge({
+            sourceId: noteNodeId,
+            targetId: entityId,
+            label: 'about',
+            skipProvenance: true,
+          });
+          if (createdEdge) noteEdgeIds.push(createdEdge.id);
+        }
+        for (const entityId of mentionIds) {
+          const createdEdge = await useGraphStore.getState().createEdge({
+            sourceId: noteNodeId,
+            targetId: entityId,
+            label: 'mention',
+            skipProvenance: true,
+          });
+          if (createdEdge) noteEdgeIds.push(createdEdge.id);
+        }
+        if (resourceNode) {
+          const createdEdge = await useGraphStore.getState().createEdge({
+            sourceId: noteNodeId,
+            targetId: resourceNode.id,
+            label: 'extracted_from',
+            skipProvenance: true,
+          });
+          if (createdEdge) noteEdgeIds.push(createdEdge.id);
+        }
+
+        // All note-originated edges get source_type='note' with source_id=note ID.
+        await Promise.all(
+          noteEdgeIds.map((edgeId) =>
+            edgeSources.add({
+              edgeId,
+              sourceType: 'note',
+              sourceId: noteNodeId,
+            }).catch(() => {})
+          )
+        );
+
+        // Entity-source rows: each about/mention entity gets a row linking it
+        // to the resource, with the correct relation_type.
+        if (resourceNode) {
+          await Promise.all([
+            ...aboutIds.map((eId) =>
+              entitySources.add(eId, resourceNode!.id, 'about').catch(() => {})
+            ),
+            ...mentionIds.map((eId) =>
+              entitySources.add(eId, resourceNode!.id, 'mention').catch(() => {})
+            ),
+          ]);
+        }
+
+        // Run the wikilink parser on the note content to create additional edges.
+        try {
+          const { createWikilinkEdgesForNote } = await import('../../shared/wikilink-parser');
+          await createWikilinkEdgesForNote(noteNodeId, note.content);
+        } catch (e) {
+          // Wikilink parsing is best-effort; don't fail the whole merge on it.
+          console.warn('[Extraction] Wikilink parser failed:', e);
+        }
       }
 
       // Save source content linked to the system-owned resource node.

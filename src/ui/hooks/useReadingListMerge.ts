@@ -27,10 +27,10 @@ export function useReadingListMerge() {
       nodes: item.extractedNodes,
       edges: item.extractedEdges,
     };
-    const items = await buildDiffItems(validated);
+    const { items, notes } = await buildDiffItems(validated);
 
     // Set diff and advance to extracted status
-    llm.setDiff({ items });
+    llm.setDiff({ items, notes });
     llm.setStatus('extracted');
 
     // Immediately open review UI

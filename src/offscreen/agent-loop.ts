@@ -7,7 +7,21 @@ import {
 } from './llm-executor';
 import { isBlockedUrl, fetchAndCleanContent } from './url-utils';
 
-const SYSTEM_PROMPT = `You are a knowledge graph extraction agent. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges) into a structured knowledge graph.
+function getAgentSystemPrompt(notesEnabled: boolean): string {
+  const notesRules = notesEnabled
+    ? `
+
+Rules for NOTES (enabled):
+- When calling save_entities, include a "notes" array alongside nodes/edges.
+- Each note is 3-10 sentences of focused prose about ONE idea or insight.
+- Title each note specifically to the source (e.g. "Notion's SharedWorker architecture for multi-tab SQLite", NOT "Architecture Overview").
+- Use [[Entity Name]] wikilinks in the content to reference entities from the nodes array.
+- Each note has an "about" array (1-3 entities the note is primarily about) and a "mentions" array (any other referenced entities).
+- Entity names in about/mentions must match the nodes array exactly.
+- Produce 2-6 notes per page, one per distinct idea.`
+    : '';
+
+  return `You are a knowledge graph extraction agent. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges) into a structured knowledge graph.
 
 Workflow:
 1. Start by using get_page_metadata to understand the page structure
@@ -29,9 +43,10 @@ Rules for EDGES:
 - Prefer these seed relationship labels when applicable: subfield_of, part_of, instance_of, created_by, affiliated_with, used_in, builds_on, enables, contradicts, alternative_to, preceded_by.
 - Otherwise use consistent, lowercase snake_case labels (e.g., "works_at", "located_in").
 - Ensure all edges reference entities that exist in your nodes array by their exact name.
-- Call save_entities exactly once when done — it is the terminal tool.
+- Call save_entities exactly once when done — it is the terminal tool.${notesRules}
 
 Be efficient: don't call tools unnecessarily. If get_page_content gives you everything you need, proceed directly to save_entities.`;
+}
 
 const MAX_ITERATIONS = 15;
 const TOOL_TIMEOUT_MS = 30_000;
@@ -44,12 +59,14 @@ interface AgentLoopParams {
   apiKey: string;
   model: string;
   maxIterations?: number;
+  notesEnabled?: boolean;
   onProgress: (event: AgentProgressEvent) => void;
 }
 
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
   const { runId, userPrompt, tabId, apiKey, model, onProgress } = params;
   const maxIter = params.maxIterations ?? MAX_ITERATIONS;
+  const systemPrompt = getAgentSystemPrompt(params.notesEnabled ?? false);
 
   const anthropicTools = toAnthropicTools(AGENT_TOOLS);
   const messages: AnthropicMessage[] = [
@@ -67,7 +84,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
       result = await streamAnthropicWithTools(
         apiKey,
         model,
-        SYSTEM_PROMPT,
+        systemPrompt,
         messages,
         anthropicTools,
         (chunk) => onProgress({ type: 'llm_chunk', text: chunk })

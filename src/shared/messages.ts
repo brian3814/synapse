@@ -73,6 +73,8 @@ export interface LLMRequestMessage extends ExtensionMessage {
     prompt: string;
     systemPrompt?: string;
     messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    /** Phase 4: carries the extractionNotesEnabled toggle for prompt selection. */
+    notesEnabled?: boolean;
   };
 }
 
@@ -133,6 +135,8 @@ export interface AgentRunStartMessage extends ExtensionMessage {
     provider: string;
     model: string;
     maxIterations?: number;
+    /** Phase 4: when true, the agent produces prose notes alongside entities. */
+    notesEnabled?: boolean;
   };
 }
 
