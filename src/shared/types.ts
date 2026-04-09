@@ -266,7 +266,7 @@ export interface LLMConfig {
 export interface ExtractionResult {
   nodes: Array<{
     name: string;
-    type: string;
+    type?: string; // legacy; entities may omit type entirely
     label?: string; // entity semantic label (concept, person, technology, ...)
     properties?: Record<string, unknown>;
     tags?: string[];

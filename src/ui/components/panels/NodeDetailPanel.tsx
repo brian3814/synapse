@@ -26,9 +26,11 @@ export function NodeDetailPanel() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState('');
+  const [label, setLabel] = useState<string | null>(null);
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [nodeTags, setNodeTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
   const [sources, setSources] = useState<
     { resourceId: string; relationType: EntityRelationType; createdAt: string }[]
   >([]);
@@ -37,6 +39,7 @@ export function NodeDetailPanel() {
     if (node) {
       setName(node.name);
       setType(node.type);
+      setLabel(node.label ?? null);
       setProperties(node.properties);
       setEditing(false);
       setTagInput('');
@@ -101,7 +104,13 @@ export function NodeDetailPanel() {
   }
 
   const handleSave = async () => {
-    await updateNode({ id: node.id, name, type, properties });
+    await updateNode({
+      id: node.id,
+      name,
+      type,
+      label: type === 'entity' ? (label ?? undefined) : undefined,
+      properties,
+    });
     await tags.setForNode(node.id, nodeTags);
     setEditing(false);
   };
@@ -168,7 +177,7 @@ export function NodeDetailPanel() {
 
       {/* Metadata section */}
       <div className="space-y-3" style={{ paddingTop: 4 }}>
-        {/* Type */}
+        {/* Type (structural layer) */}
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
           {editing ? (
@@ -177,12 +186,9 @@ export function NodeDetailPanel() {
               onChange={(e) => setType(e.target.value)}
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
             >
+              <option value="entity">entity</option>
               <option value="resource">resource</option>
               <option value="note">note</option>
-              <option value="concept">concept</option>
-              {!['resource', 'note', 'concept'].includes(type) && (
-                <option value={type}>{type}</option>
-              )}
             </select>
           ) : (
             <span
@@ -193,6 +199,39 @@ export function NodeDetailPanel() {
             </span>
           )}
         </div>
+
+        {/* Label (semantic categorization, entities only) */}
+        {(type === 'entity' || node.type === 'entity') && (
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">Label</label>
+            {editing ? (
+              <select
+                value={label ?? 'concept'}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+              >
+                {entityLabels.map((t) => (
+                  <option key={t.type} value={t.type}>{t.type}</option>
+                ))}
+                {label && !entityLabels.some((t) => t.type === label) && (
+                  <option value={label}>{label}</option>
+                )}
+              </select>
+            ) : (
+              <span className="text-xs text-zinc-300">{node.label ?? '—'}</span>
+            )}
+          </div>
+        )}
+
+        {/* Folder path (notes only) */}
+        {node.type === 'note' && node.folderPath !== undefined && (
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">Folder</label>
+            <span className="text-xs text-zinc-300 font-mono">
+              {node.folderPath || <em className="text-zinc-500">root</em>}
+            </span>
+          </div>
+        )}
 
         {/* Tags */}
         <div>

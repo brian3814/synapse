@@ -7,7 +7,8 @@ export type TempId = string; // `temp-${uuid}`
 export interface ReviewNode {
   tempId: TempId;
   name: string;
-  type: string;
+  type: string; // structural layer: 'resource' | 'entity' | 'note'
+  label?: string; // semantic entity label (concept, person, technology, ...)
   properties: Record<string, unknown>;
   tags?: string[];
   mergeRecommendation?: {
@@ -80,7 +81,10 @@ interface ExtractionReviewStore {
   select(tempId: TempId | null, type: 'node' | 'edge' | null): void;
 
   // Edits
-  editNode(tempId: TempId, changes: Partial<Pick<ReviewNode, 'name' | 'type' | 'properties' | 'tags'>>): void;
+  editNode(
+    tempId: TempId,
+    changes: Partial<Pick<ReviewNode, 'name' | 'type' | 'label' | 'properties' | 'tags'>>
+  ): void;
   editEdge(tempId: TempId, changes: Partial<Pick<ReviewEdge, 'label' | 'type'>>): void;
   addEdge(sourceTempId: TempId, targetTempId: TempId, label: string, type?: string): void;
   removeEdge(tempId: TempId): void;

@@ -7,22 +7,28 @@ const EXTRACTION_SYSTEM_PROMPT = `You are a knowledge graph extraction assistant
 Output format:
 {
   "nodes": [
-    { "name": "Entity Name", "type": "descriptive_type", "properties": { "key": "value" }, "tags": ["domain_tag"] }
+    { "name": "Entity Name", "label": "semantic_label", "properties": { "key": "value" }, "tags": ["domain_tag"] }
   ],
   "edges": [
-    { "sourceName": "Source Entity", "targetName": "Target Entity", "label": "relationship_type", "type": "relationship_category" }
+    { "sourceName": "Source Entity", "targetName": "Target Entity", "label": "relationship_label" }
   ]
 }
 
-Rules:
-- Extract the most important entities and relationships
-- Use consistent, lowercase relationship labels (e.g., "works_at", "located_in", "created_by")
-- Node type must be one of: resource, concept, note
-- For resource nodes, include properties.kind (url, image, video, pdf)
-- Include a tags array for domain annotations (e.g. ["technology", "ai"])
-- Include relevant properties as key-value pairs
-- Ensure all edges reference entities that exist in the nodes array by their exact name
-- Return ONLY valid JSON, no other text`;
+Rules for NODES:
+- Do NOT output resource nodes — the system creates them automatically. Every node is an entity.
+- Use the "label" field to categorize each node semantically. Allowed labels:
+  concept, person, organization, technology, event, place, methodology.
+- If no label fits, default to "concept".
+- Include relevant properties as key-value pairs.
+- Include a "tags" array for domain annotations (e.g. ["technology", "ai"]).
+
+Rules for EDGES:
+- Use consistent, lowercase relationship labels (e.g., "works_at", "located_in", "created_by").
+- Prefer these seed labels when applicable: subfield_of, part_of, instance_of, created_by,
+  affiliated_with, used_in, builds_on, enables, contradicts, alternative_to, preceded_by.
+- Ensure all edges reference entities that exist in the nodes array by their exact name.
+
+Return ONLY valid JSON, no other text.`;
 
 export async function executeLLMRequestStreaming(
   payload: LLMRequestWithKeyMessage['payload'],

@@ -10,17 +10,20 @@ Return ONLY valid JSON:
 {
   "summary": "...",
   "keyTopics": ["topic1", "topic2"],
-  "nodes": [{ "name": "...", "type": "...", "properties": {...}, "tags": ["..."] }],
+  "nodes": [{ "name": "...", "label": "semantic_label", "properties": {...}, "tags": ["..."] }],
   "edges": [{ "sourceName": "...", "targetName": "...", "label": "..." }]
 }
 
 Rules:
-- Extract the most important entities and relationships
-- Use consistent, lowercase relationship labels (e.g., "works_at", "located_in")
-- Node type must be one of: resource, concept, note
-- Include a tags array for domain annotations (e.g. ["technology", "ai"])
-- Include relevant properties as key-value pairs
-- Ensure all edges reference entities that exist in the nodes array by their exact name`;
+- Do NOT output resource nodes. The source URL is automatically tracked as a resource by the system.
+- Every node is an entity. Use the "label" field to categorize it semantically. Allowed labels:
+  concept, person, organization, technology, event, place, methodology.
+- If no label fits, default to "concept".
+- Extract the most important entities and relationships.
+- Use consistent, lowercase relationship labels (e.g., "works_at", "located_in", "built_by").
+- Include a tags array for domain annotations (e.g. ["technology", "ai"]).
+- Include relevant properties as key-value pairs.
+- Ensure all edges reference entities that exist in the nodes array by their exact name.`;
 
 const READING_LIST_FETCH_MAX_BYTES = 100_000;
 
@@ -34,7 +37,13 @@ export async function extractReadingListItem(payload: {
   success: boolean;
   summary?: string;
   keyTopics?: string[];
-  nodes?: Array<{ name: string; type: string; properties?: Record<string, unknown>; tags?: string[] }>;
+  nodes?: Array<{
+    name: string;
+    type?: string;
+    label?: string;
+    properties?: Record<string, unknown>;
+    tags?: string[];
+  }>;
   edges?: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
   pageContent?: string;
   pageTitle?: string;

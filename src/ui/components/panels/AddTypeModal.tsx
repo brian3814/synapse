@@ -27,8 +27,13 @@ export function AddTypeModal({ onClose, onCreated }: AddTypeModalProps) {
       setError('Lowercase letters, numbers, hyphens, underscores only (max 50 chars)');
       return;
     }
+    // Prevent collision with structural types — those are reserved.
+    if (['resource', 'entity', 'note'].includes(normalized)) {
+      setError('Reserved structural type — pick a different label');
+      return;
+    }
     if (types.some((t) => t.type === normalized)) {
-      setError('Type already exists');
+      setError('Label already exists');
       return;
     }
 
@@ -36,6 +41,7 @@ export function AddTypeModal({ onClose, onCreated }: AddTypeModalProps) {
     const result = await createType({
       type: normalized,
       description: description.trim() || undefined,
+      category: 'entity_label',
     });
     setSubmitting(false);
 
@@ -43,7 +49,7 @@ export function AddTypeModal({ onClose, onCreated }: AddTypeModalProps) {
       onCreated(result.type);
       onClose();
     } else {
-      setError('Failed to create type');
+      setError('Failed to create label');
     }
   };
 
@@ -53,14 +59,18 @@ export function AddTypeModal({ onClose, onCreated }: AddTypeModalProps) {
         className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 w-72 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-zinc-100 mb-3">Add New Type</h3>
+        <h3 className="text-sm font-semibold text-zinc-100 mb-3">Add Entity Label</h3>
+        <p className="text-xs text-zinc-500 mb-3">
+          Entity labels categorize nodes semantically (concept, person, technology, ...).
+          Structural types (resource / entity / note) are fixed.
+        </p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-zinc-400 block mb-1">Name</label>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">Label</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. tool, person, project"
+              placeholder="e.g. paper, dataset, framework"
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
               autoFocus
             />

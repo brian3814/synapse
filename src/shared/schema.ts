@@ -1,9 +1,15 @@
 import { z } from 'zod';
 
-// LLM extraction output schema
+// LLM extraction output schema.
+//
+// In the three-layer model, the LLM outputs entities and edges. Resources are
+// system-created (never emitted by the LLM). The `type` field is optional and
+// is narrowed to 'entity' at merge time; what the LLM actually picks is a
+// semantic `label` (concept/person/organization/...).
 export const extractedNodeSchema = z.object({
   name: z.string().min(1),
-  type: z.string().min(1),
+  type: z.string().optional(), // legacy; defaults to 'entity' during normalization
+  label: z.string().optional(), // semantic entity label: concept, person, technology, ...
   properties: z.record(z.string(), z.unknown()).optional(),
   tags: z.array(z.string()).optional(),
 });

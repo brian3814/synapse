@@ -55,13 +55,114 @@ function streamFromOffscreen(
   });
 }
 
+/**
+ * Normalizes an LLM-extracted node to the three-layer model:
+ * - Filters out any `type='resource'` outputs (resources are system-created)
+ * - Treats everything else as an entity: `type='entity'` with a semantic `label`
+ * - Back-compat: `type='concept'` (legacy) becomes `label='concept'`
+ */
+interface NormalizedExtractedNode {
+  name: string;
+  type: 'entity';
+  label: string;
+  properties?: Record<string, unknown>;
+  tags?: string[];
+}
+
+function normalizeExtractedNode(raw: {
+  name: string;
+  type?: string;
+  label?: string;
+  properties?: Record<string, unknown>;
+  tags?: string[];
+}): NormalizedExtractedNode | null {
+  const rawType = (raw.type ?? '').toLowerCase().trim();
+  if (rawType === 'resource') return null; // system-owned; drop
+
+  // If the LLM still outputs a legacy semantic type (e.g. 'concept', 'person'),
+  // promote it to a label on the 'entity' layer.
+  let label = raw.label?.trim();
+  if (!label) {
+    if (rawType && rawType !== 'entity' && rawType !== 'note') {
+      label = rawType;
+    } else {
+      label = 'concept';
+    }
+  }
+
+  // Note: extraction produces entities, not notes. Note creation is a Phase 4
+  // feature gated by the extractionNotesEnabled toggle.
+  return {
+    name: raw.name,
+    type: 'entity',
+    label,
+    properties: raw.properties,
+    tags: raw.tags,
+  };
+}
+
+/**
+ * Ensures a resource node exists for the given URL. Resource nodes are
+ * system-owned in the three-layer model: they are created deterministically
+ * at merge time (never by the LLM), guaranteeing the provenance chain is
+ * always intact. Re-uses an existing resource node if one is already present
+ * for the URL.
+ */
+export async function ensureResourceNode(
+  sourceUrl: string,
+  title?: string | null
+): Promise<{ id: string; identifier: string | null; sourceUrl: string } | null> {
+  const graph = useGraphStore.getState();
+
+  // In-memory lookup (fast path)
+  const existing = graph.nodes.find(
+    (n) => n.type === 'resource' && n.sourceUrl === sourceUrl
+  );
+  if (existing) return { id: existing.id, identifier: existing.identifier, sourceUrl };
+
+  // Not in memory — create it. createNode is idempotent via identifier
+  // (generateIdentifier produces a stable slug from the URL).
+  let displayName = title?.trim();
+  if (!displayName) {
+    try {
+      const u = new URL(sourceUrl);
+      displayName = u.hostname + u.pathname;
+    } catch {
+      displayName = sourceUrl;
+    }
+  }
+
+  const created = await graph.createNode({
+    name: displayName,
+    type: 'resource',
+    properties: {},
+    sourceUrl,
+  });
+  if (!created) return null;
+  return { id: created.id, identifier: created.identifier, sourceUrl };
+}
+
 export async function buildDiffItems(
-  validated: { nodes: Array<{ name: string; type: string; properties?: Record<string, unknown>; tags?: string[] }>; edges: Array<{ sourceName: string; targetName: string; label: string; type?: string }> }
+  validated: {
+    nodes: Array<{
+      name: string;
+      type?: string;
+      label?: string;
+      properties?: Record<string, unknown>;
+      tags?: string[];
+    }>;
+    edges: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
+  }
 ): Promise<DiffItem[]> {
   const graph = useGraphStore.getState();
 
+  // Normalize first, filter out resource nodes (system-created).
+  const normalizedNodes = validated.nodes
+    .map(normalizeExtractedNode)
+    .filter((n): n is NormalizedExtractedNode => n !== null);
+
   // Resolve all nodes in parallel to avoid sequential DB round-trips
-  const nodeItems = await Promise.all(validated.nodes.map(async (node): Promise<DiffItem> => {
+  const nodeItems = await Promise.all(normalizedNodes.map(async (node): Promise<DiffItem> => {
     // First try in-memory exact match
     const inMemoryMatch = graph.nodes.find(
       (n) => n.name.toLowerCase() === node.name.toLowerCase()
@@ -512,7 +613,13 @@ export function useLLMExtraction() {
     // Convert node DiffItems → ReviewNodes (resolve fuzzy matches in parallel)
     const nodeItems = diff.items.filter(item => item.type === 'node');
     const resolvedNodes = await Promise.all(nodeItems.map(async (item) => {
-      const extracted = item.extracted as { name: string; type: string; properties?: Record<string, unknown>; tags?: string[] };
+      const extracted = item.extracted as {
+        name: string;
+        type: string;
+        label?: string;
+        properties?: Record<string, unknown>;
+        tags?: string[];
+      };
       const tempId = `temp-${crypto.randomUUID()}`;
 
       let mergeRecommendation: ReviewNode['mergeRecommendation'];
@@ -547,7 +654,16 @@ export function useLLMExtraction() {
         }
       }
 
-      return { tempId, name: extracted.name, type: extracted.type, properties: extracted.properties ?? {}, tags: extracted.tags ?? [], mergeRecommendation, removed: false } as ReviewNode;
+      return {
+        tempId,
+        name: extracted.name,
+        type: extracted.type,
+        label: extracted.label,
+        properties: extracted.properties ?? {},
+        tags: extracted.tags ?? [],
+        mergeRecommendation,
+        removed: false,
+      } as ReviewNode;
     }));
 
     for (const node of resolvedNodes) {
@@ -591,7 +707,15 @@ export function useLLMExtraction() {
       const graph = useGraphStore.getState();
       const tempIdToRealId = new Map<string, string>();
 
-      // First pass: create/merge nodes
+      // Pass 0: deterministically ensure a resource node exists for this source URL.
+      // In the three-layer model, resources are system-owned — the LLM never emits
+      // them, and the merge always anchors its provenance to a real resource node.
+      let resourceNode: { id: string; identifier: string | null; sourceUrl: string } | null = null;
+      if (llm.sourceUrl) {
+        resourceNode = await ensureResourceNode(llm.sourceUrl);
+      }
+
+      // First pass: create/merge entity nodes (and any other non-resource nodes)
       for (const node of activeNodes) {
         if (node.mergeRecommendation?.status === 'accepted') {
           // Merge: use existing node ID
@@ -618,10 +742,13 @@ export function useLLMExtraction() {
             }
           }
         } else {
-          // New node: create it
+          // New node: create it. Resources are never in the review; the LLM is
+          // prompted to only emit entities (and notes, when that Phase 4 toggle
+          // is on). Entities carry a semantic label.
           const created = await graph.createNode({
             name: node.name,
             type: node.type,
+            label: node.label,
             properties: node.properties,
             sourceUrl: llm.sourceUrl ?? undefined,
           });
@@ -670,15 +797,11 @@ export function useLLMExtraction() {
         }
       }
 
-      // Save source content
-      if (llm.sourceUrl && llm.inputText) {
+      // Save source content linked to the system-owned resource node.
+      if (llm.sourceUrl && llm.inputText && resourceNode) {
         try {
-          const resourceNodeId = useGraphStore.getState().nodes.find(
-            (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
-          )?.id;
-
           await sourceContent.save({
-            nodeId: resourceNodeId,
+            nodeId: resourceNode.id,
             url: llm.sourceUrl,
             content: llm.inputText,
           });
@@ -689,28 +812,23 @@ export function useLLMExtraction() {
 
       // Link entity nodes to their source resource (parallelized per Pitfall #20).
       // The three-layer model tracks this in entity_sources with a relation_type
-      // distinction (about/mention). Direct review apply without notes defaults to 'about'.
-      if (llm.sourceUrl) {
-        const resourceNode = useGraphStore.getState().nodes.find(
-          (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
-        );
-        if (resourceNode) {
-          const entityNodeIds: string[] = [];
-          for (const node of activeNodes) {
-            if (node.type === 'entity' || node.type === 'concept') {
-              const realId = tempIdToRealId.get(node.tempId);
-              if (realId) entityNodeIds.push(realId);
-            }
-          }
-          if (entityNodeIds.length > 0) {
-            await Promise.all(
-              entityNodeIds.map((id) =>
-                entitySources.add(id, resourceNode.id, 'about').catch(() => {
-                  // Best-effort: source link may already exist
-                })
-              )
-            );
-          }
+      // distinction (about/mention). Review apply without notes defaults to 'about'.
+      if (resourceNode) {
+        const entityNodeIds: string[] = [];
+        for (const node of activeNodes) {
+          if (node.type !== 'entity') continue;
+          const realId = tempIdToRealId.get(node.tempId)
+            ?? node.mergeRecommendation?.existingNodeId;
+          if (realId) entityNodeIds.push(realId);
+        }
+        if (entityNodeIds.length > 0) {
+          await Promise.all(
+            entityNodeIds.map((id) =>
+              entitySources.add(id, resourceNode!.id, 'about').catch(() => {
+                // Best-effort: source link may already exist
+              })
+            )
+          );
         }
       }
 

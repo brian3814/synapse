@@ -18,15 +18,16 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
   const updateConversionKey = useExtractionReviewStore((s) => s.updateConversionKey);
   const confirmConvertToProperty = useExtractionReviewStore((s) => s.confirmConvertToProperty);
   const cancelConvertToProperty = useExtractionReviewStore((s) => s.cancelConvertToProperty);
-  const types = useNodeTypeStore((s) => s.types);
+  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
 
   const isSelected = selectedTempId === node.tempId;
   const [editName, setEditName] = useState(node.name);
-  const [editType, setEditType] = useState(node.type);
+  const [editLabel, setEditLabel] = useState(node.label ?? 'concept');
   const [showMergeDetail, setShowMergeDetail] = useState(false);
 
   const merge = node.mergeRecommendation;
   const isPendingConversion = pendingConversion?.nodeTempId === node.tempId;
+  const isEntity = node.type === 'entity';
 
   const handleClick = () => {
     if (isSelected) {
@@ -34,14 +35,14 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
     } else {
       select(node.tempId, 'node');
       setEditName(node.name);
-      setEditType(node.type);
+      setEditLabel(node.label ?? 'concept');
     }
   };
 
   const handleSaveEdit = () => {
-    const changes: Partial<Pick<ReviewNode, 'name' | 'type'>> = {};
+    const changes: Partial<Pick<ReviewNode, 'name' | 'label'>> = {};
     if (editName !== node.name) changes.name = editName;
-    if (editType !== node.type) changes.type = editType;
+    if (isEntity && editLabel !== (node.label ?? 'concept')) changes.label = editLabel;
     if (Object.keys(changes).length > 0) {
       editNode(node.tempId, changes);
     }
@@ -82,7 +83,9 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
           }}
         />
         <span className="text-sm text-zinc-200 truncate font-medium">{node.name}</span>
-        <span className="text-xs text-zinc-500 ml-auto shrink-0">{node.type}</span>
+        <span className="text-xs text-zinc-500 ml-auto shrink-0">
+          {isEntity ? (node.label ?? 'concept') : node.type}
+        </span>
 
         {/* Merge badge */}
         {merge?.status === 'pending' && (
@@ -158,22 +161,27 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
               placeholder="Name"
               onClick={(e) => e.stopPropagation()}
             />
-            <select
-              value={editType}
-              onChange={(e) => {
-                setEditType(e.target.value);
-                editNode(node.tempId, { type: e.target.value });
-              }}
-              className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {types.map((t) => (
-                <option key={t.type} value={t.type}>{t.type}</option>
-              ))}
-              {!types.some((t) => t.type === node.type) && (
-                <option value={node.type}>{node.type}</option>
-              )}
-            </select>
+            {isEntity ? (
+              <select
+                value={editLabel}
+                onChange={(e) => {
+                  setEditLabel(e.target.value);
+                  editNode(node.tempId, { label: e.target.value });
+                }}
+                className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500"
+                onClick={(e) => e.stopPropagation()}
+                title="Entity label"
+              >
+                {entityLabels.map((t) => (
+                  <option key={t.type} value={t.type}>{t.type}</option>
+                ))}
+                {!entityLabels.some((t) => t.type === editLabel) && editLabel && (
+                  <option value={editLabel}>{editLabel}</option>
+                )}
+              </select>
+            ) : (
+              <span className="text-xs text-zinc-500 px-2 py-1">{node.type}</span>
+            )}
           </div>
 
           {/* Properties display */}
