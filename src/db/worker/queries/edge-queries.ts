@@ -27,6 +27,20 @@ export async function getEdgesForNode(nodeId: string): Promise<DbEdge[]> {
   return rows;
 }
 
+/**
+ * Look up the seeded category for a relationship label.
+ * The three-layer model keeps the canonical relationship name in `label`
+ * (drives dedup / queries) and a derived category in `type` (drives viz grouping).
+ * When the label isn't in the ontology, we fall back to 'related'.
+ */
+async function deriveEdgeType(label: string): Promise<string> {
+  const { rows } = await executeQuery<{ category: string }>(
+    'SELECT category FROM ontology_edge_types WHERE type = ?;',
+    [label]
+  );
+  return rows[0]?.category ?? 'related';
+}
+
 export async function createEdge(input: {
   sourceId: string;
   targetId: string;
@@ -38,6 +52,10 @@ export async function createEdge(input: {
   sourceUrl?: string;
 }): Promise<DbEdge> {
   const id = generateId();
+  // Auto-derive type from label if caller didn't specify one. This keeps
+  // the LLM prompt simple (it only outputs `label`) while the graph viz
+  // still gets a stable category to color/style the edge by.
+  const type = input.type ?? (await deriveEdgeType(input.label));
   const { rows } = await executeQuery<DbEdge>(
     `INSERT INTO edges (id, source_id, target_id, label, type, properties, weight, directed, source_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -47,7 +65,7 @@ export async function createEdge(input: {
       input.sourceId,
       input.targetId,
       input.label,
-      input.type ?? 'related',
+      type,
       input.properties ?? '{}',
       input.weight ?? 1.0,
       input.directed !== false ? 1 : 0,

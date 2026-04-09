@@ -14,6 +14,7 @@ import * as spatialQueries from './queries/spatial-queries';
 import * as readingListQueries from './queries/reading-list-queries';
 import * as tagQueries from './queries/tag-queries';
 import * as entitySourceQueries from './queries/entity-source-queries';
+import * as edgeSourceQueries from './queries/edge-source-queries';
 import * as chatQueries from './queries/chat-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
@@ -322,6 +323,25 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'entitySources.getEntitiesForResource': {
       ensureInit();
       return { result: await entitySourceQueries.getEntitiesForResource(params as string) };
+    }
+
+    // Edge source operations (edge_sources table — provenance tracking)
+    case 'edgeSources.add': {
+      ensureInit();
+      await edgeSourceQueries.addEdgeSource(params as any);
+      return { result: { success: true } };
+    }
+    case 'edgeSources.getForEdge': {
+      ensureInit();
+      return { result: await edgeSourceQueries.getSourcesForEdge(params as string) };
+    }
+    case 'edgeSources.removeForNote': {
+      ensureInit();
+      return { result: await edgeSourceQueries.removeSourcesForNote(params as string) };
+    }
+    case 'edgeSources.getEdgesFromNote': {
+      ensureInit();
+      return { result: await edgeSourceQueries.getEdgesFromNote(params as string) };
     }
 
     // Indexed file operations

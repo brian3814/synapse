@@ -215,6 +215,37 @@ export const tags = {
     sendRequest('tags.getAllTags') as Promise<string[]>,
 };
 
+// Edge provenance operations (edge_sources table).
+// Edges can originate from three kinds of sources in the three-layer model:
+//   - 'note':       the edge was inferred from a note's prose (source_id = note node ID)
+//   - 'extraction': the edge was emitted directly by an LLM extraction (resource_id = resource node ID)
+//   - 'user':       the edge was created manually in the UI
+export type EdgeProvenanceType = 'note' | 'extraction' | 'user';
+
+export const edgeSources = {
+  add: (input: {
+    edgeId: string;
+    sourceType: EdgeProvenanceType;
+    sourceId?: string | null;
+    resourceId?: string | null;
+  }) => sendRequest('edgeSources.add', input) as Promise<{ success: boolean }>,
+  getForEdge: (edgeId: string) =>
+    sendRequest('edgeSources.getForEdge', edgeId) as Promise<
+      Array<{
+        id: number;
+        edge_id: string;
+        source_type: EdgeProvenanceType;
+        source_id: string | null;
+        resource_id: string | null;
+        created_at: string;
+      }>
+    >,
+  removeForNote: (noteId: string) =>
+    sendRequest('edgeSources.removeForNote', noteId) as Promise<number>,
+  getEdgesFromNote: (noteId: string) =>
+    sendRequest('edgeSources.getEdgesFromNote', noteId) as Promise<string[]>,
+};
+
 // Entity source operations (entity → resource provenance with about/mention distinction)
 export type EntityRelationType = 'about' | 'mention';
 

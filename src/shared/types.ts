@@ -228,6 +228,12 @@ export interface CreateEdgeInput {
   weight?: number;
   directed?: boolean;
   sourceUrl?: string;
+  /**
+   * When true, graph.createEdge will NOT auto-write a user-attributed
+   * edge_sources row. Extraction flows should pass `true` and then record
+   * their own `extraction` or `note` provenance row.
+   */
+  skipProvenance?: boolean;
 }
 
 export interface UpdateEdgeInput {

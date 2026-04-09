@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
+import { edgeSources, type EdgeProvenanceType } from '../../../db/client/db-client';
+
+interface EdgeProvenanceRow {
+  id: number;
+  edge_id: string;
+  source_type: EdgeProvenanceType;
+  source_id: string | null;
+  resource_id: string | null;
+  created_at: string;
+}
 
 export function EdgeDetailPanel() {
   const selectedEdgeId = useGraphStore((s) => s.selectedEdgeId);
@@ -21,6 +31,7 @@ export function EdgeDetailPanel() {
   const [type, setType] = useState('');
   const [weight, setWeight] = useState(1);
   const [properties, setProperties] = useState<Record<string, unknown>>({});
+  const [provenance, setProvenance] = useState<EdgeProvenanceRow[]>([]);
 
   useEffect(() => {
     if (edge) {
@@ -29,6 +40,8 @@ export function EdgeDetailPanel() {
       setWeight(edge.weight);
       setProperties(edge.properties);
       setEditing(false);
+
+      edgeSources.getForEdge(edge.id).then(setProvenance).catch(() => setProvenance([]));
     }
   }, [edge]);
 
@@ -151,6 +164,34 @@ export function EdgeDetailPanel() {
         <Field label="Created">
           <span className="text-xs text-zinc-500">{edge.createdAt}</span>
         </Field>
+
+        {provenance.length > 0 && (
+          <Field label={`Provenance (${provenance.length})`}>
+            <div className="space-y-1">
+              {provenance.map((p) => {
+                let detail = '';
+                if (p.source_type === 'note' && p.source_id) {
+                  const note = nodes.find((n) => n.id === p.source_id);
+                  detail = note?.name ?? p.source_id.slice(0, 8);
+                } else if (p.source_type === 'extraction' && p.resource_id) {
+                  const res = nodes.find((n) => n.id === p.resource_id);
+                  detail = res?.name ?? res?.sourceUrl ?? p.resource_id.slice(0, 8);
+                } else if (p.source_type === 'user') {
+                  detail = 'manual edit';
+                }
+                return (
+                  <div
+                    key={p.id}
+                    className="text-xs bg-zinc-800 rounded px-2 py-1 flex justify-between gap-2"
+                  >
+                    <span className="text-zinc-500 shrink-0">{p.source_type}</span>
+                    <span className="text-zinc-300 truncate">{detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </Field>
+        )}
       </div>
     </div>
   );

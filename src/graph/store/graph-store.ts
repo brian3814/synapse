@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources } from '../../db/client/db-client';
+import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources, edgeSources } from '../../db/client/db-client';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
@@ -231,6 +231,18 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
         const edges = [...state.edges, edge];
         return { edges, adjacency: buildAdjacencyMap(edges) };
       });
+
+      // Record user attribution unless the caller opted out. Extraction
+      // flows pass skipProvenance=true so they can write their own
+      // 'extraction' or 'note' provenance row after this call.
+      if (!input.skipProvenance) {
+        edgeSources
+          .add({ edgeId: edge.id, sourceType: 'user' })
+          .catch(() => {
+            // Best-effort: provenance is observational
+          });
+      }
+
       return edge;
     } catch (e: any) {
       set({ error: e.message });

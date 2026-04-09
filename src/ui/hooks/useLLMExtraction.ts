@@ -5,7 +5,7 @@ import { useExtractionReviewStore, type ReviewNode, type ReviewEdge } from '../.
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
 import { QUICK_EXTRACT_SYSTEM_PROMPT } from '../../shared/quick-extract-prompt';
-import { entityResolution, sourceContent, entitySources } from '../../db/client/db-client';
+import { entityResolution, sourceContent, entitySources, edgeSources } from '../../db/client/db-client';
 import type { DiffItem, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
 function streamFromOffscreen(
@@ -425,8 +425,8 @@ export function useLLMExtraction() {
             sourceId,
             targetId,
             label: extracted.label,
-            type: extracted.type,
             sourceUrl: llm.sourceUrl ?? undefined,
+            skipProvenance: true,
           });
         }
       }
@@ -758,9 +758,10 @@ export function useLLMExtraction() {
         }
       }
 
-      // Second pass: create edges
+      // Second pass: create edges and record provenance in edge_sources.
       const updatedGraph = useGraphStore.getState();
       const allReviewTempIds = new Set(reviewStore.nodes.map((n) => n.tempId));
+      const createdEdgeIds: string[] = [];
 
       for (const edge of activeEdges) {
         const resolveEndpoint = (id: string): string | undefined => {
@@ -787,14 +788,39 @@ export function useLLMExtraction() {
         const targetId = resolveEndpoint(edge.targetTempId);
 
         if (sourceId && targetId) {
-          await updatedGraph.createEdge({
+          // Let the DB layer auto-derive `type` from the label via
+          // ontology_edge_types (Phase 3). We intentionally omit `type` here
+          // so createEdge's lookup runs. skipProvenance suppresses the
+          // default 'user' attribution; we write an 'extraction' row below.
+          const created = await updatedGraph.createEdge({
             sourceId,
             targetId,
             label: edge.label,
-            type: edge.type,
             sourceUrl: llm.sourceUrl ?? undefined,
+            skipProvenance: true,
           });
+          if (created) {
+            createdEdgeIds.push(created.id);
+          }
         }
+      }
+
+      // Record edge provenance. Without notes, every LLM-produced edge is
+      // attributed to the extraction with the resource node as its anchor.
+      // With notes (Phase 4), a future branch will use source_type='note'
+      // and set source_id to the emitting note's ID.
+      if (createdEdgeIds.length > 0 && resourceNode) {
+        await Promise.all(
+          createdEdgeIds.map((edgeId) =>
+            edgeSources.add({
+              edgeId,
+              sourceType: 'extraction',
+              resourceId: resourceNode!.id,
+            }).catch(() => {
+              // Best-effort: row already exists
+            })
+          )
+        );
       }
 
       // Save source content linked to the system-owned resource node.
