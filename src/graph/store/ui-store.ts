@@ -5,6 +5,15 @@ type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'search' | 
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 
+/**
+ * Plain-object replacement for Set<StructuralNodeType>.
+ * Using a record instead of a Set because Zustand + React 19's
+ * useSyncExternalStore doesn't handle mutable reference types (Set, Map)
+ * well — the snapshot equality check triggers infinite re-render loops
+ * (React error #185).
+ */
+export type LayerVisibility = Record<StructuralNodeType, boolean>;
+
 interface UIStore {
   displayMode: DisplayMode;
   activePanel: ActivePanel;
@@ -21,7 +30,7 @@ interface UIStore {
    * Default is entity-only — the "what do I know" view. Notes and
    * resources can be layered on top via the layer toggles.
    */
-  visibleLayers: Set<StructuralNodeType>;
+  visibleLayers: LayerVisibility;
 
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
@@ -49,7 +58,7 @@ export const useUIStore = create<UIStore>((set) => ({
   panelWidth: 400,
   chatSidebarWidth: 400,
   focusNodeCallback: null,
-  visibleLayers: new Set<StructuralNodeType>(['entity']),
+  visibleLayers: { entity: true, note: false, resource: false },
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setActivePanel: (panel) =>
@@ -71,11 +80,9 @@ export const useUIStore = create<UIStore>((set) => ({
   setFocusNodeCallback: (cb) => set({ focusNodeCallback: cb }),
   toggleLayer: (layer) =>
     set((state) => {
-      const next = new Set(state.visibleLayers);
-      if (next.has(layer)) next.delete(layer);
-      else next.add(layer);
+      const next = { ...state.visibleLayers, [layer]: !state.visibleLayers[layer] };
       // Always keep at least one layer visible so the graph isn't empty.
-      if (next.size === 0) next.add('entity');
+      if (!next.entity && !next.note && !next.resource) next.entity = true;
       return { visibleLayers: next, graphKey: state.graphKey + 1 };
     }),
 }));

@@ -31,7 +31,7 @@ export function useGraphData() {
   // endpoints are no longer in the visible set.
   const filtered = useMemo(() => {
     const filteredNodes = nodes.filter((n) =>
-      visibleLayers.has(n.type as 'entity' | 'note' | 'resource')
+      visibleLayers[n.type as 'entity' | 'note' | 'resource'] === true
     );
     // Apply size hints by layer: notes are smaller, resources slightly smaller.
     const sized = filteredNodes.map((n) => {

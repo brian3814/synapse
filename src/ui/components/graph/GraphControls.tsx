@@ -65,7 +65,7 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
     label: string,
     color: string
   ) => {
-    const active = visibleLayers.has(layer);
+    const active = visibleLayers[layer];
     return (
       <button
         key={layer}
