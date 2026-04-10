@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useExtractionReviewStore, type ReviewNode, type PendingConversion } from '../../../graph/store/extraction-review-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 
@@ -18,7 +18,14 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
   const updateConversionKey = useExtractionReviewStore((s) => s.updateConversionKey);
   const confirmConvertToProperty = useExtractionReviewStore((s) => s.confirmConvertToProperty);
   const cancelConvertToProperty = useExtractionReviewStore((s) => s.cancelConvertToProperty);
-  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
+  // Select the raw types array (stable reference) and derive labels in useMemo.
+  // Calling s.getEntityLabels() inside the selector creates a new array on
+  // every invocation, which triggers useSyncExternalStore infinite re-renders.
+  const allTypes = useNodeTypeStore((s) => s.types);
+  const entityLabels = useMemo(
+    () => allTypes.filter((t) => t.category === 'entity_label'),
+    [allTypes]
+  );
 
   const isSelected = selectedTempId === node.tempId;
   const [editName, setEditName] = useState(node.name);

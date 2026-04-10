@@ -30,7 +30,11 @@ export function NodeDetailPanel() {
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [nodeTags, setNodeTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
+  const allTypes = useNodeTypeStore((s) => s.types);
+  const entityLabels = useMemo(
+    () => allTypes.filter((t) => t.category === 'entity_label'),
+    [allTypes]
+  );
   const [sources, setSources] = useState<
     { resourceId: string; relationType: EntityRelationType; createdAt: string }[]
   >([]);

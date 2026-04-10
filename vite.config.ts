@@ -5,6 +5,10 @@ import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { access, readFile, writeFile, rmdir, unlink, copyFile } from 'fs/promises';
 
+// Set by defineConfig's mode parameter; sub-build plugins read this
+// to enable sourcemaps + skip minification in dev builds.
+let isDev = false;
+
 // Plugin to build the content script as IIFE after main build
 function contentScriptPlugin(): Plugin {
   return {
@@ -13,6 +17,7 @@ function contentScriptPlugin(): Plugin {
     closeBundle: async () => {
       await viteBuild({
         configFile: false,
+        mode: isDev ? 'development' : 'production',
         resolve: {
           alias: {
             '@': resolve(__dirname, 'src'),
@@ -46,6 +51,7 @@ function layoutWorkerPlugin(): Plugin {
     closeBundle: async () => {
       await viteBuild({
         configFile: false,
+        mode: isDev ? 'development' : 'production',
         base: '',
         resolve: {
           alias: {
@@ -55,7 +61,7 @@ function layoutWorkerPlugin(): Plugin {
         build: {
           outDir: resolve(__dirname, 'dist'),
           emptyOutDir: false,
-          sourcemap: false,
+          sourcemap: isDev,
           rollupOptions: {
             input: {
               'layout-worker': resolve(__dirname, 'src/graph/layout/layout-worker.ts'),
@@ -83,6 +89,7 @@ function dbWorkerPlugin(): Plugin {
     closeBundle: async () => {
       await viteBuild({
         configFile: false,
+        mode: isDev ? 'development' : 'production',
         base: '',
         resolve: {
           alias: {
@@ -92,7 +99,7 @@ function dbWorkerPlugin(): Plugin {
         build: {
           outDir: resolve(__dirname, 'dist'),
           emptyOutDir: false,
-          sourcemap: false,
+          sourcemap: isDev,
           rollupOptions: {
             input: {
               'db-worker': resolve(__dirname, 'src/db/worker/db-worker.ts'),
@@ -121,6 +128,7 @@ function dbSharedWorkerPlugin(): Plugin {
     closeBundle: async () => {
       await viteBuild({
         configFile: false,
+        mode: isDev ? 'development' : 'production',
         base: '',
         resolve: {
           alias: {
@@ -130,7 +138,7 @@ function dbSharedWorkerPlugin(): Plugin {
         build: {
           outDir: resolve(__dirname, 'dist'),
           emptyOutDir: false,
-          sourcemap: false,
+          sourcemap: isDev,
           rollupOptions: {
             input: {
               'db-shared-worker': resolve(__dirname, 'src/db/worker/db-shared-worker.ts'),
@@ -173,9 +181,18 @@ function fixHtmlPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  isDev = mode === 'development';
+  return {
   base: '',
   plugins: [react(), tailwindcss(), fixHtmlPlugin(), dbWorkerPlugin(), dbSharedWorkerPlugin(), layoutWorkerPlugin(), contentScriptPlugin()],
+  // Force React to use its production bundle even in dev mode.
+  // React's dev bundle uses new Function() for stack traces, which
+  // Chrome extension CSP (script-src 'self' 'wasm-unsafe-eval') blocks.
+  // Our own code is still unminified + sourcemapped for debugging.
+  define: {
+    'process.env.NODE_ENV': '"production"',
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -204,4 +221,5 @@ export default defineConfig({
       },
     },
   },
+};
 });
