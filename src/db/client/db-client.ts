@@ -163,6 +163,8 @@ export const edges = {
   delete: (id: string) => sendRequest('edges.delete', id) as Promise<boolean>,
   getBetween: (nodeIds: string[]) => sendRequest('edges.getBetween', nodeIds) as Promise<any[]>,
   getTypes: () => sendRequest('edges.getTypes') as Promise<string[]>,
+  search: (query: string, limit?: number) =>
+    sendRequest('edges.search', { query, limit }) as Promise<any[]>,
 };
 
 // Node type operations

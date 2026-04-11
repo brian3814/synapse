@@ -199,6 +199,12 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       return { result: await edgeQueries.getEdgesBetween(params as string[]) };
     }
 
+    case 'edges.search': {
+      ensureInit();
+      const p = params as { query: string; limit?: number };
+      return { result: await edgeQueries.searchEdges(p.query, p.limit) };
+    }
+
     // Node type operations
     case 'nodeTypes.getAll': {
       ensureInit();

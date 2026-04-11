@@ -1,28 +1,26 @@
 import React from 'react';
 import { useDisplayMode } from '../hooks/useDisplayMode';
 import { useUIStore } from '../../graph/store/ui-store';
-import { useGraphStore } from '../../graph/store/graph-store';
+// graph-store no longer needed here — stats moved to GraphControls
 import { useReadingListStore } from '../../graph/store/reading-list-store';
+import { HeaderSearch } from './search/HeaderSearch';
 
 export function Header() {
   const { displayMode, toggleMode } = useDisplayMode();
   const { activePanel, setActivePanel, clusteringEnabled, toggleClustering, chatOpen, toggleChat } = useUIStore();
-  const nodeCount = useGraphStore((s) => s.nodes.length);
-  const edgeCount = useGraphStore((s) => s.edges.length);
   const readingListItems = useReadingListStore((s) => s.items);
   const readyCount = Object.values(readingListItems).filter(i => i.status === 'extracted').length;
   const isSidePanel = displayMode === 'sidePanel';
 
   return (
-    <header className="flex items-center justify-between px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
-      <div className="flex items-center gap-2">
+    <header className="flex items-center gap-2 px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
+      <div className="flex items-center gap-2 shrink-0">
         <h1 className="font-semibold text-zinc-100" style={{ fontSize: '16px' }}>Knowledge Graph</h1>
-        <span className="text-zinc-500" style={{ fontSize: '12px' }}>
-          {nodeCount}n · {edgeCount}e
-        </span>
       </div>
 
-      <div className="flex items-center gap-1">
+      <HeaderSearch />
+
+      <div className="flex items-center gap-1 shrink-0 ml-auto">
         <ToolbarButton
           active={activePanel === 'readingList'}
           onClick={() => setActivePanel('readingList')}
@@ -36,14 +34,6 @@ export function Header() {
               </span>
             )}
           </span>
-        </ToolbarButton>
-
-        <ToolbarButton
-          active={activePanel === 'search'}
-          onClick={() => setActivePanel('search')}
-          title="Search"
-        >
-          <SearchIcon />
         </ToolbarButton>
 
         <ToolbarButton
@@ -154,12 +144,6 @@ const BookmarkListIcon = () => (
     <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
     <line x1="9" y1="10" x2="15" y2="10"/>
     <line x1="9" y1="14" x2="15" y2="14"/>
-  </svg>
-);
-
-const SearchIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
   </svg>
 );
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
-type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'search' | 'query' | 'llm' | 'notes' | 'intelligence' | 'settings' | 'readingList';
+type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'llm' | 'notes' | 'intelligence' | 'settings' | 'readingList';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 

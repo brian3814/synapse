@@ -124,6 +124,25 @@ export async function getEdgeTypes(): Promise<string[]> {
   return rows.map(r => r.type);
 }
 
+/** Search edges by label, including source/target node names for display. */
+export async function searchEdges(
+  queryText: string,
+  limit = 30
+): Promise<(DbEdge & { source_name: string; target_name: string })[]> {
+  const pattern = `%${queryText}%`;
+  const { rows } = await executeQuery<DbEdge & { source_name: string; target_name: string }>(
+    `SELECT e.*, sn.name AS source_name, tn.name AS target_name
+     FROM edges e
+     JOIN nodes sn ON sn.id = e.source_id
+     JOIN nodes tn ON tn.id = e.target_id
+     WHERE e.label LIKE ? OR sn.name LIKE ? OR tn.name LIKE ?
+     ORDER BY e.label
+     LIMIT ?;`,
+    [pattern, pattern, pattern, limit]
+  );
+  return rows;
+}
+
 export async function getEdgesBetween(nodeIds: string[]): Promise<DbEdge[]> {
   if (nodeIds.length === 0) return [];
   const placeholders = nodeIds.map(() => '?').join(',');
