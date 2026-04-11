@@ -45,6 +45,9 @@ interface UIStore {
   setChatSidebarWidth: (width: number) => void;
   setFocusNodeCallback: (cb: ((nodeId: string) => void) | null) => void;
   toggleLayer: (layer: StructuralNodeType) => void;
+  /** Note ID to auto-open in NoteEditor when the notes panel activates. */
+  pendingEditNoteId: string | null;
+  setPendingEditNoteId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -59,6 +62,7 @@ export const useUIStore = create<UIStore>((set) => ({
   chatSidebarWidth: 400,
   focusNodeCallback: null,
   visibleLayers: { entity: true, note: false, resource: false },
+  pendingEditNoteId: null,
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setActivePanel: (panel) =>
@@ -78,6 +82,7 @@ export const useUIStore = create<UIStore>((set) => ({
   setPanelWidth: (width) => set({ panelWidth: Math.min(800, Math.max(200, width)) }),
   setChatSidebarWidth: (width) => set({ chatSidebarWidth: Math.min(800, Math.max(200, width)) }),
   setFocusNodeCallback: (cb) => set({ focusNodeCallback: cb }),
+  setPendingEditNoteId: (id) => set({ pendingEditNoteId: id }),
   toggleLayer: (layer) =>
     set((state) => {
       const next = { ...state.visibleLayers, [layer]: !state.visibleLayers[layer] };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
+import { useUIStore } from '../../../graph/store/ui-store';
 import { NoteEditor } from './NoteEditor';
 import { noteFolders } from '../../../db/client/db-client';
 import type { GraphNode } from '../../../shared/types';
@@ -25,6 +26,16 @@ export function NotesPanel() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']));
   const [pendingFolder, setPendingFolder] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Auto-open editor when another panel sets pendingEditNoteId
+  const pendingEditNoteId = useUIStore((s) => s.pendingEditNoteId);
+  useEffect(() => {
+    if (pendingEditNoteId) {
+      setEditingNodeId(pendingEditNoteId);
+      setView('editor');
+      useUIStore.getState().setPendingEditNoteId(null);
+    }
+  }, [pendingEditNoteId]);
 
   const noteNodes = useMemo(
     () => nodes.filter((n) => n.type === 'note'),
