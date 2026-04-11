@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
-import { sourceContent, noteFolders } from '../../../db/client/db-client';
+import { useUIStore } from '../../../graph/store/ui-store';
+import { sourceContent, noteFolders, noteAttachments } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
@@ -20,8 +21,11 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>('write');
+  const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const graphStore = useGraphStore();
+  // Track the effective note ID (may be created on-the-fly for image uploads)
+  const effectiveNodeIdRef = useRef<string | null>(nodeId);
 
   // Load existing note
   useEffect(() => {
@@ -139,6 +143,74 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     }
   }, [title, content, nodeId, graphStore, onBack]);
 
+  // Keep effectiveNodeIdRef in sync
+  useEffect(() => { effectiveNodeIdRef.current = nodeId; }, [nodeId]);
+
+  // --- Image drop/paste handling ---
+  const insertImageFiles = useCallback(async (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+
+    setUploading(true);
+    try {
+      // Ensure note exists before attaching images
+      let nid = effectiveNodeIdRef.current;
+      if (!nid) {
+        const t = title.trim() || 'Untitled Note';
+        const node = await graphStore.createNode({
+          name: t,
+          type: 'note',
+          properties: { content },
+        });
+        if (!node) return;
+        nid = node.id;
+        effectiveNodeIdRef.current = nid;
+      }
+
+      const textarea = textareaRef.current;
+      const cursorPos = textarea?.selectionStart ?? content.length;
+      let insertText = '';
+
+      for (const file of images) {
+        const { data, mimeType } = await compressImage(file);
+        const attachment = await noteAttachments.create(nid, file.name, mimeType, data);
+        insertText += `![${file.name}](attachment:${attachment.id})\n`;
+      }
+
+      // Insert at cursor position
+      const before = content.slice(0, cursorPos);
+      const after = content.slice(cursorPos);
+      setContent(before + insertText + after);
+    } finally {
+      setUploading(false);
+    }
+  }, [title, content, graphStore]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files);
+      insertImageFiles(files);
+    },
+    [insertImageFiles]
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData.files);
+      if (files.some((f) => f.type.startsWith('image/'))) {
+        e.preventDefault();
+        insertImageFiles(files);
+      }
+    },
+    [insertImageFiles]
+  );
+
   // Ctrl+S / Cmd+S to save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -216,17 +288,33 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       </div>
 
       {activeTab === 'write' ? (
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Write your note... Use [[Node Label]] to link to entities in your graph."
-          className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 placeholder-zinc-600 resize-none font-mono min-h-[200px]"
-        />
+        <div className="flex-1 flex flex-col relative">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onPaste={handlePaste}
+            placeholder="Write your note... Use [[Node Label]] to link to entities. Drop or paste images."
+            className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 placeholder-zinc-600 resize-none font-mono min-h-[200px]"
+          />
+          {uploading && (
+            <div className="absolute inset-0 bg-zinc-900/60 flex items-center justify-center rounded">
+              <span className="text-xs text-zinc-400 flex items-center gap-2">
+                <span className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                Uploading image...
+              </span>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex-1 w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 overflow-y-auto min-h-[200px]">
           {content.trim() ? (
-            <NoteMarkdownPreview content={content} />
+            <NoteMarkdownPreview content={content} onNodeClick={(nodeId) => {
+              useGraphStore.getState().selectNode(nodeId);
+              useUIStore.getState().forceActivePanel('nodeDetail');
+            }} />
           ) : (
             <p className="text-zinc-600 text-sm italic">Nothing to preview</p>
           )}
@@ -317,4 +405,29 @@ function sanitizeFileName(title: string): string {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .slice(0, 50);
+}
+
+async function compressImage(
+  file: File,
+  maxWidth = 800,
+  quality = 0.8
+): Promise<{ data: Uint8Array; mimeType: string }> {
+  const img = await createImageBitmap(file);
+  const scale = Math.min(1, maxWidth / img.width);
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0, w, h);
+  img.close();
+  // Use JPEG for photos, keep PNG for images with transparency
+  const isPng = file.type === 'image/png';
+  const blob = await canvas.convertToBlob({
+    type: isPng ? 'image/png' : 'image/jpeg',
+    quality: isPng ? undefined : quality,
+  });
+  return {
+    data: new Uint8Array(await blob.arrayBuffer()),
+    mimeType: isPng ? 'image/png' : 'image/jpeg',
+  };
 }

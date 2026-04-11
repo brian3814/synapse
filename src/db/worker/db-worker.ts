@@ -17,6 +17,7 @@ import * as entitySourceQueries from './queries/entity-source-queries';
 import * as edgeSourceQueries from './queries/edge-source-queries';
 import * as noteFolderQueries from './queries/note-folder-queries';
 import * as chatQueries from './queries/chat-queries';
+import * as noteAttachmentQueries from './queries/note-attachment-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -543,6 +544,25 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
       ensureInit();
       const p = params as { sessionId: string; limit?: number };
       return { result: await chatQueries.getRecentMessages(p.sessionId, p.limit) };
+    }
+
+    // Note attachment operations
+    case 'noteAttachments.create': {
+      ensureInit();
+      const p = params as { noteId: string; filename: string; mimeType: string; data: Uint8Array };
+      return { result: await noteAttachmentQueries.createAttachment(p.noteId, p.filename, p.mimeType, p.data) };
+    }
+    case 'noteAttachments.get': {
+      ensureInit();
+      return { result: await noteAttachmentQueries.getAttachment(params as string) };
+    }
+    case 'noteAttachments.getForNote': {
+      ensureInit();
+      return { result: await noteAttachmentQueries.getAttachmentsForNote(params as string) };
+    }
+    case 'noteAttachments.delete': {
+      ensureInit();
+      return { result: await noteAttachmentQueries.deleteAttachment(params as string) };
     }
 
     default:

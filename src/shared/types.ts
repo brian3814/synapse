@@ -104,12 +104,12 @@ export interface DbNoteFolder {
   created_at: string;
 }
 
-// Note attachment metadata (binary stored in OPFS attachments/)
 export interface DbNoteAttachment {
   id: string;
   note_id: string;
   filename: string;
   mime_type: string;
+  data: Uint8Array | null;
   source_url: string | null;
   created_at: string;
 }

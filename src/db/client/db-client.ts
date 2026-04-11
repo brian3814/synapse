@@ -195,6 +195,18 @@ export const sourceContent = {
     sendRequest('sourceContent.getAll') as Promise<any[]>,
 };
 
+// Note attachment operations
+export const noteAttachments = {
+  create: (noteId: string, filename: string, mimeType: string, data: Uint8Array) =>
+    sendRequest('noteAttachments.create', { noteId, filename, mimeType, data }) as Promise<any>,
+  get: (id: string) =>
+    sendRequest('noteAttachments.get', id) as Promise<any>,
+  getForNote: (noteId: string) =>
+    sendRequest('noteAttachments.getForNote', noteId) as Promise<any[]>,
+  delete: (id: string) =>
+    sendRequest('noteAttachments.delete', id) as Promise<boolean>,
+};
+
 // Entity resolution operations
 export const entityResolution = {
   findMatches: (name: string, fuzzyThreshold?: number) =>

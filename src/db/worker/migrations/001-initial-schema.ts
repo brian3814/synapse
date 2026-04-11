@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS note_attachments (
     note_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     filename    TEXT NOT NULL,
     mime_type   TEXT NOT NULL,
+    data        BLOB,
     source_url  TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
