@@ -74,22 +74,22 @@ export async function generateStressTestData(
   for (let i = 0; i < nodeCount; i++) {
     const id = generateId();
     nodeIds.push(id);
-    const type = pick(NODE_TYPES);
-    const label = generateLabel(i);
-    const identifier = `${type}/${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const semanticType = pick(NODE_TYPES);
+    const name = generateLabel(i);
+    const identifier = `entity/${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${id.slice(0, 8)}`;
     const properties = JSON.stringify({
       domain: pick(DOMAINS),
       version: `${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 20)}.${Math.floor(Math.random() * 100)}`,
       score: Math.round(Math.random() * 100),
     });
 
-    const centroid = centroids.get(type)!;
+    const centroid = centroids.get(semanticType)!;
     const x = centroid.cx + gaussianRandom() * jitterSpread;
     const y = centroid.cy + gaussianRandom() * jitterSpread;
 
     statements.push({
-      sql: `INSERT INTO nodes (id, identifier, name, type, properties, size, x, y) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-      params: [id, identifier, label, type, properties, 0.5 + Math.random() * 2, x, y],
+      sql: `INSERT INTO nodes (id, identifier, name, type, label, properties, size, x, y) VALUES (?, ?, ?, 'entity', ?, ?, ?, ?, ?);`,
+      params: [id, identifier, name, semanticType, properties, 0.5 + Math.random() * 2, x, y],
     });
   }
 

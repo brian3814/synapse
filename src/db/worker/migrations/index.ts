@@ -18,9 +18,14 @@ const migrations: Migration[] = [migration001, migration002, migration003, migra
 
 // Track whether FTS5 is available for search queries
 let fts5Available = false;
+let notesFts5Available = false;
 
 export function isFTS5Available(): boolean {
   return fts5Available;
+}
+
+export function isNotesFTS5Available(): boolean {
+  return notesFts5Available;
 }
 
 export async function runMigrations(): Promise<number> {
@@ -50,6 +55,12 @@ export async function runMigrations(): Promise<number> {
       fts5Available = true;
     } catch {
       fts5Available = false;
+    }
+    try {
+      await query("SELECT * FROM notes_fts LIMIT 0;");
+      notesFts5Available = true;
+    } catch {
+      notesFts5Available = false;
     }
   }
 
@@ -91,6 +102,7 @@ export async function runMigrations(): Promise<number> {
 
         if (migration.version === 2) {
           fts5Available = true;
+          notesFts5Available = true;
         }
 
         console.log(`[DB] Migration ${migration.version} applied successfully`);

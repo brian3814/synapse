@@ -183,4 +183,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS note_search (
+    rowid       INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id     TEXT UNIQUE NOT NULL,
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_note_search_node_id ON note_search(node_id);
 `;

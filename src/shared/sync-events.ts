@@ -11,4 +11,5 @@ export type SyncEvent =
   | { type: 'edge_deleted'; id: string }
   | { type: 'node_type_created'; nodeType: NodeType }
   | { type: 'node_type_deleted'; nodeTypeId: string }
+  | { type: 'note_content_updated'; nodeId: string }
   | { type: 'reset' };

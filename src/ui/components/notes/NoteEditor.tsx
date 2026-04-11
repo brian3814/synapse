@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
-import { sourceContent, noteFolders, noteAttachments } from '../../../db/client/db-client';
+import { noteSearch, noteFolders, noteAttachments } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
+import { read as readNote, write as writeNote } from '../../../notes/opfs-note-store';
+import { stripMarkdownToPlainText } from '../../../notes/markdown-utils';
+import { SYNC_CHANNEL, type SyncEvent } from '../../../shared/sync-events';
 
 type EditorTab = 'write' | 'preview';
 
@@ -35,18 +38,31 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     if (node) {
       setTitle(node.name);
       setFolderPath(node.folderPath ?? '');
-      // Load content from source_content or properties
-      if (typeof node.properties?.content === 'string') {
-        setContent(node.properties.content);
-      }
-      // Also try loading from source_content table
-      sourceContent.getByNodeId(nodeId).then((sc: any) => {
-        if (sc?.content) {
-          const parsed = parseMarkdown(sc.content);
-          setContent(parsed.content);
-        }
-      }).catch(() => {});
     }
+    // Read content from OPFS (canonical source)
+    readNote(nodeId).then((md) => {
+      if (md) {
+        const parsed = parseMarkdown(md);
+        setContent(parsed.content);
+      }
+    }).catch(() => {});
+  }, [nodeId]);
+
+  // Cross-tab: reload content when another tab saves this note
+  useEffect(() => {
+    if (!nodeId) return;
+    const channel = new BroadcastChannel(SYNC_CHANNEL);
+    channel.onmessage = (e: MessageEvent<SyncEvent>) => {
+      if (e.data.type === 'note_content_updated' && e.data.nodeId === nodeId) {
+        readNote(nodeId).then((md) => {
+          if (md) {
+            const parsed = parseMarkdown(md);
+            setContent(parsed.content);
+          }
+        }).catch(() => {});
+      }
+    };
+    return () => channel.close();
   }, [nodeId]);
 
   // Load the set of folder choices (distinct folder_paths from notes + markers).
@@ -77,45 +93,42 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
 
     try {
       const wikiLinks = extractWikiLinks(content);
-      const properties = { content, wikiLinks };
+      const markdown = generateNoteMarkdown(title, content, wikiLinks);
 
       if (nodeId) {
-        // Update existing note
+        // 1. Write OPFS first (orphaned files are harmless)
+        await writeNote(nodeId, markdown);
+        // 2. Update search index
+        await noteSearch.upsert(nodeId, title, stripMarkdownToPlainText(content));
+        // 3. Update node metadata (no content in properties)
         await graphStore.updateNode({
           id: nodeId,
           name: title,
           folderPath,
-          properties,
-        });
-
-        // Update source content
-        await sourceContent.save({
-          nodeId,
-          url: `note://${nodeId}`,
-          title,
-          content: generateNoteMarkdown(title, content, wikiLinks),
+          properties: { wikiLinks },
         });
       } else {
-        // Create new note node
+        // Create new note node (no content in properties)
         const node = await graphStore.createNode({
           name: title,
           type: 'note',
           folderPath,
-          properties,
+          properties: { wikiLinks },
         });
 
         if (node) {
-          // Save source content
-          await sourceContent.save({
-            nodeId: node.id,
-            url: `note://${node.id}`,
-            title,
-            content: generateNoteMarkdown(title, content, wikiLinks),
-          });
-
-          // Create edges for wiki-links
+          await writeNote(node.id, markdown);
+          await noteSearch.upsert(node.id, title, stripMarkdownToPlainText(content));
           await createWikiLinkEdges(node.id, wikiLinks);
         }
+      }
+
+      // Broadcast content update to other tabs
+      const savedId = nodeId ?? graphStore.nodes.find((n) => n.name === title && n.type === 'note')?.id;
+      if (savedId) {
+        const channel = new BroadcastChannel(SYNC_CHANNEL);
+        channel.postMessage({ type: 'note_content_updated', nodeId: savedId } satisfies SyncEvent);
+        channel.close();
       }
 
       // Optionally sync to filesystem
@@ -123,7 +136,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         const folderHandle = await getStoredFolder();
         if (folderHandle) {
           const fileName = sanitizeFileName(title) + '.md';
-          const markdown = generateNoteMarkdown(title, content, wikiLinks);
           await writeMarkdownFile(folderHandle, `notes/${fileName}`, markdown);
         }
       } catch {
@@ -141,7 +153,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     } finally {
       setSaving(false);
     }
-  }, [title, content, nodeId, graphStore, onBack]);
+  }, [title, content, nodeId, graphStore, onBack, folderPath]);
 
   // Keep effectiveNodeIdRef in sync
   useEffect(() => { effectiveNodeIdRef.current = nodeId; }, [nodeId]);
@@ -157,14 +169,19 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       let nid = effectiveNodeIdRef.current;
       if (!nid) {
         const t = title.trim() || 'Untitled Note';
+        const wikiLinks = extractWikiLinks(content);
         const node = await graphStore.createNode({
           name: t,
           type: 'note',
-          properties: { content },
+          properties: { wikiLinks },
         });
         if (!node) return;
         nid = node.id;
         effectiveNodeIdRef.current = nid;
+        // Write initial content to OPFS + search index
+        const markdown = generateNoteMarkdown(t, content, wikiLinks);
+        writeNote(nid, markdown).catch(() => {});
+        noteSearch.upsert(nid, t, stripMarkdownToPlainText(content)).catch(() => {});
       }
 
       const textarea = textareaRef.current;

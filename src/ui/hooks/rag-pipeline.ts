@@ -11,6 +11,8 @@
 
 import { nodes as nodesApi, edges as edgesApi, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
+import { read as readNote } from '../../notes/opfs-note-store';
+import { parseMarkdown } from '../../notes/markdown-utils';
 import type { DbNode, DbEdge, DbSourceContent } from '../../shared/types';
 
 export interface RAGContext {
@@ -124,9 +126,25 @@ async function getSourceExcerpts(
   const results = await Promise.all(
     nodeIds.slice(0, 15).map(async (nodeId) => {
       try {
+        const node = nodeMap.get(nodeId);
+        // Notes: read from OPFS (canonical source)
+        if (node?.type === 'note') {
+          const md = await readNote(nodeId);
+          if (md) {
+            const parsed = parseMarkdown(md);
+            return {
+              nodeId,
+              nodeLabel: node.name,
+              url: `note://${nodeId}`,
+              title: node.name,
+              excerpt: parsed.content.slice(0, maxExcerptLength),
+            };
+          }
+          return null;
+        }
+        // Resources: read from source_content
         const sc: DbSourceContent | null = await sourceContent.getByNodeId(nodeId);
         if (sc?.content) {
-          const node = nodeMap.get(nodeId);
           return {
             nodeId,
             nodeLabel: node?.name ?? 'Unknown',

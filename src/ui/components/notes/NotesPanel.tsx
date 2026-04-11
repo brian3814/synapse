@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { NoteEditor } from './NoteEditor';
-import { noteFolders } from '../../../db/client/db-client';
+import { noteFolders, noteSearch } from '../../../db/client/db-client';
 import type { GraphNode } from '../../../shared/types';
 
 type View = 'list' | 'editor';
@@ -341,9 +341,12 @@ function NoteTreeItem({
   onEdit: (id: string) => void;
   onMoveToRoot: () => void;
 }) {
-  const preview = typeof node.properties?.content === 'string'
-    ? node.properties.content.slice(0, 60)
-    : '';
+  const [preview, setPreview] = useState('');
+  useEffect(() => {
+    noteSearch.getEntry(node.id).then((entry) => {
+      if (entry) setPreview(entry.body.slice(0, 60));
+    }).catch(() => {});
+  }, [node.id]);
   return (
     <div
       className="flex items-center gap-1.5 py-0.5 group"

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
-import { nodes as dbNodes, edges as dbEdges } from '../../../db/client/db-client';
+import { nodes as dbNodes, edges as dbEdges, noteSearch } from '../../../db/client/db-client';
 import type { DbNode } from '../../../shared/types';
 
 const MIN_QUERY_LENGTH = 2;
@@ -72,9 +72,10 @@ export function HeaderSearch() {
     setSearching(true);
 
     try {
-      const [nodeResults, edgeResults] = await Promise.all([
+      const [nodeResults, edgeResults, noteContentResults] = await Promise.all([
         dbNodes.search(q, 30) as Promise<DbNode[]>,
         dbEdges.search(q, 15) as Promise<EdgeResult[]>,
+        noteSearch.search(q, 10),
       ]);
 
       if (searchIdRef.current !== id) return;
@@ -82,12 +83,21 @@ export function HeaderSearch() {
       const entities: DbNode[] = [];
       const notes: DbNode[] = [];
       const resources: DbNode[] = [];
+      const noteIdsSeen = new Set<string>();
 
       for (const node of nodeResults) {
         if (node.type === 'entity') entities.push(node);
-        else if (node.type === 'note') notes.push(node);
+        else if (node.type === 'note') { notes.push(node); noteIdsSeen.add(node.id); }
         else if (node.type === 'resource') resources.push(node);
         else entities.push(node); // fallback
+      }
+
+      // Add note content matches not already found by node name search
+      for (const nr of noteContentResults) {
+        if (!noteIdsSeen.has(nr.node_id)) {
+          notes.push({ id: nr.node_id, name: nr.title, type: 'note' } as DbNode);
+          noteIdsSeen.add(nr.node_id);
+        }
       }
 
       setResults({ entities, notes, resources, edges: edgeResults });

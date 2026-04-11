@@ -2,6 +2,8 @@ import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-
 import { nodes, edges, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
+import { read as readNote } from '../../notes/opfs-note-store';
+import { parseMarkdown } from '../../notes/markdown-utils';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
 
@@ -339,7 +341,22 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
     }
 
     case 'get_source_content': {
-      const sc = await sourceContent.getByNodeId(input.nodeId as string);
+      const nodeId = input.nodeId as string;
+      // Notes: read from OPFS
+      const targetNode = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+      if (targetNode?.type === 'note') {
+        const md = await readNote(nodeId);
+        if (md) {
+          const parsed = parseMarkdown(md);
+          return JSON.stringify({
+            url: `note://${nodeId}`,
+            title: targetNode.name,
+            content: parsed.content.substring(0, 5000),
+          });
+        }
+      }
+      // Resources: read from source_content
+      const sc = await sourceContent.getByNodeId(nodeId);
       if (!sc) return JSON.stringify({ error: 'No source content found' });
       return JSON.stringify({
         url: (sc as any).url,

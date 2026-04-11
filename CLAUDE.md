@@ -97,6 +97,19 @@ CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects
 - `src/db/worker/migrations/` — Versioned, FTS5 detected at runtime. Migration 002 (FTS) is optional; search falls back to LIKE.
 - `src/db/client/db-client.ts` — UI-thread client with requestId-based response matching and 10s timeouts.
 
+## Note Content Storage (OPFS)
+
+Note content is stored as `.md` files in OPFS (`notes/{node_id}.md`), NOT in SQLite. The UI thread reads/writes OPFS directly via async API, bypassing the SharedWorker/DedicatedWorker chain. See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) for full ADR.
+
+- **`src/notes/opfs-note-store.ts`** — OPFS CRUD: `init()`, `read()`, `write()`, `remove()`, `list()`, `exists()`
+- **`src/notes/markdown-utils.ts`** — `stripMarkdownToPlainText()` for FTS tokenization, re-exports `parseMarkdown`/`generateNoteMarkdown`
+- **`note_search` table** (in 001-initial-schema) — Backing table for FTS5 external content. Stores `node_id`, `title`, stripped plain-text `body`.
+- **`notes_fts` virtual table** (in 002-fts-index) — External content FTS5 on `note_search`. Auto-synced via INSERT/DELETE/UPDATE triggers.
+- **Write ordering**: OPFS first, then `note_search` upsert, then `nodes` metadata update. Orphaned OPFS files are harmless; dangling DB references are not.
+- **`nodes.properties`** for notes contains only `{ wikiLinks }` — no content. Content is never stored in `source_content` for notes.
+- **Cross-tab sync**: `BroadcastChannel(SYNC_CHANNEL)` with `note_content_updated` event type.
+- **Accepted duplication**: Note body exists in OPFS (markdown) and `note_search.body` (plain text for FTS). Will be eliminated when wa-sqlite upgrades to SQLite 3.43+ (`contentless_delete=1`).
+
 ## Graph Renderer (Three.js)
 
 Custom renderer in `src/graph/renderer/` — zero React dependency. Uses InstancedMesh (1-2 draw calls) for nodes/edges instead of Reagraph's per-element meshes.
@@ -144,3 +157,4 @@ React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.s
 - **Detailed docs**: `ARCHITECTURE.md` for full system design, SQLite schema, and 13 documented pitfalls
 - **Search**: [`docs/search.md`](docs/search.md) — FTS5 sanitization, LIKE fallback, UI debounce/stale-cancellation
 - **Pitfalls**: `docs/pitfalls/` — Detailed writeups of specific Chrome extension pitfalls
+- **Note storage ADR**: [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) — OPFS note files, FTS5 strategy, duplication tradeoff

@@ -74,16 +74,36 @@ export async function getClusterSummary(): Promise<ClusterSummary[]> {
   return rows;
 }
 
-/** Edge counts between node type pairs (for far zoom cluster edges). */
+/** Edge counts between node type pairs (for far zoom cluster edges).
+ *  Builds an in-memory id→type map then aggregates — avoids expensive SQL
+ *  double-join + GROUP BY over the full edges table. */
 export async function getInterClusterEdges(): Promise<InterClusterEdge[]> {
-  const { rows } = await executeQuery<InterClusterEdge>(
-    `SELECT n1.type as sourceType, n2.type as targetType, COUNT(*) as count
-     FROM edges e
-     JOIN nodes n1 ON e.source_id = n1.id
-     JOIN nodes n2 ON e.target_id = n2.id
-     GROUP BY n1.type, n2.type;`
+  // 1. Single pass: build id→type map
+  const { rows: nodes } = await executeQuery<{ id: string; type: string }>(
+    'SELECT id, type FROM nodes;'
   );
-  return rows;
+  const typeMap = new Map<string, string>();
+  for (const n of nodes) typeMap.set(n.id, n.type);
+
+  // 2. Single pass: scan edges, aggregate counts in JS
+  const { rows: edges } = await executeQuery<{ source_id: string; target_id: string }>(
+    'SELECT source_id, target_id FROM edges;'
+  );
+  const counts = new Map<string, number>();
+  for (const e of edges) {
+    const st = typeMap.get(e.source_id);
+    const tt = typeMap.get(e.target_id);
+    if (!st || !tt) continue;
+    const key = `${st}\0${tt}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const result: InterClusterEdge[] = [];
+  for (const [key, count] of counts) {
+    const [sourceType, targetType] = key.split('\0');
+    result.push({ sourceType, targetType, count });
+  }
+  return result;
 }
 
 /** Count nodes in a bounding box (for density checks). */

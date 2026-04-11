@@ -207,6 +207,22 @@ export const noteAttachments = {
     sendRequest('noteAttachments.delete', id) as Promise<boolean>,
 };
 
+// Note search operations (OPFS FTS5 index)
+export const noteSearch = {
+  upsert: (nodeId: string, title: string, body: string) =>
+    sendRequest('noteSearch.upsert', { nodeId, title, body }) as Promise<{ success: boolean }>,
+  delete: (nodeId: string) =>
+    sendRequest('noteSearch.delete', nodeId) as Promise<boolean>,
+  search: (query: string, limit?: number) =>
+    sendRequest('noteSearch.search', { query, limit }) as Promise<
+      Array<{ node_id: string; title: string; snippet: string }>
+    >,
+  getEntry: (nodeId: string) =>
+    sendRequest('noteSearch.getEntry', nodeId) as Promise<{ title: string; body: string } | null>,
+  getAll: () =>
+    sendRequest('noteSearch.getAll') as Promise<Array<{ node_id: string; title: string }>>,
+};
+
 // Entity resolution operations
 export const entityResolution = {
   findMatches: (name: string, fuzzyThreshold?: number) =>
@@ -331,7 +347,7 @@ export const spatial = {
   clusterSummary: () =>
     sendRequest('spatial.clusterSummary') as Promise<any[]>,
   interClusterEdges: () =>
-    sendRequest('spatial.interClusterEdges') as Promise<any[]>,
+    sendRequest('spatial.interClusterEdges', undefined, 30_000) as Promise<any[]>,
   batchUpdatePositions: (updates: Array<{ id: string; x: number; y: number }>) =>
     sendRequest('spatial.batchUpdatePositions', updates, 60_000) as Promise<{ success: boolean }>,
   nodeCountInBounds: (minX: number, minY: number, maxX: number, maxY: number) =>

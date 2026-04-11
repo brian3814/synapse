@@ -129,7 +129,10 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     }
   }, [selectedNodeIds, adjacency]);
 
-  if (!windowed && nodes.length === 0) {
+  // Show empty state only when the store is truly empty — not when all
+  // nodes are hidden by layer filters.
+  const totalNodeCount = useGraphStore((s) => s.nodes.length);
+  if (!windowed && totalNodeCount === 0) {
     return (
       <div className="absolute inset-0 flex items-center justify-center text-zinc-500 text-sm">
         <div className="text-center p-4">

@@ -18,6 +18,7 @@ import * as edgeSourceQueries from './queries/edge-source-queries';
 import * as noteFolderQueries from './queries/note-folder-queries';
 import * as chatQueries from './queries/chat-queries';
 import * as noteAttachmentQueries from './queries/note-attachment-queries';
+import * as noteSearchQueries from './queries/note-search-queries';
 import { executeGraphQuery, executeGraphMutation } from './query-engine';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -563,6 +564,31 @@ async function handleAction(action: string, params: unknown): Promise<{ result: 
     case 'noteAttachments.delete': {
       ensureInit();
       return { result: await noteAttachmentQueries.deleteAttachment(params as string) };
+    }
+
+    // --- Note search (OPFS FTS5 index) ---
+    case 'noteSearch.upsert': {
+      ensureInit();
+      const { nodeId, title, body } = params as { nodeId: string; title: string; body: string };
+      await noteSearchQueries.upsertNoteSearch(nodeId, title, body);
+      return { result: { success: true } };
+    }
+    case 'noteSearch.delete': {
+      ensureInit();
+      return { result: await noteSearchQueries.deleteNoteSearch(params as string) };
+    }
+    case 'noteSearch.search': {
+      ensureInit();
+      const { query, limit } = params as { query: string; limit?: number };
+      return { result: await noteSearchQueries.searchNotes(query, limit) };
+    }
+    case 'noteSearch.getEntry': {
+      ensureInit();
+      return { result: await noteSearchQueries.getNoteSearchEntry(params as string) };
+    }
+    case 'noteSearch.getAll': {
+      ensureInit();
+      return { result: await noteSearchQueries.getAllNoteSearchEntries() };
     }
 
     default:

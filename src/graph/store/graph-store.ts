@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources, edgeSources } from '../../db/client/db-client';
+import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
+import { remove as removeNoteFile } from '../../notes/opfs-note-store';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
@@ -201,9 +202,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
         // Best-effort cleanup: remove entity_sources for deleted resource nodes.
         // entity_sources uses the resource node's ID (not identifier) as the FK.
         if (node?.type === 'resource') {
-          entitySources.removeAllForResource(node.id).catch(() => {
-            // Best-effort cleanup
-          });
+          entitySources.removeAllForResource(node.id).catch(() => {});
+        }
+
+        // Best-effort cleanup: remove OPFS file + search index for deleted notes.
+        if (node?.type === 'note') {
+          noteSearch.delete(node.id).catch(() => {});
+          removeNoteFile(node.id).catch(() => {});
         }
       }
       return success;
