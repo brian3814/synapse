@@ -171,6 +171,7 @@ export function LLMPanel() {
         </div>
       )}
 
+
       {error && (
         <div className="bg-red-900/30 border border-red-800 rounded p-3">
           <p className="text-xs text-red-400">{error}</p>
@@ -199,7 +200,10 @@ export function LLMPanel() {
           }}
         />
       ) : isIdle && activeTab === 'page' ? (
-        <PromptInput onSubmit={extractionMode === 'deep' ? startAgentExtraction : startQuickExtraction} />
+        <PromptInput onSubmit={(prompt, sourceUrl) => {
+          const fn = extractionMode === 'deep' ? startAgentExtraction : startQuickExtraction;
+          fn(prompt, sourceUrl);
+        }} />
       ) : isIdle && activeTab === 'text' ? (
         <TextInput onSubmit={startExtraction} />
       ) : status === 'agent-running' ? (

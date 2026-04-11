@@ -1,7 +1,5 @@
-import React from 'react';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 import { ReviewToolbar } from './ReviewToolbar';
-import { ReviewGraph } from './ReviewGraph';
 import { ReviewItemList } from './ReviewItemList';
 
 interface ExtractionReviewProps {
@@ -10,7 +8,6 @@ interface ExtractionReviewProps {
 
 export function ExtractionReview({ onApply }: ExtractionReviewProps) {
   const active = useExtractionReviewStore((s) => s.active);
-  const viewMode = useExtractionReviewStore((s) => s.viewMode);
   const nodes = useExtractionReviewStore((s) => s.nodes);
   const edges = useExtractionReviewStore((s) => s.edges);
 
@@ -26,15 +23,6 @@ export function ExtractionReview({ onApply }: ExtractionReviewProps) {
   return (
     <div className="space-y-3">
       <ReviewToolbar />
-
-      {/* Mini graph preview — only in extracted mode */}
-      {viewMode === 'extracted' && <ReviewGraph />}
-
-      {viewMode === 'overlay' && (
-        <p className="text-xs text-zinc-500 italic">
-          Preview nodes are shown in the main graph view.
-        </p>
-      )}
 
       <ReviewItemList />
 

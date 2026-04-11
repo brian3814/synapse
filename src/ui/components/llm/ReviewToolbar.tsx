@@ -1,9 +1,7 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 
 export function ReviewToolbar() {
-  const viewMode = useExtractionReviewStore((s) => s.viewMode);
-  const setViewMode = useExtractionReviewStore((s) => s.setViewMode);
   const undoStack = useExtractionReviewStore((s) => s.undoStack);
   const redoStack = useExtractionReviewStore((s) => s.redoStack);
   const undo = useExtractionReviewStore((s) => s.undo);
@@ -26,24 +24,7 @@ export function ReviewToolbar() {
 
   return (
     <div className="flex items-center justify-between">
-      <div className="flex gap-0.5 bg-zinc-800 rounded p-0.5">
-        <button
-          onClick={() => setViewMode('extracted')}
-          className={`text-xs px-2 py-1 rounded transition-colors ${
-            viewMode === 'extracted' ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Extracted
-        </button>
-        <button
-          onClick={() => setViewMode('overlay')}
-          className={`text-xs px-2 py-1 rounded transition-colors ${
-            viewMode === 'overlay' ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Overlay
-        </button>
-      </div>
+      <h4 className="text-xs font-medium text-zinc-400">Review Extraction</h4>
       <div className="flex gap-1">
         <button
           onClick={undo}

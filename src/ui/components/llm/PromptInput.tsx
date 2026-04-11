@@ -4,13 +4,14 @@ import { estimateExtractionCost } from '../../../shared/cost-estimator';
 import type { PageComplexity } from '../../../shared/types';
 
 interface PromptInputProps {
-  onSubmit: (prompt: string) => void;
+  onSubmit: (prompt: string, sourceUrl?: string) => void;
 }
 
 const EXTRACTION_NOTES_KEY = 'extractionNotesEnabled';
 
 export function PromptInput({ onSubmit }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
   const [tabUrl, setTabUrl] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [model, setModel] = useState<string>('');
@@ -70,7 +71,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
       if (response?.complexity) setComplexity(response.complexity);
     }).catch(() => {});
 
-    // Load the notes toggle setting (three-layer model: Phase 4)
+    // Load the notes toggle setting
     chrome.storage.local.get(EXTRACTION_NOTES_KEY).then((result: Record<string, any>) => {
       setNotesEnabled(Boolean(result[EXTRACTION_NOTES_KEY]));
     }).catch(() => {});
@@ -81,83 +82,96 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
     try {
       await chrome.storage.local.set({ [EXTRACTION_NOTES_KEY]: next });
     } catch {
-      // Storage may be unavailable; revert optimistic state.
       setNotesEnabled(!next);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || configError) return;
-    onSubmit(prompt.trim());
+    if (configError || budgetExceeded) return;
+    onSubmit(prompt.trim(), sourceUrl.trim() || undefined);
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      {tabUrl && (
-        <div className="flex items-center gap-1.5 text-xs text-zinc-500 truncate">
-          <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M2 4h12v9H2z" />
-            <path d="M5 4V2h6v2" />
-          </svg>
-          <span className="truncate">{tabUrl}</span>
-        </div>
-      )}
+  const canSubmit = !configError && !budgetExceeded;
 
-      {/* Quick / Deep mode toggle */}
-      <div className="flex gap-1 bg-zinc-800 rounded p-0.5">
-        <button
-          type="button"
-          onClick={() => setExtractionMode('quick')}
-          className={`flex-1 text-xs py-1.5 rounded transition-colors ${
-            extractionMode === 'quick'
-              ? 'bg-zinc-600 text-zinc-100'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Quick
-        </button>
-        <button
-          type="button"
-          onClick={() => setExtractionMode('deep')}
-          className={`flex-1 text-xs py-1.5 rounded transition-colors ${
-            extractionMode === 'deep'
-              ? 'bg-zinc-600 text-zinc-100'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Deep
-        </button>
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Source URL */}
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1.5">Source</label>
+        <input
+          type="url"
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
+          placeholder={tabUrl ?? 'https://...'}
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2.5 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+        />
+        <p className="text-[10px] text-zinc-600 mt-1">
+          Leave empty to extract from the current tab
+        </p>
       </div>
 
-      {suggestedMode && suggestedMode !== extractionMode && (
-        <p className="text-[10px] text-amber-400">
-          Suggested: {suggestedMode === 'deep' ? 'Deep Extract (complex page)' : 'Quick Extract (simple page)'}
-        </p>
-      )}
-
-      {/* Notes toggle (three-layer model: Phase 4). When on, the LLM also
-          produces short prose notes attached to entities via about/mention. */}
-      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={notesEnabled}
-          onChange={(e) => toggleNotes(e.target.checked)}
-          className="accent-indigo-500"
-        />
-        <span>Generate notes</span>
-        <span className="text-[10px] text-zinc-600">
-          {notesEnabled ? '(prose units with wikilinks)' : ''}
-        </span>
-      </label>
-
+      {/* Extraction Mode */}
       <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1.5">Extraction Mode</label>
+        <div className="flex gap-1 bg-zinc-800 rounded p-0.5">
+          <button
+            type="button"
+            onClick={() => setExtractionMode('quick')}
+            className={`flex-1 text-xs py-1.5 rounded transition-colors ${
+              extractionMode === 'quick'
+                ? 'bg-zinc-600 text-zinc-100'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Quick
+          </button>
+          <button
+            type="button"
+            onClick={() => setExtractionMode('deep')}
+            className={`flex-1 text-xs py-1.5 rounded transition-colors ${
+              extractionMode === 'deep'
+                ? 'bg-zinc-600 text-zinc-100'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Deep
+          </button>
+        </div>
+        {suggestedMode && suggestedMode !== extractionMode && (
+          <p className="text-[10px] text-amber-400 mt-1">
+            Suggested: {suggestedMode === 'deep' ? 'Deep Extract (complex page)' : 'Quick Extract (simple page)'}
+          </p>
+        )}
+      </div>
+
+      {/* Options */}
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1.5">Options</label>
+        <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={notesEnabled}
+            onChange={(e) => toggleNotes(e.target.checked)}
+            className="accent-indigo-500"
+          />
+          <span>Generate notes</span>
+          <span className="text-[10px] text-zinc-600">
+            {notesEnabled ? '(prose units with wikilinks)' : ''}
+          </span>
+        </label>
+      </div>
+
+      {/* Custom Instructions (optional) */}
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1.5">
+          Instructions <span className="text-zinc-600 font-normal">(optional)</span>
+        </label>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="What would you like to extract from this page?"
-          className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600 min-h-[80px] resize-y"
-          autoFocus
+          placeholder="e.g. Focus on the people and organizations mentioned..."
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2.5 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600 min-h-[60px] resize-y"
         />
       </div>
 
@@ -171,7 +185,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
 
       <button
         type="submit"
-        disabled={!prompt.trim() || !!configError || budgetExceeded}
+        disabled={!canSubmit}
         className="w-full bg-indigo-600 text-white text-sm py-2 rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {extractionMode === 'deep' ? 'Deep Extract' : 'Quick Extract'}

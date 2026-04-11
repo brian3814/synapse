@@ -305,11 +305,11 @@ export function useLLMExtraction() {
     }
   }, []);
 
-  const startQuickExtraction = useCallback(async (prompt: string) => {
+  const startQuickExtraction = useCallback(async (prompt?: string, sourceUrl?: string) => {
     // Privacy disclosure gate
     const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
     if (!disc.privacyDisclosureAccepted) {
-      useLLMStore.getState().setShowPrivacyModal(true, () => startQuickExtraction(prompt));
+      useLLMStore.getState().setShowPrivacyModal(true, () => startQuickExtraction(prompt, sourceUrl));
       return;
     }
 
@@ -324,14 +324,33 @@ export function useLLMExtraction() {
       return;
     }
 
-    // Fetch page content via content script
+    // Fetch page content: from custom URL or current tab
     let pageContent: { title: string; url: string; content: string };
-    try {
-      pageContent = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT_QUICK' }) as any;
-      if (!pageContent?.content) throw new Error('No page content received');
-    } catch (e: any) {
-      llm.setError(`Failed to get page content: ${e.message}`);
-      return;
+    if (sourceUrl) {
+      try {
+        const resp = await fetch(sourceUrl);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const html = await resp.text();
+        const { htmlToMarkdown } = await import('../../shared/html-to-markdown');
+        const markdown = htmlToMarkdown(html).replace(/\n{3,}/g, '\n\n');
+        const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+        pageContent = {
+          title: titleMatch?.[1]?.trim() ?? sourceUrl,
+          url: sourceUrl,
+          content: markdown.length > 50_000 ? markdown.substring(0, 50_000) + '\n\n...[truncated]' : markdown,
+        };
+      } catch (e: any) {
+        llm.setError(`Failed to fetch URL: ${e.message}`);
+        return;
+      }
+    } else {
+      try {
+        pageContent = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT_QUICK' }) as any;
+        if (!pageContent?.content) throw new Error('No page content received');
+      } catch (e: any) {
+        llm.setError(`Failed to get page content: ${e.message}`);
+        return;
+      }
     }
 
     llm.setInputText(pageContent.content);
@@ -518,11 +537,11 @@ export function useLLMExtraction() {
     }
   }, []);
 
-  const startAgentExtraction = useCallback(async (prompt: string) => {
+  const startAgentExtraction = useCallback(async (prompt?: string, sourceUrl?: string) => {
     // Privacy disclosure gate
     const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
     if (!disc.privacyDisclosureAccepted) {
-      useLLMStore.getState().setShowPrivacyModal(true, () => startAgentExtraction(prompt));
+      useLLMStore.getState().setShowPrivacyModal(true, () => startAgentExtraction(prompt, sourceUrl));
       return;
     }
 
@@ -552,16 +571,23 @@ export function useLLMExtraction() {
 
     const runId = crypto.randomUUID();
     llm.setStatus('agent-running');
-    llm.setSourceUrl(tab.url ?? null);
+    llm.setSourceUrl(sourceUrl ?? tab.url ?? null);
 
     const notesOn = await isNotesEnabled();
+
+    // Build agent prompt: include custom URL if provided, so the agent
+    // uses fetch_url to retrieve it instead of reading the active tab.
+    let agentPrompt = prompt || 'Extract entities and relationships from this page.';
+    if (sourceUrl) {
+      agentPrompt = `${agentPrompt}\n\nIMPORTANT: Extract from this URL instead of the current tab: ${sourceUrl}\nUse fetch_url to retrieve its content.`;
+    }
 
     // Send AGENT_RUN_START — offscreen reads apiKey from storage directly
     chrome.runtime.sendMessage({
       type: 'AGENT_RUN_START',
       payload: {
         runId,
-        userPrompt: prompt,
+        userPrompt: agentPrompt,
         tabId: tab.id,
         provider: config.provider,
         model: config.model,
