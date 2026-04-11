@@ -957,7 +957,10 @@ export function useLLMExtraction() {
             const created = await useGraphStore.getState().createNode({
               name: candidateName,
               type: 'note',
-              properties: { content: note.content },
+              properties: {
+                content: note.content,
+                ...(resourceNode ? { resourceId: resourceNode.id } : {}),
+              },
               sourceUrl: llm.sourceUrl ?? undefined,
             });
             if (created) {

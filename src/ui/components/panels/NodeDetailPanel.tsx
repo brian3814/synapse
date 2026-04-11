@@ -3,7 +3,8 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
-import { tags, entitySources, type EntityRelationType } from '../../../db/client/db-client';
+import { tags } from '../../../db/client/db-client';
+import { MultiSelectPanel } from './MultiSelectPanel';
 
 export function NodeDetailPanel() {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
@@ -35,9 +36,62 @@ export function NodeDetailPanel() {
     () => allTypes.filter((t) => t.category === 'entity_label'),
     [allTypes]
   );
-  const [sources, setSources] = useState<
-    { resourceId: string; relationType: EntityRelationType; createdAt: string }[]
-  >([]);
+  // Derive sources via two-hop: entity → connected notes → note's resource.
+  // Notes are the intermediary between entities and resources. Each note stores
+  // resourceId in properties (or has an extracted_from edge to the resource).
+  const connectedResources = useMemo(() => {
+    if (!selectedNodeId) return [];
+
+    // Step 1: find note nodes connected to this node via edges
+    const connectedNoteIds: string[] = [];
+    for (const edge of edges) {
+      let otherId: string | null = null;
+      if (edge.sourceId === selectedNodeId) otherId = edge.targetId;
+      else if (edge.targetId === selectedNodeId) otherId = edge.sourceId;
+      if (!otherId) continue;
+      const otherNode = nodes.find((n) => n.id === otherId && n.type === 'note');
+      if (otherNode) connectedNoteIds.push(otherNode.id);
+    }
+
+    // Step 2: for each note, resolve its source resource
+    const resourceMap = new Map<string, { id: string; name: string; noteCount: number }>();
+    for (const noteId of connectedNoteIds) {
+      const noteNode = nodes.find((n) => n.id === noteId);
+      if (!noteNode) continue;
+
+      // Try resourceId from properties first, then follow extracted_from edges
+      const resId = noteNode.properties?.resourceId as string | undefined;
+      let resourceNode: typeof nodes[0] | undefined;
+
+      if (resId) {
+        resourceNode = nodes.find((n) => n.id === resId && n.type === 'resource');
+      }
+      if (!resourceNode) {
+        // Fallback: follow extracted_from edge from note to resource
+        for (const edge of edges) {
+          if (edge.sourceId === noteId && edge.label === 'extracted_from') {
+            resourceNode = nodes.find((n) => n.id === edge.targetId && n.type === 'resource');
+            if (resourceNode) break;
+          }
+        }
+      }
+      if (!resourceNode && noteNode.sourceUrl) {
+        // Last fallback: match by sourceUrl
+        resourceNode = nodes.find((n) => n.type === 'resource' && n.sourceUrl === noteNode.sourceUrl);
+      }
+
+      if (resourceNode) {
+        const existing = resourceMap.get(resourceNode.id);
+        if (existing) {
+          existing.noteCount++;
+        } else {
+          resourceMap.set(resourceNode.id, { id: resourceNode.id, name: resourceNode.name, noteCount: 1 });
+        }
+      }
+    }
+
+    return [...resourceMap.values()];
+  }, [edges, nodes, selectedNodeId]);
 
   useEffect(() => {
     if (node) {
@@ -50,53 +104,12 @@ export function NodeDetailPanel() {
 
       // Load tags
       tags.getForNode(node.id).then(setNodeTags).catch(() => setNodeTags([]));
-
-      // Load entity sources (about/mention provenance for entity nodes)
-      if (node.type === 'entity') {
-        entitySources.getForEntity(node.id).then(setSources).catch(() => setSources([]));
-      } else {
-        setSources([]);
-      }
     }
   }, [node]);
 
-  // Multi-select summary
+  // Multi-select: delegate to dedicated panel
   if (selectedNodeIds.size > 1) {
-    const selectedNodes = nodes.filter((n) => selectedNodeIds.has(n.id));
-    const handleBulkDelete = async () => {
-      if (!confirm(`Delete ${selectedNodes.length} selected nodes? Connected edges will also be removed.`)) return;
-      for (const n of selectedNodes) {
-        await deleteNode(n.id);
-      }
-      setActivePanel('none');
-    };
-    return (
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-100">
-            {selectedNodes.length} nodes selected
-          </h3>
-          <button
-            onClick={handleBulkDelete}
-            className="text-xs px-2 py-1 bg-red-900/50 text-red-400 rounded hover:bg-red-900"
-          >
-            Delete All
-          </button>
-        </div>
-        <div className="space-y-1 max-h-60 overflow-y-auto">
-          {selectedNodes.map((n) => (
-            <div key={n.id} className="flex items-center gap-2 px-2 py-1 bg-zinc-800 rounded text-xs">
-              <div
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: n.color || getColorForType(n.type) }}
-              />
-              <span className="text-zinc-200 truncate">{n.name}</span>
-              <span className="text-zinc-500 capitalize ml-auto flex-shrink-0">{n.type}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <MultiSelectPanel />;
   }
 
   if (!node) {
@@ -124,6 +137,39 @@ export function NodeDetailPanel() {
       await deleteNode(node.id);
       setActivePanel('none');
     }
+  };
+
+  // For resource nodes: find associated notes (via extracted_from edges or resourceId property)
+  // and offer to delete them together.
+  const handleDeleteWithNotes = async () => {
+    // Find notes linked to this resource via extracted_from edges
+    const linkedNoteIds = new Set<string>();
+    for (const edge of edges) {
+      if (edge.targetId === node.id && edge.label === 'extracted_from') {
+        const srcNode = nodes.find((n) => n.id === edge.sourceId && n.type === 'note');
+        if (srcNode) linkedNoteIds.add(srcNode.id);
+      }
+    }
+    // Also find notes that reference this resource via properties.resourceId
+    for (const n of nodes) {
+      if (n.type === 'note' && n.properties?.resourceId === node.id) {
+        linkedNoteIds.add(n.id);
+      }
+    }
+
+    const noteCount = linkedNoteIds.size;
+    const msg = noteCount > 0
+      ? `Delete resource "${node.name}" and ${noteCount} associated ${noteCount === 1 ? 'note' : 'notes'}? All connected edges will also be removed.`
+      : `Delete resource "${node.name}"? No associated notes found.`;
+
+    if (!confirm(msg)) return;
+
+    // Delete notes first (cascade removes their edges), then the resource
+    for (const noteId of linkedNoteIds) {
+      await deleteNode(noteId);
+    }
+    await deleteNode(node.id);
+    setActivePanel('none');
   };
 
   const handleAddTag = () => {
@@ -176,6 +222,15 @@ export function NodeDetailPanel() {
           >
             Delete
           </button>
+          {node.type === 'resource' && (
+            <button
+              onClick={handleDeleteWithNotes}
+              className="text-xs px-2 py-1 bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+              title="Delete this resource and all notes extracted from it"
+            >
+              + Notes
+            </button>
+          )}
         </div>
       </div>
 
@@ -294,35 +349,28 @@ export function NodeDetailPanel() {
         )}
       </div>
 
-      {/* Sources (entity nodes only) — lists resource nodes this entity was extracted from */}
-      {node.type === 'entity' && sources.length > 0 && (
+      {/* Sources — derived via notes: entity → note → resource */}
+      {(connectedResources.length > 0 || node.sourceUrl) && (
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">
-            Sources ({sources.length})
+            {connectedResources.length > 0 ? `Sources (${connectedResources.length})` : 'Source'}
           </label>
           <div className="space-y-1">
-            {sources.map((src) => {
-              const resourceNode = nodes.find((n) => n.id === src.resourceId);
-              const display = resourceNode?.name ?? resourceNode?.sourceUrl ?? src.resourceId;
-              return (
-                <div
-                  key={`${src.resourceId}-${src.relationType}`}
-                  className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1 flex justify-between gap-2"
-                >
-                  <span className="truncate">{display}</span>
-                  <span className="text-zinc-500 shrink-0">{src.relationType}</span>
-                </div>
-              );
-            })}
+            {connectedResources.map((src) => (
+              <div
+                key={src.id}
+                className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1 flex justify-between gap-2"
+              >
+                <span className="truncate">{src.name}</span>
+                <span className="text-zinc-500 shrink-0">
+                  {src.noteCount} {src.noteCount === 1 ? 'note' : 'notes'}
+                </span>
+              </div>
+            ))}
+            {connectedResources.length === 0 && node.sourceUrl && (
+              <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Source URL (legacy / resource nodes) */}
-      {node.sourceUrl && (
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">Source</label>
-          <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>
         </div>
       )}
 
