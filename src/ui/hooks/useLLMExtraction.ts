@@ -17,7 +17,11 @@ async function isNotesEnabled(): Promise<boolean> {
     return false;
   }
 }
-import { entityResolution, sourceContent, entitySources, edgeSources } from '../../db/client/db-client';
+import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
+import { write as writeNote } from '../../notes/opfs-note-store';
+import { generateNoteMarkdown } from '../../notes/markdown-utils';
+import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
+import { parseMarkdown } from '../../filesystem/markdown-parser';
 import type { DiffItem, ExtractedNoteCandidate, AgentProgressEvent, EntityMatch } from '../../shared/types';
 
 function streamFromOffscreen(
@@ -950,6 +954,8 @@ export function useLLMExtraction() {
 
         // Create the note node. Handle name collision via unique index on
         // nodes.name WHERE type='note'. Retry with a disambiguating suffix.
+        // Content goes to OPFS, not properties (per ADR).
+        const wikiLinks = parseMarkdown(note.content).wikiLinks;
         let noteNodeId: string | null = null;
         let candidateName = note.title;
         for (let attempt = 0; attempt < 3 && !noteNodeId; attempt++) {
@@ -958,7 +964,7 @@ export function useLLMExtraction() {
               name: candidateName,
               type: 'note',
               properties: {
-                content: note.content,
+                wikiLinks,
                 ...(resourceNode ? { resourceId: resourceNode.id } : {}),
               },
               sourceUrl: llm.sourceUrl ?? undefined,
@@ -966,6 +972,11 @@ export function useLLMExtraction() {
             if (created) {
               noteNodeId = created.id;
               noteCreatedIds.push(created.id);
+              // Write content to OPFS as .md file (canonical source)
+              const markdown = generateNoteMarkdown(candidateName, note.content, wikiLinks);
+              await writeNote(created.id, markdown);
+              // Update FTS search index
+              await noteSearch.upsert(created.id, candidateName, stripMarkdownToPlainText(note.content));
             } else {
               break;
             }

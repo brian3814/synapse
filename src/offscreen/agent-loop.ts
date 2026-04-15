@@ -12,13 +12,16 @@ function getAgentSystemPrompt(notesEnabled: boolean): string {
     ? `
 
 Rules for NOTES (enabled):
-- When calling save_entities, include a "notes" array alongside nodes/edges.
-- Each note is 3-10 sentences of focused prose about ONE idea or insight.
-- Title each note specifically to the source (e.g. "Notion's SharedWorker architecture for multi-tab SQLite", NOT "Architecture Overview").
-- Use [[Entity Name]] wikilinks in the content to reference entities from the nodes array.
-- Each note has an "about" array (1-3 entities the note is primarily about) and a "mentions" array (any other referenced entities).
-- Entity names in about/mentions must match the nodes array exactly.
-- Produce 2-6 notes per page, one per distinct idea.`
+- When calling save_entities, include exactly ONE note in the "notes" array — a structured summary of the resource.
+- Title: "Summary: <page title>"
+- The note content MUST be markdown with this structure:
+  1. **TL;DR** section first — 2-3 sentences capturing the core message.
+  2. Then 3-5 **sections** that break down the content by topic/theme. Each section should have a ## heading and a descriptive paragraph.
+  3. Include **markdown tables** where the page contains structured/comparative data (features, specs, comparisons, timelines, etc.). Reproduce key tables from the source.
+  4. Include **images** from the page where relevant using ![description](image_url). Use the original image URLs from the page. Only include images that add value (diagrams, charts, screenshots), not decorative ones.
+- Use [[Entity Name]] wikilinks to reference entities from the nodes array.
+- "about" lists 1-3 key entities the note covers. "mentions" lists other referenced entities.
+- Entity names in about/mentions must match the nodes array exactly.`
     : '';
 
   return `You are a knowledge graph extraction agent. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges) into a structured knowledge graph.

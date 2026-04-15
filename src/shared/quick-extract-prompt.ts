@@ -8,10 +8,10 @@ export function getQuickExtractSystemPrompt(notesEnabled: boolean): string {
     ? `
   "notes": [
     {
-      "title": "A short, source-specific title",
-      "content": "3-10 sentences of focused prose, ideally with [[wikilinks]] to entities from the nodes array.",
-      "about": ["Entity Name 1", "Entity Name 2"],
-      "mentions": ["Entity Name 3"]
+      "title": "Summary: <page title>",
+      "content": "## TL;DR\\n2-3 sentence summary.\\n\\n## Section Title\\nDescription...\\n\\n| Col1 | Col2 |\\n|---|---|\\n| data | data |",
+      "about": ["Entity Name 1"],
+      "mentions": ["Entity Name 2"]
     }
   ],`
     : '';
@@ -20,12 +20,15 @@ export function getQuickExtractSystemPrompt(notesEnabled: boolean): string {
     ? `
 
 Rules for NOTES:
-- Produce 2-6 notes per page, one per distinct idea or insight.
-- Each note is 3-10 sentences of focused prose — NOT a summary of the whole page.
-- Title should be specific to this source (e.g. "Notion's SharedWorker architecture for multi-tab SQLite", NOT "Architecture Overview").
-- Use [[Entity Name]] wikilinks in the content to reference entities from the nodes array.
-- "about" lists 1-3 entities the note is primarily about (these become the note's main subjects).
-- "mentions" lists any other entities the note incidentally references.
+- Produce exactly ONE note — a structured summary of the entire resource.
+- Title: "Summary: <page title>"
+- The note content MUST be markdown with this structure:
+  1. **TL;DR** section first (## TL;DR) — 2-3 sentences capturing the core message.
+  2. Then 3-5 **sections** that break down the content by topic/theme. Each section: ## heading + descriptive paragraph.
+  3. Include **markdown tables** where the page has structured/comparative data (features, specs, comparisons, timelines). Reproduce key tables from the source.
+  4. Include **images** where relevant using ![description](image_url) with original URLs from the page. Only diagrams, charts, and screenshots — not decorative images.
+- Use [[Entity Name]] wikilinks to reference entities from the nodes array.
+- "about" lists 1-3 key entities the note covers. "mentions" lists other referenced entities.
 - Entity names in about/mentions must match names in the nodes array exactly.`
     : '';
 
