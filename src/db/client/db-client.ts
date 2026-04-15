@@ -97,6 +97,16 @@ function spawnAndAttachWorker(): void {
   );
 }
 
+/**
+ * Notify the SharedWorker that this tab/panel is about to close and will take
+ * the DedicatedWorker with it. The SharedWorker resets its state and asks any
+ * surviving tab to spawn a replacement. Call this before `window.close()`.
+ */
+export function notifyWorkerDying(): void {
+  if (!port) return;
+  port.postMessage({ requestId: '__worker_dying__', action: '__worker_dying__' } as WorkerRequest);
+}
+
 function sendRequest(action: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!port) {
@@ -145,7 +155,7 @@ export const nodes = {
   update: (input: any) => sendRequest('nodes.update', input) as Promise<any>,
   delete: (id: string) => sendRequest('nodes.delete', id) as Promise<boolean>,
   search: (query: string, limit?: number) =>
-    sendRequest('nodes.search', { query, limit }) as Promise<any[]>,
+    sendRequest('nodes.search', { query, limit }, 30_000) as Promise<any[]>,
   getTypes: () => sendRequest('nodes.getTypes') as Promise<string[]>,
   getNeighborhood: (nodeId: string, hops?: number) =>
     sendRequest('nodes.getNeighborhood', { nodeId, hops }) as Promise<{ nodeIds: string[] }>,
@@ -164,7 +174,7 @@ export const edges = {
   getBetween: (nodeIds: string[]) => sendRequest('edges.getBetween', nodeIds) as Promise<any[]>,
   getTypes: () => sendRequest('edges.getTypes') as Promise<string[]>,
   search: (query: string, limit?: number) =>
-    sendRequest('edges.search', { query, limit }) as Promise<any[]>,
+    sendRequest('edges.search', { query, limit }, 30_000) as Promise<any[]>,
 };
 
 // Node type operations
@@ -214,7 +224,7 @@ export const noteSearch = {
   delete: (nodeId: string) =>
     sendRequest('noteSearch.delete', nodeId) as Promise<boolean>,
   search: (query: string, limit?: number) =>
-    sendRequest('noteSearch.search', { query, limit }) as Promise<
+    sendRequest('noteSearch.search', { query, limit }, 30_000) as Promise<
       Array<{ node_id: string; title: string; snippet: string }>
     >,
   getEntry: (nodeId: string) =>

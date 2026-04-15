@@ -46,6 +46,9 @@ const pendingInits: Array<{ port: MessagePort; requestId: string }> = [];
 // Queue requests that arrive before the worker port is ready
 const earlyQueue: Array<{ port: MessagePort; request: WorkerRequest }> = [];
 
+// Track all connected tab/panel ports so we can broadcast __needs_worker__
+const connectedPorts = new Set<MessagePort>();
+
 function onWorkerMessage(event: MessageEvent<WorkerResponse>): void {
   const { requestId, success, data, error, syncEvent } = event.data;
 
@@ -165,12 +168,29 @@ function attachWorkerPort(port: MessagePort): void {
 self.onconnect = (connectEvent: MessageEvent) => {
   const port = connectEvent.ports[0];
 
+  connectedPorts.add(port);
+
   port.onmessage = (event: MessageEvent) => {
     const request = event.data as WorkerRequest;
 
     // Handle worker port attachment from UI
     if (request.action === '__attach_worker__' && event.ports?.length > 0) {
       attachWorkerPort(event.ports[0]);
+      return;
+    }
+
+    // Handle dying notification — tab/panel about to close, worker will die
+    if (request.action === '__worker_dying__') {
+      resetWorkerState();
+      connectedPorts.delete(port);
+      // Ask all surviving tabs to spawn a replacement worker
+      for (const p of connectedPorts) {
+        p.postMessage({
+          requestId: '__needs_worker__',
+          success: true,
+          data: { needsWorker: true },
+        } as WorkerResponse);
+      }
       return;
     }
 
