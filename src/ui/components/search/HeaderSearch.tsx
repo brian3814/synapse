@@ -11,6 +11,8 @@ const DEBOUNCE_MS = 300;
 interface EdgeResult {
   id: string;
   label: string;
+  source_id: string;
+  target_id: string;
   source_name: string;
   target_name: string;
 }
@@ -71,42 +73,52 @@ export function HeaderSearch() {
     const id = ++searchIdRef.current;
     setSearching(true);
 
-    try {
-      const [nodeResults, edgeResults, noteContentResults] = await Promise.all([
-        dbNodes.search(q, 30) as Promise<DbNode[]>,
-        dbEdges.search(q, 15) as Promise<EdgeResult[]>,
-        noteSearch.search(q, 10),
-      ]);
+    // Use allSettled so a single slow/failed sub-query (e.g. edges.search on
+    // large datasets) doesn't wipe out successful node results.
+    const [nodeSettled, edgeSettled, noteSettled] = await Promise.allSettled([
+      dbNodes.search(q, 30) as Promise<DbNode[]>,
+      dbEdges.search(q, 15) as Promise<EdgeResult[]>,
+      noteSearch.search(q, 10),
+    ]);
 
-      if (searchIdRef.current !== id) return;
+    if (searchIdRef.current !== id) return;
 
-      const entities: DbNode[] = [];
-      const notes: DbNode[] = [];
-      const resources: DbNode[] = [];
-      const noteIdsSeen = new Set<string>();
-
-      for (const node of nodeResults) {
-        if (node.type === 'entity') entities.push(node);
-        else if (node.type === 'note') { notes.push(node); noteIdsSeen.add(node.id); }
-        else if (node.type === 'resource') resources.push(node);
-        else entities.push(node); // fallback
-      }
-
-      // Add note content matches not already found by node name search
-      for (const nr of noteContentResults) {
-        if (!noteIdsSeen.has(nr.node_id)) {
-          notes.push({ id: nr.node_id, name: nr.title, type: 'note' } as DbNode);
-          noteIdsSeen.add(nr.node_id);
-        }
-      }
-
-      setResults({ entities, notes, resources, edges: edgeResults });
-      setOpen(true);
-    } catch {
-      if (searchIdRef.current === id) setResults(EMPTY);
-    } finally {
-      if (searchIdRef.current === id) setSearching(false);
+    if (nodeSettled.status === 'rejected') {
+      console.warn('[HeaderSearch] nodes.search failed:', nodeSettled.reason);
     }
+    if (edgeSettled.status === 'rejected') {
+      console.warn('[HeaderSearch] edges.search failed:', edgeSettled.reason);
+    }
+    if (noteSettled.status === 'rejected') {
+      console.warn('[HeaderSearch] noteSearch.search failed:', noteSettled.reason);
+    }
+
+    const nodeResults = nodeSettled.status === 'fulfilled' ? nodeSettled.value : [];
+    const edgeResults = edgeSettled.status === 'fulfilled' ? edgeSettled.value : [];
+    const noteContentResults = noteSettled.status === 'fulfilled' ? noteSettled.value : [];
+
+    const entities: DbNode[] = [];
+    const notes: DbNode[] = [];
+    const resources: DbNode[] = [];
+    const noteIdsSeen = new Set<string>();
+
+    for (const node of nodeResults) {
+      if (node.type === 'entity') entities.push(node);
+      else if (node.type === 'note') { notes.push(node); noteIdsSeen.add(node.id); }
+      else if (node.type === 'resource') resources.push(node);
+      else entities.push(node); // fallback
+    }
+
+    for (const nr of noteContentResults) {
+      if (!noteIdsSeen.has(nr.node_id)) {
+        notes.push({ id: nr.node_id, name: nr.title, type: 'note' } as DbNode);
+        noteIdsSeen.add(nr.node_id);
+      }
+    }
+
+    setResults({ entities, notes, resources, edges: edgeResults });
+    setOpen(true);
+    setSearching(false);
   }, []);
 
   const handleChange = useCallback(
@@ -132,16 +144,46 @@ export function HeaderSearch() {
   };
 
   const handleSelectNode = (id: string) => {
-    selectNode(id);
-    setActivePanel('nodeDetail');
+    // If the matched node is in a hidden layer, reveal it so the canvas
+    // has something to fit to.
+    const node = useGraphStore.getState().nodes.find((n) => n.id === id);
+    let layerToggled = false;
+    if (node) {
+      const { visibleLayers, toggleLayer } = useUIStore.getState();
+      const layer = node.type as 'entity' | 'note' | 'resource';
+      if (visibleLayers[layer] === false) {
+        toggleLayer(layer);
+        layerToggled = true;
+      }
+    }
+    const invoke = () => {
+      const cb = useUIStore.getState().focusNodeCallback;
+      if (cb) {
+        cb(id);
+      } else {
+        selectNode(id);
+        setActivePanel('nodeDetail');
+      }
+    };
+    if (layerToggled) {
+      // Wait two frames: React commit → GraphCanvas.updateData → fitToView
+      requestAnimationFrame(() => requestAnimationFrame(invoke));
+    } else {
+      invoke();
+    }
     setOpen(false);
     setQuery('');
     setResults(EMPTY);
   };
 
-  const handleSelectEdge = (id: string) => {
+  const handleSelectEdge = (id: string, sourceId?: string, targetId?: string) => {
     selectEdge(id);
     setActivePanel('edgeDetail');
+    // Fit viewport to both endpoints so the edge is visible
+    if (sourceId && targetId) {
+      const cb = useUIStore.getState().focusNodeCallback;
+      if (cb) cb([sourceId, targetId]);
+    }
     setOpen(false);
     setQuery('');
     setResults(EMPTY);
@@ -235,7 +277,7 @@ export function HeaderSearch() {
               {results.edges.map((edge) => (
                 <button
                   key={edge.id}
-                  onClick={() => handleSelectEdge(edge.id)}
+                  onClick={() => handleSelectEdge(edge.id, edge.source_id, edge.target_id)}
                   className="w-full text-left px-3 py-1.5 hover:bg-zinc-700 flex items-center gap-1.5 text-xs"
                 >
                   <span className="text-zinc-300 truncate">{edge.source_name}</span>

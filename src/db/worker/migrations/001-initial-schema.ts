@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS edges (
 );
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
+CREATE INDEX IF NOT EXISTS idx_edges_label ON edges(label);
 
 CREATE TABLE IF NOT EXISTS entity_aliases (
     id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

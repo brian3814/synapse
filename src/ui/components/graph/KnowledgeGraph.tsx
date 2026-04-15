@@ -34,12 +34,17 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
 
   const [windowed, setWindowed] = useState(false);
 
-  // Register focus-node callback for chat node links
+  // Register focus-node callback for chat node links + header search clicks.
+  // Accepts a single id (pan+zoom to that node, show detail) or an array
+  // (fit viewport to enclose all — used for edge endpoints).
   useEffect(() => {
-    setFocusNodeCallback((nodeId: string) => {
-      selectNode(nodeId);
-      forceActivePanel('nodeDetail');
-      graphRef.current?.fitToView([nodeId]);
+    setFocusNodeCallback((nodeIds: string | string[]) => {
+      const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+      if (ids.length === 1) {
+        selectNode(ids[0]);
+        forceActivePanel('nodeDetail');
+      }
+      graphRef.current?.fitToView(ids);
     });
     return () => setFocusNodeCallback(null);
   }, [selectNode, forceActivePanel, setFocusNodeCallback]);

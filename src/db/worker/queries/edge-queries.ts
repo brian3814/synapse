@@ -124,23 +124,35 @@ export async function getEdgeTypes(): Promise<string[]> {
   return rows.map(r => r.type);
 }
 
-/** Search edges by label, including source/target node names for display. */
+/** Search edges by label, including source/target node names for display.
+ *  Split into two cheap queries — avoids triple-LIKE + double-JOIN over full
+ *  edges table, which times out on graphs with 30k+ edges. */
 export async function searchEdges(
   queryText: string,
   limit = 30
 ): Promise<(DbEdge & { source_name: string; target_name: string })[]> {
   const pattern = `%${queryText}%`;
-  const { rows } = await executeQuery<DbEdge & { source_name: string; target_name: string }>(
-    `SELECT e.*, sn.name AS source_name, tn.name AS target_name
-     FROM edges e
-     JOIN nodes sn ON sn.id = e.source_id
-     JOIN nodes tn ON tn.id = e.target_id
-     WHERE e.label LIKE ? OR sn.name LIKE ? OR tn.name LIKE ?
-     ORDER BY e.label
-     LIMIT ?;`,
-    [pattern, pattern, pattern, limit]
+  const { rows: matchedEdges } = await executeQuery<DbEdge>(
+    `SELECT * FROM edges WHERE label LIKE ? ORDER BY label LIMIT ?;`,
+    [pattern, limit]
   );
-  return rows;
+  if (matchedEdges.length === 0) return [];
+
+  const endpointIds = Array.from(
+    new Set(matchedEdges.flatMap((e) => [e.source_id, e.target_id]))
+  );
+  const placeholders = endpointIds.map(() => '?').join(',');
+  const { rows: endpoints } = await executeQuery<{ id: string; name: string }>(
+    `SELECT id, name FROM nodes WHERE id IN (${placeholders});`,
+    endpointIds
+  );
+  const nameMap = new Map(endpoints.map((n) => [n.id, n.name]));
+
+  return matchedEdges.map((e) => ({
+    ...e,
+    source_name: nameMap.get(e.source_id) ?? '',
+    target_name: nameMap.get(e.target_id) ?? '',
+  }));
 }
 
 export async function getEdgesBetween(nodeIds: string[]): Promise<DbEdge[]> {
