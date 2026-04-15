@@ -24,7 +24,7 @@ interface UIStore {
   chatDisplayMode: ChatDisplayMode;
   panelWidth: number;
   chatSidebarWidth: number;
-  focusNodeCallback: ((nodeId: string) => void) | null;
+  focusNodeCallback: ((nodeIds: string | string[]) => void) | null;
   /**
    * Which of the three structural layers are visible in the main graph.
    * Default is entity-only — the "what do I know" view. Notes and
@@ -43,7 +43,7 @@ interface UIStore {
   setChatDisplayMode: (mode: ChatDisplayMode) => void;
   setPanelWidth: (width: number) => void;
   setChatSidebarWidth: (width: number) => void;
-  setFocusNodeCallback: (cb: ((nodeId: string) => void) | null) => void;
+  setFocusNodeCallback: (cb: ((nodeIds: string | string[]) => void) | null) => void;
   toggleLayer: (layer: StructuralNodeType) => void;
   /** Note ID to auto-open in NoteEditor when the notes panel activates. */
   pendingEditNoteId: string | null;
@@ -56,7 +56,7 @@ export const useUIStore = create<UIStore>((set) => ({
   layoutType: 'forceDirected2d',
   clusteringEnabled: true,
   graphKey: 0,
-  chatOpen: true,
+  chatOpen: false,
   chatDisplayMode: 'sidebar',
   panelWidth: 400,
   chatSidebarWidth: 400,

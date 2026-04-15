@@ -107,6 +107,28 @@ export function NodeDetailPanel() {
     }
   }, [node]);
 
+  // For resource nodes: find linked notes to display in the panel
+  // MUST be before early returns to satisfy React's rules of hooks.
+  const linkedNotes = useMemo(() => {
+    if (node?.type !== 'resource') return [];
+    const noteIds = new Set<string>();
+    for (const edge of edges) {
+      if (edge.targetId === node.id && edge.label === 'extracted_from') {
+        const srcNode = nodes.find((n) => n.id === edge.sourceId && n.type === 'note');
+        if (srcNode) noteIds.add(srcNode.id);
+      }
+    }
+    for (const n of nodes) {
+      if (n.type === 'note' && n.properties?.resourceId === node.id) {
+        noteIds.add(n.id);
+      }
+    }
+    return [...noteIds].map((id) => nodes.find((n) => n.id === id)).filter(Boolean) as typeof nodes;
+  }, [node, edges, nodes]);
+
+  const forceActivePanel = useUIStore((s) => s.forceActivePanel);
+  const setPendingEditNoteId = useUIStore((s) => s.setPendingEditNoteId);
+
   // Multi-select: delegate to dedicated panel
   if (selectedNodeIds.size > 1) {
     return <MultiSelectPanel />;
@@ -119,6 +141,11 @@ export function NodeDetailPanel() {
       </div>
     );
   }
+
+  const handleOpenNote = (noteId: string) => {
+    setPendingEditNoteId(noteId);
+    forceActivePanel('notes');
+  };
 
   const handleSave = async () => {
     await updateNode({
@@ -180,7 +207,7 @@ export function NodeDetailPanel() {
     setTagInput('');
   };
 
-  const color = node.color || getColorForType(node.type);
+  const color = node?.color || getColorForType(node?.type ?? '');
 
   return (
     <div className="p-4 space-y-4">
@@ -370,6 +397,29 @@ export function NodeDetailPanel() {
             {connectedResources.length === 0 && node.sourceUrl && (
               <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Linked Notes — for resource nodes */}
+      {linkedNotes.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-zinc-400 mb-2">
+            Notes ({linkedNotes.length})
+          </h4>
+          <div className="space-y-1">
+            {linkedNotes.map((noteNode) => (
+              <button
+                key={noteNode.id}
+                onClick={() => handleOpenNote(noteNode.id)}
+                className="w-full text-left px-2 py-1.5 bg-zinc-800 rounded text-xs hover:bg-zinc-700 flex items-center gap-2"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sky-400 flex-shrink-0">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span className="text-zinc-200 truncate">{noteNode.name}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
