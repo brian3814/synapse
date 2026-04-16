@@ -261,6 +261,23 @@ export function NodeDetailPanel() {
         </div>
       </div>
 
+      {/* Quick action: open this note in the Notes panel editor */}
+      {node.type === 'note' && (
+        <button
+          onClick={() => handleOpenNote(node.id)}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-700/40 rounded text-xs font-medium text-sky-300"
+          title="Open this note in the Notes panel editor"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          Open in Note Editor
+        </button>
+      )}
+
       {/* Metadata section */}
       <div className="space-y-3" style={{ paddingTop: 4 }}>
         {/* Type (structural layer) */}
