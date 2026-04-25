@@ -5,9 +5,14 @@
   "type": "module",
   "main": "dist-electron/main/main.cjs",
   "scripts": {
-    "dev": "vite build --watch --mode development",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "vite build --watch --mode development --config vite.config.chrome.ts",
+    "build": "tsc && vite build --config vite.config.chrome.ts",
+    "preview": "vite preview",
+    "build:chrome": "tsc && vite build --config vite.config.chrome.ts",
+    "build:electron-main": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --outdir=dist-electron/main --format=cjs --out-extension:.js=.cjs --external:electron --packages=external",
+    "build:electron-renderer": "vite build --config vite.config.electron.ts",
+    "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
+    "dev:electron": "npm run build:electron && electron ."
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
