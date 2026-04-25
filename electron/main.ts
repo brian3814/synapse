@@ -1,9 +1,5 @@
-import { app, BrowserWindow, protocol, net, session } from 'electron';
-import { fileURLToPath } from 'url';
+import { app, BrowserWindow, protocol, net } from 'electron';
 import path from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
