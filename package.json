@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "dist-electron/main/main.cjs",
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "tsc && vite build",
@@ -30,6 +31,8 @@
     "@types/three": "^0.183.1",
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^41.3.0",
+    "esbuild": "^0.28.0",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

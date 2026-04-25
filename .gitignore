@@ -22,3 +22,6 @@ Thumbs.db
 # Tooling artifacts
 .superpowers/
 .playwright-mcp/
+
+# Electron build output
+dist-electron/
