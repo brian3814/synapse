@@ -6,6 +6,7 @@ import { OriginPrivateFileSystemVFS } from 'wa-sqlite/src/examples/OriginPrivate
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js';
 
 import { migrateFromIDB } from './idb-to-opfs-migration';
+import { setEngine } from './query-executor';
 
 const DB_NAME = 'kg_extension.db';
 
@@ -95,6 +96,8 @@ export async function initSQLite(): Promise<void> {
   if (vfsName === 'opfs') {
     await migrateFromIDB(sqlite3, db!);
   }
+
+  setEngine({ exec, query, checkModuleAvailable });
 }
 
 /**

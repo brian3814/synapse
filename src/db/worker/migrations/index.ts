@@ -1,4 +1,4 @@
-import { exec, query, checkModuleAvailable } from '../sqlite-engine';
+import { executeExec, executeQuery, checkModuleAvailable } from '../query-executor';
 import * as migration001 from './001-initial-schema';
 import * as migration002 from './002-fts-index';
 import * as migration003 from './003-source-content';
@@ -30,7 +30,7 @@ export function isNotesFTS5Available(): boolean {
 
 export async function runMigrations(): Promise<number> {
   // Ensure schema_version table exists
-  await exec(`
+  await executeExec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER PRIMARY KEY,
       applied_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -39,7 +39,7 @@ export async function runMigrations(): Promise<number> {
   `);
 
   // Get current version
-  const rows = await query<{ version: number }>(
+  const { rows } = await executeQuery<{ version: number }>(
     'SELECT MAX(version) as version FROM schema_version;'
   );
   const currentVersion = rows[0]?.version ?? 0;
@@ -51,13 +51,13 @@ export async function runMigrations(): Promise<number> {
   // If FTS5 was previously set up, verify it still works
   if (currentVersion >= 2 && hasFTS5Module) {
     try {
-      await query("SELECT * FROM nodes_fts LIMIT 0;");
+      await executeQuery("SELECT * FROM nodes_fts LIMIT 0;");
       fts5Available = true;
     } catch {
       fts5Available = false;
     }
     try {
-      await query("SELECT * FROM notes_fts LIMIT 0;");
+      await executeQuery("SELECT * FROM notes_fts LIMIT 0;");
       notesFts5Available = true;
     } catch {
       notesFts5Available = false;
@@ -72,7 +72,7 @@ export async function runMigrations(): Promise<number> {
       if (migration.version === 2 && !hasFTS5Module) {
         console.log(`[DB] Skipping migration ${migration.version}: FTS5 module not available`);
         try {
-          await exec(
+          await executeExec(
             `INSERT OR IGNORE INTO schema_version (version, description) VALUES (?, ?);`,
             [migration.version, `${migration.description} (skipped - no fts5)`]
           );
@@ -91,10 +91,10 @@ export async function runMigrations(): Promise<number> {
           .filter((s) => s.length > 0);
 
         for (const stmt of statements) {
-          await exec(stmt + ';');
+          await executeExec(stmt + ';');
         }
 
-        await exec(
+        await executeExec(
           `INSERT INTO schema_version (version, description) VALUES (?, ?);`,
           [migration.version, migration.description]
         );
@@ -110,7 +110,7 @@ export async function runMigrations(): Promise<number> {
         if (migration.optional) {
           console.warn(`[DB] Optional migration ${migration.version} failed (skipping):`, e);
           try {
-            await exec(
+            await executeExec(
               `INSERT OR IGNORE INTO schema_version (version, description) VALUES (?, ?);`,
               [migration.version, `${migration.description} (skipped)`]
             );
@@ -128,20 +128,20 @@ export async function runMigrations(): Promise<number> {
 
   // Ensure chat tables exist (added after initial schema was already deployed,
   // so CREATE IF NOT EXISTS runs idempotently on every init)
-  await exec(`CREATE TABLE IF NOT EXISTS chat_sessions (
+  await executeExec(`CREATE TABLE IF NOT EXISTS chat_sessions (
     id TEXT PRIMARY KEY, title TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_active_at TEXT NOT NULL DEFAULT (datetime('now')),
     status TEXT NOT NULL DEFAULT 'active'
   );`);
-  await exec(`CREATE TABLE IF NOT EXISTS chat_messages (
+  await executeExec(`CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
     role TEXT NOT NULL, content TEXT NOT NULL, rag_context TEXT,
     status TEXT NOT NULL DEFAULT 'complete',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);`);
+  await executeExec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);`);
 
   return appliedVersion;
 }
