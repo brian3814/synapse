@@ -18,7 +18,7 @@ async function isNotesEnabled(): Promise<boolean> {
   }
 }
 import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
-import { write as writeNote } from '../../notes/opfs-note-store';
+import { write as writeNote } from '../../notes/note-store';
 import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';

@@ -3,7 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { entityResolution, noteSearch } from '../../../db/client/db-client';
-import { write as writeNote } from '../../../notes/opfs-note-store';
+import { write as writeNote } from '../../../notes/note-store';
 import { generateNoteMarkdown, stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import type { GraphNode } from '../../../shared/types';
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { nodes, edges, initDbClient } from './db-client';
-import { init as initNoteStore } from '../../notes/opfs-note-store';
+import { initNoteStore } from '../../notes/note-store';
 import type { DbNode, DbEdge } from '../../shared/types';
 
 // Hook to initialize the database
@@ -10,10 +10,7 @@ export function useDbInit(): { ready: boolean; error: string | null } {
 
   useEffect(() => {
     initDbClient()
-      .then(() => {
-        if ((window as any).electronAPI) return;
-        return initNoteStore();
-      })
+      .then(() => initNoteStore())
       .then(() => setReady(true))
       .catch((e) => {
         console.error('[useDbInit] Failed:', e);

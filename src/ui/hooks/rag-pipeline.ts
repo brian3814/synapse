@@ -11,7 +11,7 @@
 
 import { nodes as nodesApi, edges as edgesApi, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
-import { read as readNote } from '../../notes/opfs-note-store';
+import { read as readNote } from '../../notes/note-store';
 import { parseMarkdown } from '../../notes/markdown-utils';
 import type { DbNode, DbEdge, DbSourceContent } from '../../shared/types';
 

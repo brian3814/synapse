@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
-import { remove as removeNoteFile } from '../../notes/opfs-note-store';
+import { remove as removeNoteFile } from '../../notes/note-store';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';

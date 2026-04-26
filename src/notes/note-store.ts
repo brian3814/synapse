@@ -18,14 +18,14 @@ export async function initNoteStore(): Promise<void> {
   if (store) return;
 
   if ((window as any).electronNotes) {
-    const { FsNoteStore } = await import('./fs-note-store');
-    store = new FsNoteStore();
+    const mod = await import('./fs-note-store');
+    store = new mod.FsNoteStore();
   } else {
-    const { OpfsNoteStore } = await import('./opfs-note-store');
-    store = new OpfsNoteStore();
+    const mod = await import('./opfs-note-store');
+    store = new mod.OpfsNoteStore();
   }
 
-  await store.init();
+  await store!.init();
 }
 
 export const read = (nodeId: string) => getNoteStore().read(nodeId);

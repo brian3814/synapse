@@ -2,7 +2,7 @@ import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-
 import { nodes, edges, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
-import { read as readNote } from '../../notes/opfs-note-store';
+import { read as readNote } from '../../notes/note-store';
 import { parseMarkdown } from '../../notes/markdown-utils';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';

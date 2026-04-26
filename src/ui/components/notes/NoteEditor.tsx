@@ -5,7 +5,7 @@ import { noteSearch, noteFolders, noteAttachments } from '../../../db/client/db-
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
-import { read as readNote, write as writeNote } from '../../../notes/opfs-note-store';
+import { read as readNote, write as writeNote } from '../../../notes/note-store';
 import { stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import { SYNC_CHANNEL, type SyncEvent } from '../../../shared/sync-events';
 
