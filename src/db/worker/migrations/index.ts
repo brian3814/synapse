@@ -85,14 +85,7 @@ export async function runMigrations(): Promise<number> {
 
       console.log(`[DB] Applying migration ${migration.version}: ${migration.description}`);
       try {
-        const statements = migration.up
-          .split(';')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-
-        for (const stmt of statements) {
-          await executeExec(stmt + ';');
-        }
+        await executeExec(migration.up);
 
         await executeExec(
           `INSERT INTO schema_version (version, description) VALUES (?, ?);`,
