@@ -1,6 +1,7 @@
 import { app, BrowserWindow, protocol, net, ipcMain } from 'electron';
 import path from 'path';
 import { StorageBackend } from './storage-backend';
+import { handleAction as dbHandleAction } from './db-backend';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -71,6 +72,16 @@ app.whenReady().then(() => {
         win.webContents.send('storage:changed', changes, 'local');
       }
     }
+  });
+
+  ipcMain.handle('db:request', async (_event, action: string, params: unknown) => {
+    const outcome = await dbHandleAction(action, params);
+    if (outcome.syncEvent) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('db:sync', outcome.syncEvent);
+      }
+    }
+    return { success: true, data: outcome.result };
   });
 
   createWindow();

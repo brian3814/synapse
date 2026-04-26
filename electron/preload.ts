@@ -18,3 +18,15 @@ contextBridge.exposeInMainWorld('electronStorage', {
     };
   },
 });
+
+contextBridge.exposeInMainWorld('electronDB', {
+  request: (action: string, params?: unknown) =>
+    ipcRenderer.invoke('db:request', action, params),
+  onSync: (callback: (event: any) => void) => {
+    const handler = (_ipcEvent: any, syncEvent: any) => callback(syncEvent);
+    ipcRenderer.on('db:sync', handler);
+    return () => {
+      ipcRenderer.removeListener('db:sync', handler);
+    };
+  },
+});
