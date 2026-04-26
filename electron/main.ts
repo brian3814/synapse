@@ -2,6 +2,7 @@ import { app, BrowserWindow, protocol, net, ipcMain } from 'electron';
 import path from 'path';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
+import * as notesBackend from './notes-backend';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -82,6 +83,30 @@ app.whenReady().then(() => {
       }
     }
     return { success: true, data: outcome.result };
+  });
+
+  ipcMain.handle('notes:init', () => {
+    notesBackend.initNotesDir();
+  });
+
+  ipcMain.handle('notes:read', (_event, nodeId: string) => {
+    return notesBackend.readNote(nodeId);
+  });
+
+  ipcMain.handle('notes:write', (_event, nodeId: string, markdown: string) => {
+    notesBackend.writeNote(nodeId, markdown);
+  });
+
+  ipcMain.handle('notes:remove', (_event, nodeId: string) => {
+    notesBackend.removeNote(nodeId);
+  });
+
+  ipcMain.handle('notes:list', () => {
+    return notesBackend.listNotes();
+  });
+
+  ipcMain.handle('notes:exists', (_event, nodeId: string) => {
+    return notesBackend.noteExists(nodeId);
   });
 
   createWindow();

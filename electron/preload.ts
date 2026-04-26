@@ -30,3 +30,12 @@ contextBridge.exposeInMainWorld('electronDB', {
     };
   },
 });
+
+contextBridge.exposeInMainWorld('electronNotes', {
+  init: () => ipcRenderer.invoke('notes:init'),
+  read: (nodeId: string) => ipcRenderer.invoke('notes:read', nodeId),
+  write: (nodeId: string, markdown: string) => ipcRenderer.invoke('notes:write', nodeId, markdown),
+  remove: (nodeId: string) => ipcRenderer.invoke('notes:remove', nodeId),
+  list: () => ipcRenderer.invoke('notes:list'),
+  exists: (nodeId: string) => ipcRenderer.invoke('notes:exists', nodeId),
+});
