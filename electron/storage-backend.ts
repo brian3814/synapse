@@ -6,10 +6,6 @@ const STORAGE_FILE = join(app.getPath('userData'), 'storage.json');
 
 const FULLY_ENCRYPTED_KEYS = new Set(['anthropicOAuth']);
 
-function shouldEncryptField(key: string, field: string): boolean {
-  return key === 'llmConfig' && field === 'apiKey';
-}
-
 export class StorageBackend {
   private data: Record<string, any> = {};
 
@@ -70,7 +66,7 @@ export class StorageBackend {
     return value;
   }
 
-  private decryptFromStorage(key: string, raw: any): any {
+  private decryptFromStorage(_key: string, raw: any): any {
     if (raw && typeof raw === 'object' && '__encrypted' in raw) {
       try {
         return JSON.parse(this.decrypt(raw.__encrypted));
