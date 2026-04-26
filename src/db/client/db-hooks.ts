@@ -10,7 +10,10 @@ export function useDbInit(): { ready: boolean; error: string | null } {
 
   useEffect(() => {
     initDbClient()
-      .then(() => initNoteStore())
+      .then(() => {
+        if ((window as any).electronAPI) return;
+        return initNoteStore();
+      })
       .then(() => setReady(true))
       .catch((e) => {
         console.error('[useDbInit] Failed:', e);

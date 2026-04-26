@@ -21,6 +21,29 @@ const pendingRequests = new Map<
 >();
 
 let initPromise: Promise<void> | null = null;
+let sendRequestImpl: ((action: string, params?: unknown) => Promise<unknown>) | null = null;
+
+function initElectronClient(): Promise<void> {
+  const electronDB = (window as any).electronDB as {
+    request: (action: string, params?: unknown) => Promise<{ success: boolean; data?: unknown; error?: string }>;
+    onSync: (callback: (event: any) => void) => () => void;
+  };
+
+  sendRequestImpl = async (action: string, params?: unknown): Promise<unknown> => {
+    const response = await electronDB.request(action, params);
+    if (!response.success) {
+      throw new Error((response as any).error ?? 'DB request failed');
+    }
+    return response.data;
+  };
+
+  const syncChannel = new BroadcastChannel('kg_extension_sync');
+  electronDB.onSync((event) => {
+    syncChannel.postMessage(event);
+  });
+
+  return sendRequestImpl('init', undefined).then(() => {});
+}
 
 function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -28,6 +51,13 @@ function generateRequestId(): string {
 
 export function initDbClient(): Promise<void> {
   if (initPromise) return initPromise;
+
+  if ((window as any).electronDB) {
+    initPromise = initElectronClient().then(() => {
+      console.log('[DB Client] Database initialized via Electron IPC (better-sqlite3)');
+    });
+    return initPromise;
+  }
 
   initPromise = new Promise((resolve, reject) => {
     try {
@@ -108,6 +138,10 @@ export function notifyWorkerDying(): void {
 }
 
 function sendRequest(action: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
+  if (sendRequestImpl) {
+    return sendRequestImpl(action, params);
+  }
+
   return new Promise((resolve, reject) => {
     if (!port) {
       reject(new Error('DB SharedWorker not initialized'));
