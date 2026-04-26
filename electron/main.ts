@@ -1,5 +1,6 @@
-import { app, BrowserWindow, protocol, net } from 'electron';
+import { app, BrowserWindow, protocol, net, ipcMain } from 'electron';
 import path from 'path';
+import { StorageBackend } from './storage-backend';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -46,6 +47,30 @@ app.whenReady().then(() => {
     }
 
     return net.fetch('file://' + filePath);
+  });
+
+  const storage = new StorageBackend();
+
+  ipcMain.handle('storage:get', (_event, keys) => {
+    return storage.get(keys);
+  });
+
+  ipcMain.handle('storage:set', (_event, items) => {
+    const changes = storage.set(items);
+    if (Object.keys(changes).length > 0) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('storage:changed', changes, 'local');
+      }
+    }
+  });
+
+  ipcMain.handle('storage:remove', (_event, keys) => {
+    const changes = storage.remove(keys);
+    if (Object.keys(changes).length > 0) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('storage:changed', changes, 'local');
+      }
+    }
   });
 
   createWindow();
