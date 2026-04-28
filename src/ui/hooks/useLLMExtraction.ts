@@ -332,16 +332,14 @@ export function useLLMExtraction() {
     let pageContent: { title: string; url: string; content: string };
     if (sourceUrl) {
       try {
-        const resp = await fetch(sourceUrl);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const html = await resp.text();
-        const { htmlToMarkdown } = await import('../../shared/html-to-markdown');
-        const markdown = htmlToMarkdown(html).replace(/\n{3,}/g, '\n\n');
-        const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+        const fetchResult = await chrome.runtime.sendMessage({ type: 'FETCH_URL', payload: { url: sourceUrl } });
+        if (fetchResult?.error) throw new Error(fetchResult.error);
+        const content = fetchResult?.content ?? '';
+        const titleMatch = content.match(/^#\s+(.+)/m);
         pageContent = {
           title: titleMatch?.[1]?.trim() ?? sourceUrl,
           url: sourceUrl,
-          content: markdown.length > 50_000 ? markdown.substring(0, 50_000) + '\n\n...[truncated]' : markdown,
+          content,
         };
       } catch (e: any) {
         llm.setError(`Failed to fetch URL: ${e.message}`);

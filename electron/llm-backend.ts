@@ -43,6 +43,12 @@ export async function handleRuntimeMessage(
       handleChatRequest(message.payload, broadcast);
       return null;
 
+    case 'FETCH_URL': {
+      const { url, maxBytes } = message.payload ?? {};
+      const result = await fetchAndCleanContent(url, maxBytes ?? 50_000);
+      return result;
+    }
+
     default:
       return null;
   }
