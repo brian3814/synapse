@@ -97,4 +97,17 @@ export function installChromeStubs(): void {
     runtime: runtimeStub,
     tabs: tabsStub,
   };
+
+  // Wire companion capture events to runtime message listeners
+  const eCompanion = (window as any).electronCompanion as {
+    onCapture: (cb: (data: { title: string; url: string; content: string }) => void) => () => void;
+  } | undefined;
+
+  if (eCompanion) {
+    eCompanion.onCapture((data) => {
+      for (const fn of messageListeners) {
+        fn({ type: 'COMPANION_PAGE_CAPTURED', payload: data }, {}, () => {});
+      }
+    });
+  }
 }

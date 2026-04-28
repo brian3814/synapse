@@ -17,7 +17,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       files: ['content-capture.js'],
     });
 
-    const captured = results?.[0]?.result;
+    const captured = results?.[0]?.result as { title: string; url: string; content: string } | undefined;
     if (!captured?.content) {
       throw new Error('No content captured');
     }

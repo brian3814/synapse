@@ -6,6 +6,7 @@ import { useUIStore } from '../graph/store/ui-store';
 import { useReadingListStore } from '../graph/store/reading-list-store';
 import { useAuthStore } from '../graph/store/auth-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
+import { useCompanionCapture } from './hooks/useCompanionCapture';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
 import { TabLayout } from './layouts/TabLayout';
@@ -13,6 +14,7 @@ import { TabLayout } from './layouts/TabLayout';
 export default function App() {
   const { ready, error: dbError } = useDbInit();
   const { displayMode } = useDisplayMode();
+  useCompanionCapture();
   const loadAll = useGraphStore((s) => s.loadAll);
   const startSyncListener = useGraphStore((s) => s.startSyncListener);
   const loadTypes = useNodeTypeStore((s) => s.loadTypes);
