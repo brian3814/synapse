@@ -1,14 +1,5 @@
 type Listener = (...args: any[]) => any;
 
-class EventStub {
-  private listeners: Listener[] = [];
-  addListener(fn: Listener) { this.listeners.push(fn); }
-  removeListener(fn: Listener) {
-    this.listeners = this.listeners.filter((l) => l !== fn);
-  }
-  hasListener(fn: Listener) { return this.listeners.includes(fn); }
-}
-
 const tabsStub = {
   query: (_queryInfo: any) => Promise.resolve([]),
   sendMessage: (_tabId: number, _message: any) => Promise.resolve(null),

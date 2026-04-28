@@ -3,6 +3,7 @@ import path from 'path';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
+import { handleRuntimeMessage, setStorage as setLLMStorage } from './llm-backend';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -52,6 +53,7 @@ app.whenReady().then(() => {
   });
 
   const storage = new StorageBackend();
+  setLLMStorage(storage);
 
   ipcMain.handle('storage:get', (_event, keys) => {
     return storage.get(keys);
@@ -107,6 +109,15 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:exists', (_event, nodeId: string) => {
     return notesBackend.noteExists(nodeId);
+  });
+
+  ipcMain.handle('runtime:sendMessage', async (_event, message) => {
+    const result = await handleRuntimeMessage(message, (broadcastMsg) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('runtime:broadcast', broadcastMsg);
+      }
+    });
+    return result;
   });
 
   createWindow();
