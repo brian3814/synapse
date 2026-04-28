@@ -1,6 +1,6 @@
 import { executeLLMRequestStreaming, streamAnthropicWithTools } from '../src/offscreen/llm-executor';
 import { AGENT_TOOLS, toAnthropicTools } from '../src/shared/agent-tools';
-import { fetchAndCleanContent, isBlockedUrl } from '../src/offscreen/url-utils';
+import { fetchAndCleanContent, isBlockedUrl } from './fetch-utils';
 import type { AgentProgressEvent, ExtractionResult } from '../src/shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../src/offscreen/llm-executor';
 import { StorageBackend } from './storage-backend';
