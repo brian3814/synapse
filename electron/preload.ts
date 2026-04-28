@@ -50,3 +50,13 @@ contextBridge.exposeInMainWorld('electronRuntime', {
     };
   },
 });
+
+contextBridge.exposeInMainWorld('electronCompanion', {
+  onCapture: (callback: (data: { title: string; url: string; content: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('companion:capture', handler);
+    return () => {
+      ipcRenderer.removeListener('companion:capture', handler);
+    };
+  },
+});

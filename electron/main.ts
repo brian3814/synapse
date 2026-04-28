@@ -4,6 +4,7 @@ import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
 import { handleRuntimeMessage, setStorage as setLLMStorage } from './llm-backend';
+import { startCompanionServer } from './companion-server';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -119,6 +120,8 @@ app.whenReady().then(() => {
     });
     return result;
   });
+
+  startCompanionServer();
 
   createWindow();
 
