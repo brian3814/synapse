@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "KG Desktop Companion",
+  "version": "1.0.0",
+  "description": "Captures rendered page content and sends to KG Desktop for extraction",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Capture page for KG Desktop"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  }
+}
