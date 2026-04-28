@@ -1,14 +1,17 @@
 import { useEffect } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
+import { useUIStore } from '../../graph/store/ui-store';
 
 export function useCompanionCapture() {
   useEffect(() => {
     const listener = (message: any) => {
       if (message?.type === 'COMPANION_PAGE_CAPTURED') {
         const { url, content } = message.payload;
+        console.log(`[Companion] Received page capture: ${url} (${content.length} chars)`);
         const llm = useLLMStore.getState();
         llm.setInputText(content);
         llm.setSourceUrl(url);
+        useUIStore.getState().forceActivePanel('llm');
       }
     };
 

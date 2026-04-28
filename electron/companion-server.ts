@@ -48,7 +48,9 @@ export function startCompanionServer(): void {
           return;
         }
 
-        for (const win of BrowserWindow.getAllWindows()) {
+        const windows = BrowserWindow.getAllWindows();
+        console.log(`[Companion Server] Received capture: "${title}" (${url}), ${content.length} chars, broadcasting to ${windows.length} windows`);
+        for (const win of windows) {
           win.webContents.send('companion:capture', { title, url, content });
         }
 
