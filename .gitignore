@@ -26,3 +26,6 @@ Thumbs.db
 # Electron build output
 dist-electron/
 release/
+
+# Companion extension build output
+dist-companion/

@@ -13,6 +13,7 @@
     "build:electron-renderer": "vite build --config vite.config.electron.ts",
     "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
     "dev:electron": "npm run build:electron && electron .",
+    "build:companion": "vite build --config packages/companion/vite.config.ts",
     "dist:mac": "npm run build:electron && electron-builder --mac",
     "dist:win": "npm run build:electron && electron-builder --win",
     "dist:linux": "npm run build:electron && electron-builder --linux"
