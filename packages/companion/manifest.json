@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Captures rendered page content and sends to KG Desktop for extraction",
   "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:19876/*"],
   "action": {
     "default_title": "Capture page for KG Desktop"
   },
