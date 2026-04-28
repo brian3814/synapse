@@ -5,7 +5,7 @@ export function useCompanionCapture() {
   useEffect(() => {
     const listener = (message: any) => {
       if (message?.type === 'COMPANION_PAGE_CAPTURED') {
-        const { title, url, content } = message.payload;
+        const { url, content } = message.payload;
         const llm = useLLMStore.getState();
         llm.setInputText(content);
         llm.setSourceUrl(url);
