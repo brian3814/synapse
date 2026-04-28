@@ -39,3 +39,14 @@ contextBridge.exposeInMainWorld('electronNotes', {
   list: () => ipcRenderer.invoke('notes:list'),
   exists: (nodeId: string) => ipcRenderer.invoke('notes:exists', nodeId),
 });
+
+contextBridge.exposeInMainWorld('electronRuntime', {
+  sendMessage: (message: any) => ipcRenderer.invoke('runtime:sendMessage', message),
+  onMessage: (callback: (message: any) => void) => {
+    const handler = (_event: any, message: any) => callback(message);
+    ipcRenderer.on('runtime:broadcast', handler);
+    return () => {
+      ipcRenderer.removeListener('runtime:broadcast', handler);
+    };
+  },
+});

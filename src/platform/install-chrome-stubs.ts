@@ -9,15 +9,6 @@ class EventStub {
   hasListener(fn: Listener) { return this.listeners.includes(fn); }
 }
 
-const runtimeStub = {
-  sendMessage: (_message: any) => Promise.resolve(null),
-  onMessage: new EventStub(),
-  onInstalled: new EventStub(),
-  getURL: (path: string) => path,
-  lastError: null as chrome.runtime.LastError | null,
-  id: 'electron-stub',
-};
-
 const tabsStub = {
   query: (_queryInfo: any) => Promise.resolve([]),
   sendMessage: (_tabId: number, _message: any) => Promise.resolve(null),
@@ -36,6 +27,12 @@ export function installChromeStubs(): void {
     onChanged: (cb: (changes: any, areaName: string) => void) => () => void;
   } | undefined;
 
+  const eRuntime = (window as any).electronRuntime as {
+    sendMessage: (message: any) => Promise<any>;
+    onMessage: (cb: (message: any) => void) => () => void;
+  } | undefined;
+
+  // Storage stubs
   const changeListeners: Listener[] = [];
 
   if (eStorage) {
@@ -64,6 +61,43 @@ export function installChromeStubs(): void {
       },
       hasListener: (fn: Listener) => changeListeners.includes(fn),
     },
+  };
+
+  // Runtime stubs
+  const messageListeners: Listener[] = [];
+
+  if (eRuntime) {
+    eRuntime.onMessage((message) => {
+      for (const fn of messageListeners) {
+        fn(message, {}, () => {});
+      }
+    });
+  }
+
+  const runtimeStub = {
+    sendMessage: (message: any, callback?: (response: any) => void) => {
+      if (eRuntime) {
+        const promise = eRuntime.sendMessage(message);
+        if (callback) {
+          promise.then(callback).catch(() => callback(undefined));
+          return;
+        }
+        return promise;
+      }
+      if (callback) { callback(null); return; }
+      return Promise.resolve(null);
+    },
+    onMessage: {
+      addListener: (fn: Listener) => { messageListeners.push(fn); },
+      removeListener: (fn: Listener) => {
+        const idx = messageListeners.indexOf(fn);
+        if (idx >= 0) messageListeners.splice(idx, 1);
+      },
+      hasListener: (fn: Listener) => messageListeners.includes(fn),
+    },
+    getURL: (path: string) => path,
+    lastError: null as any,
+    id: 'electron-stub',
   };
 
   (globalThis as any).chrome = {
