@@ -128,12 +128,21 @@ export function LLMPanel() {
   const error = useLLMStore((s) => s.error);
   const showPrivacyModal = useLLMStore((s) => s.showPrivacyModal);
   const pendingAction = useLLMStore((s) => s.pendingAction);
+  const pendingCapture = useLLMStore((s) => s.pendingCapture);
   const rateLimitWait = useLLMStore((s) => s.rateLimitWait);
   const resetLLM = useLLMStore((s) => s.reset);
   const resetReview = useExtractionReviewStore((s) => s.reset);
   const extractionMode = useLLMStore((s) => s.extractionMode);
   const reset = () => { resetLLM(); resetReview(); };
   const { startExtraction, startQuickExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview } = useLLMExtraction();
+
+  React.useEffect(() => {
+    if (pendingCapture && status === 'idle') {
+      const { url, content } = pendingCapture;
+      useLLMStore.getState().setPendingCapture(null);
+      startExtraction(content, url);
+    }
+  }, [pendingCapture, status, startExtraction]);
 
   const isIdle = status === 'idle' || status === 'error';
   const isRunning = status === 'extracting' || status === 'agent-running';

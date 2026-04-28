@@ -32,15 +32,15 @@ export async function handleRuntimeMessage(
 
   switch (type) {
     case 'LLM_REQUEST':
-      handleLLMRequest(message.payload, broadcast);
+      handleLLMRequest({ ...message.payload, requestId: message.requestId }, broadcast);
       return null;
 
     case 'AGENT_RUN_START':
-      handleAgentRun(message.payload, broadcast);
+      handleAgentRun({ ...message.payload, runId: message.payload?.runId }, broadcast);
       return null;
 
     case 'CHAT_LLM_REQUEST':
-      handleChatRequest(message.payload, broadcast);
+      handleChatRequest({ ...message.payload, requestId: message.payload?.requestId }, broadcast);
       return null;
 
     case 'FETCH_URL': {

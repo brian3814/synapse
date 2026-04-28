@@ -8,9 +8,7 @@ export function useCompanionCapture() {
       if (message?.type === 'COMPANION_PAGE_CAPTURED') {
         const { url, content } = message.payload;
         console.log(`[Companion] Received page capture: ${url} (${content.length} chars)`);
-        const llm = useLLMStore.getState();
-        llm.setInputText(content);
-        llm.setSourceUrl(url);
+        useLLMStore.getState().setPendingCapture({ url, content });
         useUIStore.getState().forceActivePanel('llm');
       }
     };

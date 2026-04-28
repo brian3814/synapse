@@ -33,6 +33,7 @@ interface LLMStore {
   rateLimitWait: RateLimitWait | null;
   showPrivacyModal: boolean;
   pendingAction: (() => void) | null;
+  pendingCapture: { url: string; content: string } | null;
 
   setStatus: (status: ExtractionStatus) => void;
   setActiveTab: (tab: ExtractionTab) => void;
@@ -44,6 +45,7 @@ interface LLMStore {
   setLastUsage: (usage: LastUsage | null) => void;
   setRateLimitWait: (wait: RateLimitWait | null) => void;
   setShowPrivacyModal: (show: boolean, pendingAction?: () => void) => void;
+  setPendingCapture: (capture: { url: string; content: string } | null) => void;
   toggleDiffItem: (index: number) => void;
   acceptAllDiff: () => void;
   rejectAllDiff: () => void;
@@ -76,6 +78,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   rateLimitWait: null,
   showPrivacyModal: false,
   pendingAction: null,
+  pendingCapture: null,
 
   setStatus: (status) => set({ status }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -83,6 +86,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   setDiff: (diff) => set({ diff }),
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
   setInputText: (text) => set({ inputText: text }),
+  setPendingCapture: (capture) => set({ pendingCapture: capture }),
   setSourceUrl: (url) => set({ sourceUrl: url }),
   setLastUsage: (usage) => set({ lastUsage: usage }),
   setRateLimitWait: (wait) => set({ rateLimitWait: wait }),
