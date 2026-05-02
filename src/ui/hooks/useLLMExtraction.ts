@@ -3,6 +3,7 @@ import { storage, notes, llm, browser } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
+import { createUICommandContext } from '../../commands/create-context';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
 import { getQuickExtractSystemPrompt } from '../../shared/quick-extract-prompt';
@@ -989,8 +990,9 @@ export function useLLMExtraction() {
 
         // Run the wikilink parser on the note content to create additional edges.
         try {
+          const wikilinkCtx = createUICommandContext();
           const { createWikilinkEdgesForNote } = await import('../../shared/wikilink-parser');
-          await createWikilinkEdgesForNote(noteNodeId, note.content);
+          await createWikilinkEdgesForNote(wikilinkCtx, noteNodeId, note.content);
         } catch (e) {
           // Wikilink parsing is best-effort; don't fail the whole merge on it.
           console.warn('[Extraction] Wikilink parser failed:', e);

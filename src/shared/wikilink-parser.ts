@@ -14,8 +14,8 @@
  *    parser does not create new nodes.
  */
 
-import { useGraphStore } from '../graph/store/graph-store';
-import { entityResolution } from '../db/client/db-client';
+import type { CommandContext } from '../commands/types';
+import * as graphCommands from '../commands/graph-commands';
 
 /**
  * Extract raw `[[…]]` tokens from note content.
@@ -49,17 +49,17 @@ export function extractWikilinks(content: string): string[] {
  * pending-links queue).
  */
 export async function resolveWikilinks(
-  wikilinks: string[]
+  ctx: CommandContext,
+  wikilinks: string[],
 ): Promise<{
   resolved: Array<{ wikilink: string; nodeId: string; nodeType: string }>;
   unresolved: string[];
 }> {
-  const graph = useGraphStore.getState();
+  const graph = await ctx.getGraphSnapshot();
   const resolved: Array<{ wikilink: string; nodeId: string; nodeType: string }> = [];
   const unresolved: string[] = [];
 
   for (const wikilink of wikilinks) {
-    // 1. Exact in-memory match (fast path)
     const lower = wikilink.toLowerCase();
     const inMemory = graph.nodes.find((n) => n.name.toLowerCase() === lower);
     if (inMemory) {
@@ -67,23 +67,22 @@ export async function resolveWikilinks(
       continue;
     }
 
-    // 2. DB-level lookup (exact → alias, no fuzzy).
     try {
-      const matches = await entityResolution.findMatches(wikilink);
+      const matches = await ctx.db.entityResolution.findMatches(wikilink);
       const exactOrAlias = matches.find(
-        (m) => m.matchType === 'exact' || m.matchType === 'alias'
+        (m: any) => m.matchType === 'exact' || m.matchType === 'alias',
       );
       if (exactOrAlias) {
-        const node = graph.nodes.find((n) => n.id === exactOrAlias.nodeId);
+        const node = graph.nodes.find((n) => n.id === (exactOrAlias as any).nodeId);
         resolved.push({
           wikilink,
-          nodeId: exactOrAlias.nodeId,
+          nodeId: (exactOrAlias as any).nodeId,
           nodeType: node?.type ?? 'entity',
         });
         continue;
       }
     } catch {
-      // Entity resolution unavailable — treat as unresolved
+      // Entity resolution unavailable
     }
 
     unresolved.push(wikilink);
@@ -111,30 +110,30 @@ function labelForWikilinkTarget(targetType: string): string {
  * dropped by the DB).
  */
 export async function createWikilinkEdgesForNote(
+  ctx: CommandContext,
   noteNodeId: string,
-  content: string
+  content: string,
 ): Promise<{ created: number; unresolved: string[] }> {
   const wikilinks = extractWikilinks(content);
   if (wikilinks.length === 0) return { created: 0, unresolved: [] };
 
-  const { resolved, unresolved } = await resolveWikilinks(wikilinks);
+  const { resolved, unresolved } = await resolveWikilinks(ctx, wikilinks);
   if (resolved.length === 0) return { created: 0, unresolved };
 
-  const graph = useGraphStore.getState();
   let created = 0;
   for (const target of resolved) {
-    if (target.nodeId === noteNodeId) continue; // self-link
+    if (target.nodeId === noteNodeId) continue;
     const label = labelForWikilinkTarget(target.nodeType);
     try {
-      const edge = await graph.createEdge({
+      const result = await graphCommands.createEdge(ctx, {
         sourceId: noteNodeId,
         targetId: target.nodeId,
         label,
-        skipProvenance: true, // caller is the extraction pipeline; it owns provenance
+        skipProvenance: true,
       });
-      if (edge) created++;
+      if (result.data) created++;
     } catch {
-      // UNIQUE constraint: edge already exists — no-op
+      // UNIQUE constraint: edge already exists
     }
   }
   return { created, unresolved };
