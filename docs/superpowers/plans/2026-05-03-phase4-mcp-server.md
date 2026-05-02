@@ -229,7 +229,7 @@ The tools cover the full CRUD surface of the knowledge graph:
 | `kg_get_neighbors` | Get N-hop neighborhood of a node |
 | `kg_search_sources` | Search ingested source content |
 | `kg_get_source_content` | Get the full source content for a node |
-| `kg_extract_text` | Run LLM entity extraction on raw text |
+| `kg_extract_text` | Run LLM entity extraction on raw text (**HTTP-only** — requires LLM backend; disabled in stdio context) |
 | `kg_save_note` | Create or update a note (markdown file + DB) |
 | `kg_read_note` | Read a note's markdown content |
 | `kg_search_notes` | Full-text search across notes |
@@ -267,6 +267,7 @@ export function registerTools(
   server: McpServer,
   ctx: CommandContext,
   broadcast: EventBroadcaster = noopBroadcaster,
+  llmProvided = false,
 ): void {
 
   // ── Node CRUD ─────────────────────────────────────────────────────
@@ -487,26 +488,33 @@ export function registerTools(
 
   // ── Extraction ────────────────────────────────────────────────────
 
-  server.registerTool(
-    'kg_extract_text',
-    {
-      description: 'Run LLM entity extraction on raw text. Extracts entities and relationships and returns them as structured data. Requires LLM to be configured.',
-      inputSchema: z.object({
-        text: z.string().describe('Raw text to extract entities from'),
-        model: z.string().optional().default('claude-sonnet-4-20250514').describe('Model to use for extraction'),
-      }),
-    },
-    async ({ text, model }) => {
-      try {
-        const result = await ctx.llm.streamExtraction(
-          { prompt: text, model },
-          () => {}, // no streaming needed for MCP — we just want the final result
-        );
-        return { content: [{ type: 'text' as const, text: result.content }] };
-      } catch (e: any) {
-        return { content: [{ type: 'text' as const, text: `Extraction failed: ${e.message}` }], isError: true };
-      }
-    },
+  // Only register kg_extract_text if a real PlatformLLM was provided.
+  // The stub LLM in createServerCommandContext rejects with 'LLM not configured'.
+  // Stdio context and HTTP without LLM skip this tool rather than always erroring.
+  const hasLLM = llmProvided !== false;
+
+  if (hasLLM) {
+    server.registerTool(
+      'kg_extract_text',
+      {
+        description: 'Run LLM entity extraction on raw text. Extracts entities and relationships and returns them as structured data.',
+        inputSchema: z.object({
+          text: z.string().describe('Raw text to extract entities from'),
+          model: z.string().optional().default('claude-sonnet-4-20250514').describe('Model to use for extraction'),
+        }),
+      },
+      async ({ text, model }) => {
+        try {
+          const result = await ctx.llm.streamExtraction(
+            { prompt: text, model },
+            () => {},
+          );
+          return { content: [{ type: 'text' as const, text: result.content }] };
+        } catch (e: any) {
+          return { content: [{ type: 'text' as const, text: `Extraction failed: ${e.message}` }], isError: true };
+        }
+      },
+    );
   );
 
   // ── Notes ─────────────────────────────────────────────────────────
@@ -828,7 +836,10 @@ import { registerResources } from './resources';
  * @param broadcast - Optional event broadcaster for sync. Electron callers
  *   inject one that sends to BrowserWindows. Stdio uses default no-op.
  */
-export function createMCPServer(ctx: CommandContext, broadcast?: EventBroadcaster): McpServer {
+export function createMCPServer(
+  ctx: CommandContext,
+  opts?: { broadcast?: EventBroadcaster; llmProvided?: boolean },
+): McpServer {
   const server = new McpServer(
     {
       name: 'kg-desktop',
@@ -842,12 +853,12 @@ export function createMCPServer(ctx: CommandContext, broadcast?: EventBroadcaste
         'Use kg_search_nodes to find nodes, kg_get_node to inspect one, kg_get_neighbors to explore the graph.',
         'Use kg_search_notes and kg_read_note to access the user\'s notes.',
         'Use kg_create_node and kg_create_edge to add knowledge to the graph.',
-        'Use kg_extract_text to run LLM extraction on raw text (requires API key configured in the desktop app).',
+        'kg_extract_text requires a running desktop app with LLM configured — it will error in stdio-only contexts.',
       ].join(' '),
     },
   );
 
-  registerTools(server, ctx, broadcast);
+  registerTools(server, ctx, opts?.broadcast, opts?.llmProvided);
   registerResources(server, ctx);
 
   return server;
@@ -1061,9 +1072,7 @@ async function main(): Promise<void> {
   const dataStore = createSqliteDataStore(initSQLite, resetSQLite);
   await dataStore.init();
 
-  // No PlatformLLM in stdio context — kg_extract_text will return an error.
-  // Standalone LLM config would require loading API keys from storage.json,
-  // which is a future enhancement.
+  // No PlatformLLM in stdio context — kg_extract_text is not registered.
   const ctx = createServerCommandContext(dataStore, notes, storage);
   const server = createMCPServer(ctx);
 
@@ -1163,7 +1172,7 @@ import { createServerCommandContext } from '../src/commands/create-server-contex
 import type { DataStore } from '../src/db/data-store';
 import type { StorageBackend } from './storage-backend';
 import * as notesBackend from './notes-backend';
-import type { PlatformNotes, PlatformStorage } from '../src/platform/types';
+import type { PlatformNotes, PlatformStorage, PlatformLLM } from '../src/platform/types';
 
 const PORT = 19876;
 
@@ -1327,7 +1336,10 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
         await transports.get(sessionId)!.handleRequest(req, res, body);
       } else if (!sessionId && isInitializeRequest(body)) {
         // New session — create transport and connect MCP server
-        const mcpServer = createMCPServer(ctx, electronBroadcast);
+        const mcpServer = createMCPServer(ctx, {
+          broadcast: electronBroadcast,
+          llmProvided: !!llm,
+        });
         const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
@@ -1490,12 +1502,14 @@ cat mcp-test-stderr.log
 Start the Electron app, then test:
 
 ```bash
+# Copy the auth token from the Electron app's startup log: "[MCP] HTTP transport auth token: <token>"
 curl -X POST http://127.0.0.1:19876/mcp \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token from startup log>" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}'
 ```
 
-Expected: JSON-RPC response with `result.serverInfo.name === "kg-desktop"` and a `Mcp-Session-Id` header.
+Expected: JSON-RPC response with `result.serverInfo.name === "kg-desktop"` and a `Mcp-Session-Id` header. Without the Bearer token, you'll get 401.
 
 - [ ] **Step 4: Document Claude Desktop configuration**
 
@@ -1540,7 +1554,10 @@ For Cursor, the equivalent `~/.cursor/mcp.json`:
   "mcpServers": {
     "kg-desktop": {
       "command": "node",
-      "args": ["/path/to/kg_extension/dist-electron/mcp-stdio.cjs"]
+      "args": ["/path/to/kg_extension/dist-electron/mcp-stdio.cjs"],
+      "env": {
+        "KG_USER_DATA": "/Users/<you>/Library/Application Support/KG Desktop"
+      }
     }
   }
 }

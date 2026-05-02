@@ -185,7 +185,7 @@ type LifecycleEvent =
 
 2. **React StrictMode safety:** The EventBus singleton must NOT have a permanent `disposed` flag. App cleanup calls `disableBroadcast()` (closes the BroadcastChannel) instead of `dispose()`. `enableBroadcast()` is idempotent and can be called again after disable. This prevents dev double-mount from permanently killing the singleton.
 
-3. **Electron main-process bridge:** The renderer EventBus only covers the renderer process. For MCP (Phase 4), which runs in Electron's main process, a separate `MainProcessEventBridge` subscribes to DB sync events via `ipcMain` and exposes them to MCP clients. The renderer eventBus is NOT the MCP event source.
+3. **Electron main-process bridge (deferred):** The renderer EventBus only covers the renderer process. MCP (Phase 4) runs in Electron's main process and broadcasts command events to renderer windows via an injected `EventBroadcaster` callback. Forwarding events to MCP clients as notifications is deferred until the EventBus (Phase 3) provides a `MainProcessEventBridge` with proper subscription infrastructure. Phase 4 v1 does NOT deliver MCP client notifications — it only syncs the renderer UI.
 
 ---
 
