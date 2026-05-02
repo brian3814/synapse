@@ -1,30 +1,9 @@
-import { executeQuery, executeExec } from './query-executor';
-import { runMigrations } from './migrations';
-import * as nodeQueries from './queries/node-queries';
-import * as edgeQueries from './queries/edge-queries';
-import * as nodeTypeQueries from './queries/node-type-queries';
-import * as sourceContentQueries from './queries/source-content-queries';
-import * as entityResolutionQueries from './queries/entity-resolution-queries';
-import * as indexedFileQueries from './queries/indexed-file-queries';
-import * as stressTestQueries from './queries/stress-test-queries';
-import * as spatialQueries from './queries/spatial-queries';
-import * as readingListQueries from './queries/reading-list-queries';
-import * as tagQueries from './queries/tag-queries';
-import * as entitySourceQueries from './queries/entity-source-queries';
-import * as edgeSourceQueries from './queries/edge-source-queries';
-import * as noteFolderQueries from './queries/note-folder-queries';
-import * as chatQueries from './queries/chat-queries';
-import * as noteAttachmentQueries from './queries/note-attachment-queries';
-import * as noteSearchQueries from './queries/note-search-queries';
-import { executeGraphQuery, executeGraphMutation } from './query-engine';
+import type { DataStore } from '../data-store';
 import type { SyncEvent } from '../../shared/sync-events';
 
 export type ActionResult = { result: unknown; syncEvent?: SyncEvent };
 
-export function createActionHandler(
-  initEngine: () => Promise<void>,
-  resetEngine: () => Promise<void>,
-) {
+export function createActionHandler(dataStore: DataStore) {
   let isInitialized = false;
 
   function ensureInit(): void {
@@ -37,8 +16,7 @@ export function createActionHandler(
     switch (action) {
       case 'init': {
         if (!isInitialized) {
-          await initEngine();
-          await runMigrations();
+          await dataStore.init();
           isInitialized = true;
         }
         return { result: { ready: true } };
@@ -49,71 +27,64 @@ export function createActionHandler(
       }
 
       case 'reset': {
-        await resetEngine();
-        await runMigrations();
+        await dataStore.reset();
         isInitialized = true;
         return { result: { ready: true }, syncEvent: { type: 'reset' } };
       }
 
       case 'clearAll': {
         ensureInit();
-        await executeExec('DELETE FROM edges');
-        await executeExec('DELETE FROM nodes');
-        await executeExec('DELETE FROM chat_messages');
-        await executeExec('DELETE FROM chat_sessions');
+        await dataStore.clearAll();
         return { result: { success: true }, syncEvent: { type: 'reset' } };
       }
 
       case 'exec': {
         ensureInit();
         const p = params as { sql: string; params?: unknown[] };
-        const { changes } = await executeExec(p.sql, p.params);
+        const changes = await dataStore.rawExec(p.sql, p.params);
         return { result: { changes } };
       }
 
       case 'query': {
         ensureInit();
         const p = params as { sql: string; params?: unknown[] };
-        const { rows } = await executeQuery(p.sql, p.params);
+        const rows = await dataStore.rawQuery(p.sql, p.params);
         return { result: { rows } };
       }
 
       // Bulk graph load — single round-trip, slim columns
       case 'loadGraph': {
         ensureInit();
-        const [nodes, edges] = await Promise.all([
-          nodeQueries.getAllNodesSlim(),
-          edgeQueries.getAllEdgesSlim(),
-        ]);
+        const { nodes, edges } = await dataStore.loadGraph();
         return { result: { nodes, edges } };
       }
 
       // Node operations
       case 'nodes.getAll': {
         ensureInit();
-        return { result: await nodeQueries.getAllNodes() };
+        return { result: await dataStore.nodes.getAll() };
       }
 
       case 'nodes.getById': {
         ensureInit();
-        return { result: await nodeQueries.getNodeById(params as string) };
+        return { result: await dataStore.nodes.getById(params as string) };
       }
 
       case 'nodes.create': {
         ensureInit();
-        const node = await nodeQueries.createNode(params as any);
+        const node = await dataStore.nodes.create(params as any);
         return { result: node, syncEvent: { type: 'node_created', node } };
       }
 
       case 'nodes.update': {
         ensureInit();
-        const node = await nodeQueries.updateNode(params as any);
+        const node = await dataStore.nodes.update(params as any);
         return { result: node, syncEvent: node ? { type: 'node_updated', node } : undefined };
       }
 
       case 'nodes.delete': {
         ensureInit();
-        const success = await nodeQueries.deleteNode(params as string);
+        const success = await dataStore.nodes.delete(params as string);
         return {
           result: success,
           syncEvent: success ? { type: 'node_deleted', id: params as string } : undefined,
@@ -123,57 +94,57 @@ export function createActionHandler(
       case 'nodes.search': {
         ensureInit();
         const p = params as { query: string; limit?: number };
-        return { result: await nodeQueries.searchNodes(p.query, p.limit) };
+        return { result: await dataStore.nodes.search(p.query, p.limit) };
       }
 
       case 'nodes.getTypes': {
         ensureInit();
-        return { result: await nodeQueries.getNodeTypes() };
+        return { result: await dataStore.nodes.getTypes() };
       }
 
       case 'nodes.matchTerms': {
         ensureInit();
         const p = params as { terms: string[]; limit?: number };
-        return { result: await nodeQueries.matchTerms(p.terms, p.limit) };
+        return { result: await dataStore.nodes.matchTerms(p.terms, p.limit) };
       }
 
       case 'nodes.getNeighborhood': {
         ensureInit();
         const p = params as { nodeId: string; hops?: number };
-        return { result: await nodeQueries.getNeighborhood(p.nodeId, p.hops) };
+        return { result: await dataStore.nodes.getNeighborhood(p.nodeId, p.hops) };
       }
 
       // Edge operations
       case 'edges.getAll': {
         ensureInit();
-        return { result: await edgeQueries.getAllEdges() };
+        return { result: await dataStore.edges.getAll() };
       }
 
       case 'edges.getById': {
         ensureInit();
-        return { result: await edgeQueries.getEdgeById(params as string) };
+        return { result: await dataStore.edges.getById(params as string) };
       }
 
       case 'edges.getForNode': {
         ensureInit();
-        return { result: await edgeQueries.getEdgesForNode(params as string) };
+        return { result: await dataStore.edges.getForNode(params as string) };
       }
 
       case 'edges.create': {
         ensureInit();
-        const edge = await edgeQueries.createEdge(params as any);
+        const edge = await dataStore.edges.create(params as any);
         return { result: edge, syncEvent: { type: 'edge_created', edge } };
       }
 
       case 'edges.update': {
         ensureInit();
-        const edge = await edgeQueries.updateEdge(params as any);
+        const edge = await dataStore.edges.update(params as any);
         return { result: edge, syncEvent: edge ? { type: 'edge_updated', edge } : undefined };
       }
 
       case 'edges.delete': {
         ensureInit();
-        const success = await edgeQueries.deleteEdge(params as string);
+        const success = await dataStore.edges.delete(params as string);
         return {
           result: success,
           syncEvent: success ? { type: 'edge_deleted', id: params as string } : undefined,
@@ -182,35 +153,35 @@ export function createActionHandler(
 
       case 'edges.getTypes': {
         ensureInit();
-        return { result: await edgeQueries.getEdgeTypes() };
+        return { result: await dataStore.edges.getTypes() };
       }
 
       case 'edges.getBetween': {
         ensureInit();
-        return { result: await edgeQueries.getEdgesBetween(params as string[]) };
+        return { result: await dataStore.edges.getBetween(params as string[]) };
       }
 
       case 'edges.search': {
         ensureInit();
         const p = params as { query: string; limit?: number };
-        return { result: await edgeQueries.searchEdges(p.query, p.limit) };
+        return { result: await dataStore.edges.search(p.query, p.limit) };
       }
 
       // Node type operations
       case 'nodeTypes.getAll': {
         ensureInit();
-        return { result: await nodeTypeQueries.getAllNodeTypes() };
+        return { result: await dataStore.nodeTypes.getAll() };
       }
 
       case 'nodeTypes.create': {
         ensureInit();
-        const nodeType = await nodeTypeQueries.createNodeType(params as any);
+        const nodeType = await dataStore.nodeTypes.create(params as any);
         return { result: nodeType, syncEvent: { type: 'node_type_created', nodeType } };
       }
 
       case 'nodeTypes.delete': {
         ensureInit();
-        const success = await nodeTypeQueries.deleteNodeType(params as string);
+        const success = await dataStore.nodeTypes.delete(params as string);
         return {
           result: success,
           syncEvent: success ? { type: 'node_type_deleted', nodeTypeId: params as string } : undefined,
@@ -220,78 +191,78 @@ export function createActionHandler(
       // Source content operations
       case 'sourceContent.save': {
         ensureInit();
-        return { result: await sourceContentQueries.saveSourceContent(params as any) };
+        return { result: await dataStore.sourceContent.save(params as any) };
       }
 
       case 'sourceContent.getByNodeId': {
         ensureInit();
-        return { result: await sourceContentQueries.getByNodeId(params as string) };
+        return { result: await dataStore.sourceContent.getByNodeId(params as string) };
       }
 
       case 'sourceContent.getByUrl': {
         ensureInit();
-        return { result: await sourceContentQueries.getByUrl(params as string) };
+        return { result: await dataStore.sourceContent.getByUrl(params as string) };
       }
 
       case 'sourceContent.search': {
         ensureInit();
         const p = params as { query: string; limit?: number };
-        return { result: await sourceContentQueries.searchContent(p.query, p.limit) };
+        return { result: await dataStore.sourceContent.search(p.query, p.limit) };
       }
 
       case 'sourceContent.delete': {
         ensureInit();
-        return { result: await sourceContentQueries.deleteByNodeId(params as string) };
+        return { result: await dataStore.sourceContent.deleteByNodeId(params as string) };
       }
 
       case 'sourceContent.getAll': {
         ensureInit();
-        return { result: await sourceContentQueries.getAllSourceContent() };
+        return { result: await dataStore.sourceContent.getAll() };
       }
 
       // Entity resolution operations
       case 'entityResolution.findMatches': {
         ensureInit();
         const p = params as { name: string; fuzzyThreshold?: number };
-        return { result: await entityResolutionQueries.findMatches(p.name, p.fuzzyThreshold) };
+        return { result: await dataStore.entityResolution.findMatches(p.name, p.fuzzyThreshold) };
       }
 
       case 'entityResolution.addAlias': {
         ensureInit();
         const p = params as { nodeId: string; alias: string };
-        return { result: await entityResolutionQueries.addAlias(p.nodeId, p.alias) };
+        return { result: await dataStore.entityResolution.addAlias(p.nodeId, p.alias) };
       }
 
       case 'entityResolution.getAliases': {
         ensureInit();
-        return { result: await entityResolutionQueries.getAliases(params as string) };
+        return { result: await dataStore.entityResolution.getAliases(params as string) };
       }
 
       case 'entityResolution.removeAlias': {
         ensureInit();
-        return { result: await entityResolutionQueries.removeAlias(params as string) };
+        return { result: await dataStore.entityResolution.removeAlias(params as string) };
       }
 
       // Tag operations
       case 'tags.getForNode': {
         ensureInit();
-        return { result: await tagQueries.getTagsForNode(params as string) };
+        return { result: await dataStore.tags.getForNode(params as string) };
       }
       case 'tags.setForNode': {
         ensureInit();
         const p = params as { nodeId: string; tags: string[] };
-        await tagQueries.setTagsForNode(p.nodeId, p.tags);
+        await dataStore.tags.setForNode(p.nodeId, p.tags);
         return { result: { success: true } };
       }
       case 'tags.getAllTags': {
         ensureInit();
-        return { result: await tagQueries.getAllTags() };
+        return { result: await dataStore.tags.getAllTags() };
       }
 
       // Entity source operations (entity_sources table — denormalized provenance cache)
       case 'entitySources.getForEntity': {
         ensureInit();
-        return { result: await entitySourceQueries.getSourcesForEntity(params as string) };
+        return { result: await dataStore.entitySources.getForEntity(params as string) };
       }
       case 'entitySources.add': {
         ensureInit();
@@ -300,7 +271,7 @@ export function createActionHandler(
           resourceId: string;
           relationType?: 'about' | 'mention';
         };
-        await entitySourceQueries.addEntitySource(p.entityId, p.resourceId, p.relationType);
+        await dataStore.entitySources.add(p.entityId, p.resourceId, p.relationType);
         return { result: { success: true } };
       }
       case 'entitySources.remove': {
@@ -311,273 +282,273 @@ export function createActionHandler(
           relationType?: 'about' | 'mention';
         };
         return {
-          result: await entitySourceQueries.removeEntitySource(p.entityId, p.resourceId, p.relationType),
+          result: await dataStore.entitySources.remove(p.entityId, p.resourceId, p.relationType),
         };
       }
       case 'entitySources.removeAllForResource': {
         ensureInit();
-        return { result: await entitySourceQueries.removeAllForResource(params as string) };
+        return { result: await dataStore.entitySources.removeAllForResource(params as string) };
       }
       case 'entitySources.getEntitiesForResource': {
         ensureInit();
-        return { result: await entitySourceQueries.getEntitiesForResource(params as string) };
+        return { result: await dataStore.entitySources.getEntitiesForResource(params as string) };
       }
 
       // Edge source operations (edge_sources table — provenance tracking)
       case 'edgeSources.add': {
         ensureInit();
-        await edgeSourceQueries.addEdgeSource(params as any);
+        await dataStore.edgeSources.add(params as any);
         return { result: { success: true } };
       }
       case 'edgeSources.getForEdge': {
         ensureInit();
-        return { result: await edgeSourceQueries.getSourcesForEdge(params as string) };
+        return { result: await dataStore.edgeSources.getForEdge(params as string) };
       }
       case 'edgeSources.removeForNote': {
         ensureInit();
-        return { result: await edgeSourceQueries.removeSourcesForNote(params as string) };
+        return { result: await dataStore.edgeSources.removeForNote(params as string) };
       }
       case 'edgeSources.getEdgesFromNote': {
         ensureInit();
-        return { result: await edgeSourceQueries.getEdgesFromNote(params as string) };
+        return { result: await dataStore.edgeSources.getEdgesFromNote(params as string) };
       }
 
       // Note folder operations (S3-style hierarchy for note organization)
       case 'noteFolders.getAll': {
         ensureInit();
-        return { result: await noteFolderQueries.getAllFolders() };
+        return { result: await dataStore.noteFolders.getAll() };
       }
       case 'noteFolders.create': {
         ensureInit();
-        await noteFolderQueries.createFolder(params as string);
+        await dataStore.noteFolders.create(params as string);
         return { result: { success: true } };
       }
       case 'noteFolders.rename': {
         ensureInit();
         const p = params as { oldPath: string; newPath: string };
-        await noteFolderQueries.renameFolder(p.oldPath, p.newPath);
+        await dataStore.noteFolders.rename(p.oldPath, p.newPath);
         return { result: { success: true } };
       }
       case 'noteFolders.delete': {
         ensureInit();
-        await noteFolderQueries.deleteFolder(params as string);
+        await dataStore.noteFolders.delete(params as string);
         return { result: { success: true } };
       }
       case 'noteFolders.moveNote': {
         ensureInit();
         const p = params as { nodeId: string; folderPath: string };
-        await noteFolderQueries.moveNote(p.nodeId, p.folderPath);
+        await dataStore.noteFolders.moveNote(p.nodeId, p.folderPath);
         return { result: { success: true } };
       }
       case 'noteFolders.getNotesInFolder': {
         ensureInit();
-        return { result: await noteFolderQueries.getNotesInFolder(params as string) };
+        return { result: await dataStore.noteFolders.getNotesInFolder(params as string) };
       }
       case 'noteFolders.getNotesRecursive': {
         ensureInit();
-        return { result: await noteFolderQueries.getNotesRecursive(params as string) };
+        return { result: await dataStore.noteFolders.getNotesRecursive(params as string) };
       }
 
       // Indexed file operations
       case 'indexedFiles.save': {
         ensureInit();
-        return { result: await indexedFileQueries.saveIndexedFile(params as any) };
+        return { result: await dataStore.indexedFiles.save(params as any) };
       }
 
       case 'indexedFiles.getByPath': {
         ensureInit();
-        return { result: await indexedFileQueries.getByPath(params as string) };
+        return { result: await dataStore.indexedFiles.getByPath(params as string) };
       }
 
       case 'indexedFiles.getAll': {
         ensureInit();
-        return { result: await indexedFileQueries.getAllIndexedFiles() };
+        return { result: await dataStore.indexedFiles.getAll() };
       }
 
       case 'indexedFiles.delete': {
         ensureInit();
-        return { result: await indexedFileQueries.deleteByPath(params as string) };
+        return { result: await dataStore.indexedFiles.deleteByPath(params as string) };
       }
 
       case 'indexedFiles.deleteByNodeId': {
         ensureInit();
-        return { result: await indexedFileQueries.deleteByNodeId(params as string) };
+        return { result: await dataStore.indexedFiles.deleteByNodeId(params as string) };
       }
 
       case 'indexedFiles.getByNodeId': {
         ensureInit();
-        return { result: await indexedFileQueries.getByNodeId(params as string) };
+        return { result: await dataStore.indexedFiles.getByNodeId(params as string) };
       }
 
       // Spatial queries
       case 'spatial.nodesInBounds': {
         ensureInit();
         const p = params as { minX: number; minY: number; maxX: number; maxY: number; limit?: number };
-        return { result: await spatialQueries.getNodesInBounds(p.minX, p.minY, p.maxX, p.maxY, p.limit) };
+        return { result: await dataStore.spatial.nodesInBounds(p.minX, p.minY, p.maxX, p.maxY, p.limit) };
       }
 
       case 'spatial.edgesForNodes': {
         ensureInit();
-        return { result: await spatialQueries.getEdgesForVisibleNodes(params as string[]) };
+        return { result: await dataStore.spatial.edgesForNodes(params as string[]) };
       }
 
       case 'spatial.clusterSummary': {
         ensureInit();
-        return { result: await spatialQueries.getClusterSummary() };
+        return { result: await dataStore.spatial.clusterSummary() };
       }
 
       case 'spatial.interClusterEdges': {
         ensureInit();
-        return { result: await spatialQueries.getInterClusterEdges() };
+        return { result: await dataStore.spatial.interClusterEdges() };
       }
 
       case 'spatial.batchUpdatePositions': {
         ensureInit();
-        await spatialQueries.batchUpdatePositions(params as Array<{ id: string; x: number; y: number }>);
+        await dataStore.spatial.batchUpdatePositions(params as Array<{ id: string; x: number; y: number }>);
         return { result: { success: true } };
       }
 
       case 'spatial.nodeCountInBounds': {
         ensureInit();
         const p = params as { minX: number; minY: number; maxX: number; maxY: number };
-        return { result: await spatialQueries.getNodeCountInBounds(p.minX, p.minY, p.maxX, p.maxY) };
+        return { result: await dataStore.spatial.nodeCountInBounds(p.minX, p.minY, p.maxX, p.maxY) };
       }
 
       case 'spatial.totalNodeCount': {
         ensureInit();
-        return { result: await spatialQueries.getTotalNodeCount() };
+        return { result: await dataStore.spatial.totalNodeCount() };
       }
 
       // Reading list history operations
       case 'readingList.save': {
         ensureInit();
-        return { result: await readingListQueries.saveHistory(params as any) };
+        return { result: await dataStore.readingList.save(params as any) };
       }
 
       case 'readingList.getAll': {
         ensureInit();
-        return { result: await readingListQueries.getAll() };
+        return { result: await dataStore.readingList.getAll() };
       }
 
       case 'readingList.getByUrl': {
         ensureInit();
-        return { result: await readingListQueries.getByUrl(params as string) };
+        return { result: await dataStore.readingList.getByUrl(params as string) };
       }
 
       case 'readingList.getRecent': {
         ensureInit();
-        return { result: await readingListQueries.getRecent(params as number) };
+        return { result: await dataStore.readingList.getRecent(params as number) };
       }
 
       // Stress test
       case 'stressTest.generate': {
         ensureInit();
         const p = params as { nodeCount: number };
-        const result = await stressTestQueries.generateStressTestData(p.nodeCount);
+        const result = await dataStore.stressTest.generate(p.nodeCount);
         return { result, syncEvent: { type: 'reset' } };
       }
 
       // Query engine operations
       case 'query.execute': {
         ensureInit();
-        return { result: await executeGraphQuery(params) };
+        return { result: await dataStore.graphQuery(params) };
       }
 
       case 'mutation.execute': {
         ensureInit();
-        return { result: await executeGraphMutation(params) };
+        return { result: await dataStore.graphMutate(params) };
       }
 
       // Chat session operations
       case 'chat.getActiveSession': {
         ensureInit();
-        return { result: await chatQueries.getActiveSession() };
+        return { result: await dataStore.chat.getActiveSession() };
       }
       case 'chat.createSession': {
         ensureInit();
         const p = params as { id: string; title: string };
-        return { result: await chatQueries.createSession(p.id, p.title) };
+        return { result: await dataStore.chat.createSession(p.id, p.title) };
       }
       case 'chat.expireSession': {
         ensureInit();
-        await chatQueries.expireSession(params as string);
+        await dataStore.chat.expireSession(params as string);
         return { result: { success: true } };
       }
       case 'chat.expireStale': {
         ensureInit();
-        await chatQueries.expireAllStaleSessions();
+        await dataStore.chat.expireStale();
         return { result: { success: true } };
       }
       case 'chat.touchSession': {
         ensureInit();
-        await chatQueries.touchSession(params as string);
+        await dataStore.chat.touchSession(params as string);
         return { result: { success: true } };
       }
       case 'chat.pruneSessions': {
         ensureInit();
-        await chatQueries.pruneSessions();
+        await dataStore.chat.pruneSessions();
         return { result: { success: true } };
       }
       case 'chat.saveMessage': {
         ensureInit();
-        return { result: await chatQueries.saveMessage(params as any) };
+        return { result: await dataStore.chat.saveMessage(params as any) };
       }
       case 'chat.getMessages': {
         ensureInit();
-        return { result: await chatQueries.getSessionMessages(params as string) };
+        return { result: await dataStore.chat.getMessages(params as string) };
       }
       case 'chat.getAllSessions': {
         ensureInit();
-        return { result: await chatQueries.getAllSessions() };
+        return { result: await dataStore.chat.getAllSessions() };
       }
       case 'chat.getRecentMessages': {
         ensureInit();
         const p = params as { sessionId: string; limit?: number };
-        return { result: await chatQueries.getRecentMessages(p.sessionId, p.limit) };
+        return { result: await dataStore.chat.getRecentMessages(p.sessionId, p.limit) };
       }
 
       // Note attachment operations
       case 'noteAttachments.create': {
         ensureInit();
         const p = params as { noteId: string; filename: string; mimeType: string; data: Uint8Array };
-        return { result: await noteAttachmentQueries.createAttachment(p.noteId, p.filename, p.mimeType, p.data) };
+        return { result: await dataStore.noteAttachments.create(p.noteId, p.filename, p.mimeType, p.data) };
       }
       case 'noteAttachments.get': {
         ensureInit();
-        return { result: await noteAttachmentQueries.getAttachment(params as string) };
+        return { result: await dataStore.noteAttachments.get(params as string) };
       }
       case 'noteAttachments.getForNote': {
         ensureInit();
-        return { result: await noteAttachmentQueries.getAttachmentsForNote(params as string) };
+        return { result: await dataStore.noteAttachments.getForNote(params as string) };
       }
       case 'noteAttachments.delete': {
         ensureInit();
-        return { result: await noteAttachmentQueries.deleteAttachment(params as string) };
+        return { result: await dataStore.noteAttachments.delete(params as string) };
       }
 
       // --- Note search (OPFS FTS5 index) ---
       case 'noteSearch.upsert': {
         ensureInit();
         const { nodeId, title, body } = params as { nodeId: string; title: string; body: string };
-        await noteSearchQueries.upsertNoteSearch(nodeId, title, body);
+        await dataStore.noteSearch.upsert(nodeId, title, body);
         return { result: { success: true } };
       }
       case 'noteSearch.delete': {
         ensureInit();
-        return { result: await noteSearchQueries.deleteNoteSearch(params as string) };
+        return { result: await dataStore.noteSearch.delete(params as string) };
       }
       case 'noteSearch.search': {
         ensureInit();
         const { query, limit } = params as { query: string; limit?: number };
-        return { result: await noteSearchQueries.searchNotes(query, limit) };
+        return { result: await dataStore.noteSearch.search(query, limit) };
       }
       case 'noteSearch.getEntry': {
         ensureInit();
-        return { result: await noteSearchQueries.getNoteSearchEntry(params as string) };
+        return { result: await dataStore.noteSearch.getEntry(params as string) };
       }
       case 'noteSearch.getAll': {
         ensureInit();
-        return { result: await noteSearchQueries.getAllNoteSearchEntries() };
+        return { result: await dataStore.noteSearch.getAll() };
       }
 
       default:

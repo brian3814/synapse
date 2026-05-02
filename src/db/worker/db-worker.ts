@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { initSQLite, resetDatabase } from './sqlite-engine';
+import { createSqliteDataStore } from '../sqlite-data-store';
 import { createActionHandler } from './action-handler';
 import type { SyncEvent } from '../../shared/sync-events';
 
@@ -18,10 +19,11 @@ type WorkerResponse = {
   syncEvent?: SyncEvent;
 };
 
-const handleAction = createActionHandler(
+const dataStore = createSqliteDataStore(
   async () => { await initSQLite(); },
   async () => { await resetDatabase(); },
 );
+const handleAction = createActionHandler(dataStore);
 
 let messageTarget: { postMessage: (msg: any) => void } = self;
 
