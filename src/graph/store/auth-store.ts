@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { storage } from '@platform';
 
 interface AuthStore {
   authenticated: boolean;
@@ -63,17 +64,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
     chrome.runtime.onMessage.addListener(messageListener);
 
     // Also listen for storage changes (token added/removed)
-    const storageListener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+    const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName === 'local' && changes.anthropicOAuth) {
         const hasTokens = !!changes.anthropicOAuth.newValue;
         set({ authenticated: hasTokens });
       }
     };
-    chrome.storage.onChanged.addListener(storageListener);
+    const cleanupStorage = storage.onChange(storageListener);
 
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener);
-      chrome.storage.onChanged.removeListener(storageListener);
+      cleanupStorage();
     };
   },
 }));

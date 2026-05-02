@@ -1,5 +1,6 @@
 import { nodes, edges } from '../../db/client/db-client';
 import { graphQuerySchema } from '../../db/worker/query-engine/schema';
+import { storage } from '@platform';
 
 export function streamFromOffscreen(
   requestId: string,
@@ -34,7 +35,7 @@ export async function fetchLLMConfigAndTypes() {
   const [nodeTypesList, edgeTypesList, storageResult] = await Promise.all([
     nodes.getTypes(),
     edges.getTypes(),
-    chrome.storage.local.get('llmConfig') as Promise<Record<string, any>>,
+    storage.get('llmConfig') as Promise<Record<string, any>>,
   ]);
 
   const config = storageResult.llmConfig;

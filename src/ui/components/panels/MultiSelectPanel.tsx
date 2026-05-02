@@ -6,6 +6,7 @@ import { entityResolution, noteSearch } from '../../../db/client/db-client';
 import { write as writeNote } from '../../../notes/note-store';
 import { generateNoteMarkdown, stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import type { GraphNode } from '../../../shared/types';
+import { storage } from '@platform';
 
 type Action = 'none' | 'merge' | 'relate' | 'note';
 type NoteMode = 'choose' | 'manual-saving' | 'auto-input' | 'auto-generating' | 'auto-preview';
@@ -247,7 +248,7 @@ export function MultiSelectPanel() {
     abortRef.current = false;
 
     try {
-      const configResult = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+      const configResult = await storage.get('llmConfig') as Record<string, any>;
       const config = configResult.llmConfig;
       if (!config?.apiKey) {
         setNoteError('No API key configured. Go to Settings to add one.');

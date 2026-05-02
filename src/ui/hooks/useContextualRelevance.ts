@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { nodes as nodesApi } from '../../db/client/db-client';
 import type { DbNode } from '../../shared/types';
+import { storage } from '@platform';
 
 export interface RelatedMatch {
   node: DbNode;
@@ -17,7 +18,7 @@ export function useContextualRelevance() {
 
   // Load preference
   useEffect(() => {
-    chrome.storage.local.get(RELEVANCE_STORAGE_KEY).then((result: Record<string, any>) => {
+    storage.get(RELEVANCE_STORAGE_KEY).then((result: Record<string, any>) => {
       if (result[RELEVANCE_STORAGE_KEY] !== undefined) {
         setEnabled(result[RELEVANCE_STORAGE_KEY]);
       }
@@ -27,7 +28,7 @@ export function useContextualRelevance() {
   const toggleEnabled = useCallback(async (value: boolean) => {
     setEnabled(value);
     try {
-      await chrome.storage.local.set({ [RELEVANCE_STORAGE_KEY]: value });
+      await storage.set({ [RELEVANCE_STORAGE_KEY]: value });
     } catch {}
     if (!value) {
       setRelatedNodes([]);

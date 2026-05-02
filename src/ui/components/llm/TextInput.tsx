@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { estimateExtractionCost } from '../../../shared/cost-estimator';
+import { storage } from '@platform';
 
 interface TextInputProps {
   onSubmit: (text: string, sourceUrl?: string) => void;
@@ -12,11 +13,11 @@ export function TextInput({ onSubmit }: TextInputProps) {
   const [budgetExceeded, setBudgetExceeded] = useState(false);
 
   useEffect(() => {
-    chrome.storage.local.get('llmConfig').then((result: Record<string, any>) => {
+    storage.get('llmConfig').then((result: Record<string, any>) => {
       if (result.llmConfig?.model) setModel(result.llmConfig.model);
     }).catch(() => {});
 
-    chrome.storage.local.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
+    storage.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
       const budget = result.usageBudget;
       if (!budget?.monthlyLimitCents || budget.monthlyLimitCents <= 0) return;
       const records = result.usageRecords ?? [];

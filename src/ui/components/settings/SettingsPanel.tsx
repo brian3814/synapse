@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
+import { storage } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
 import { useGraphStore } from '../../../graph/store/graph-store';
@@ -14,7 +15,7 @@ export function SettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
   useEffect(() => {
-    chrome.storage.local.get(LLM_CONFIG_STORAGE_KEY).then((result: Record<string, any>) => {
+    storage.get(LLM_CONFIG_STORAGE_KEY).then((result: Record<string, any>) => {
       const config = result[LLM_CONFIG_STORAGE_KEY];
       if (config) {
         setProvider(config.provider);
@@ -29,7 +30,7 @@ export function SettingsPanel() {
   const handleSave = async () => {
     const config = { provider, model, apiKey };
     try {
-      await chrome.storage.local.set({ [LLM_CONFIG_STORAGE_KEY]: config });
+      await storage.set({ [LLM_CONFIG_STORAGE_KEY]: config });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -40,7 +41,7 @@ export function SettingsPanel() {
   const handleClearKey = async () => {
     setApiKey('');
     try {
-      await chrome.storage.local.remove(LLM_CONFIG_STORAGE_KEY);
+      await storage.remove(LLM_CONFIG_STORAGE_KEY);
     } catch (e) {
       // Not in extension context
     }
@@ -155,7 +156,7 @@ function UsageSection() {
   const [backendShowsCost, setBackendShowsCost] = useState(true);
 
   useEffect(() => {
-    chrome.storage.local.get(['usageRecords', 'usageBudget', 'usageBackendType']).then((result: Record<string, any>) => {
+    storage.get(['usageRecords', 'usageBudget', 'usageBackendType']).then((result: Record<string, any>) => {
       if (result.usageRecords) setRecords(result.usageRecords);
       if (result.usageBudget?.monthlyLimitCents != null) {
         setBudgetDollars((result.usageBudget.monthlyLimitCents / 100).toFixed(2));
@@ -182,7 +183,7 @@ function UsageSection() {
   const handleSaveBudget = async () => {
     const cents = Math.round(parseFloat(budgetDollars) * 100) || 0;
     try {
-      await chrome.storage.local.set({ usageBudget: { monthlyLimitCents: cents } });
+      await storage.set({ usageBudget: { monthlyLimitCents: cents } });
       setSavedBudget(true);
       setTimeout(() => setSavedBudget(false), 2000);
     } catch {}
@@ -264,7 +265,7 @@ function RelevanceSection() {
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
-    chrome.storage.local.get('contextualRelevanceEnabled').then((result: Record<string, any>) => {
+    storage.get('contextualRelevanceEnabled').then((result: Record<string, any>) => {
       if (result.contextualRelevanceEnabled !== undefined) {
         setEnabled(result.contextualRelevanceEnabled);
       }
@@ -275,7 +276,7 @@ function RelevanceSection() {
     const newValue = !enabled;
     setEnabled(newValue);
     try {
-      await chrome.storage.local.set({ contextualRelevanceEnabled: newValue });
+      await storage.set({ contextualRelevanceEnabled: newValue });
     } catch {}
   };
 

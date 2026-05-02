@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { DisplayMode } from '../../shared/types';
 import { DISPLAY_MODE_STORAGE_KEY } from '../../shared/constants';
 import { notifyWorkerDying } from '../../db/client/db-client';
+import { storage } from '@platform';
 
 function getDisplayMode(): DisplayMode {
   const params = new URLSearchParams(window.location.search);
@@ -19,7 +20,7 @@ export function useDisplayMode() {
 
     // Persist preference
     try {
-      await chrome.storage.local.set({ [DISPLAY_MODE_STORAGE_KEY]: newMode });
+      await storage.set({ [DISPLAY_MODE_STORAGE_KEY]: newMode });
     } catch (e) {
       // Not in extension context
     }

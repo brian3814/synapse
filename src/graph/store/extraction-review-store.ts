@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { storage } from '@platform';
 
 // --- Types ---
 
@@ -561,7 +562,7 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
 
     try {
       // Try LLM for inverse key suggestions
-      const config = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+      const config = await storage.get('llmConfig') as Record<string, any>;
       const llmConfig = config.llmConfig;
 
       let suggestedKeys: Record<string, string> = {};

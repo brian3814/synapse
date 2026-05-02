@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import type { ExtractionResult } from '../../../shared/types';
+import { storage } from '@platform';
 
 function formatCost(cents: number): string {
   return `$${(cents / 100).toFixed(cents < 1 ? 4 : 3)}`;
@@ -16,7 +17,7 @@ export function ExtractionSummary({ onProceed }: ExtractionSummaryProps) {
   const [showsCost, setShowsCost] = useState(true);
 
   useEffect(() => {
-    chrome.storage.local.get('usageBackendType').then((result: Record<string, any>) => {
+    storage.get('usageBackendType').then((result: Record<string, any>) => {
       setShowsCost(result.usageBackendType !== 'managed');
     }).catch(() => {});
   }, []);

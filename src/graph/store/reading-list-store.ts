@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ReadingListItem } from '../../shared/types';
+import { storage } from '@platform';
 
 interface ReadingListStore {
   items: Record<string, ReadingListItem>; // keyed by URL
@@ -24,7 +25,7 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   loadFromStorage: async () => {
     set({ loading: true });
     try {
-      const result = await chrome.storage.local.get('readingListItems');
+      const result = await storage.get('readingListItems') as Record<string, any>;
       const items = (result.readingListItems as Record<string, ReadingListItem>) ?? {};
       set({ items, loading: false });
     } catch (e) {
@@ -34,14 +35,14 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   },
 
   startSyncListener: () => {
-    // Listen for chrome.storage changes (SW writes to readingListItems)
-    const storageListener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+    // Listen for storage changes (SW writes to readingListItems)
+    const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName === 'local' && changes.readingListItems) {
         const newItems = (changes.readingListItems.newValue as Record<string, ReadingListItem>) ?? {};
         set({ items: newItems });
       }
     };
-    chrome.storage.onChanged.addListener(storageListener);
+    const cleanupStorage = storage.onChange(storageListener);
 
     // Also listen for extraction result broadcasts directly (for faster UI update)
     const messageListener = (message: any) => {
@@ -82,7 +83,7 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
     // Return cleanup function
     return () => {
-      chrome.storage.onChanged.removeListener(storageListener);
+      cleanupStorage();
       chrome.runtime.onMessage.removeListener(messageListener);
     };
   },

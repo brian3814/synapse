@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { storage } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
@@ -11,7 +12,7 @@ const EXTRACTION_NOTES_ENABLED_KEY = 'extractionNotesEnabled';
 /** Read the persisted notes-toggle setting. Defaults to false (off). */
 async function isNotesEnabled(): Promise<boolean> {
   try {
-    const stored = await chrome.storage.local.get(EXTRACTION_NOTES_ENABLED_KEY) as Record<string, any>;
+    const stored = await storage.get(EXTRACTION_NOTES_ENABLED_KEY) as Record<string, any>;
     return Boolean(stored[EXTRACTION_NOTES_ENABLED_KEY]);
   } catch {
     return false;
@@ -229,7 +230,7 @@ export async function buildDiffItems(
 export function useLLMExtraction() {
   const startExtraction = useCallback(async (text: string, sourceUrl?: string) => {
     // Privacy disclosure gate
-    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    const disc = await storage.get('privacyDisclosureAccepted') as Record<string, any>;
     if (!disc.privacyDisclosureAccepted) {
       useLLMStore.getState().setShowPrivacyModal(true, () => startExtraction(text, sourceUrl));
       return;
@@ -249,7 +250,7 @@ export function useLLMExtraction() {
     llm.setStatus('extracting');
 
     try {
-      const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+      const result = await storage.get('llmConfig') as Record<string, any>;
       const config = result.llmConfig;
       if (!config?.apiKey) {
         throw new Error('No API key configured. Go to Settings to add one.');
@@ -311,7 +312,7 @@ export function useLLMExtraction() {
 
   const startQuickExtraction = useCallback(async (prompt?: string, sourceUrl?: string) => {
     // Privacy disclosure gate
-    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    const disc = await storage.get('privacyDisclosureAccepted') as Record<string, any>;
     if (!disc.privacyDisclosureAccepted) {
       useLLMStore.getState().setShowPrivacyModal(true, () => startQuickExtraction(prompt, sourceUrl));
       return;
@@ -321,7 +322,7 @@ export function useLLMExtraction() {
     llm.setError(null);
 
     // Get LLM config
-    const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+    const result = await storage.get('llmConfig') as Record<string, any>;
     const config = result.llmConfig;
     if (!config?.apiKey) {
       llm.setError('No API key configured. Go to Settings to add one.');
@@ -541,7 +542,7 @@ export function useLLMExtraction() {
 
   const startAgentExtraction = useCallback(async (prompt?: string, sourceUrl?: string) => {
     // Privacy disclosure gate
-    const disc = await chrome.storage.local.get('privacyDisclosureAccepted') as Record<string, any>;
+    const disc = await storage.get('privacyDisclosureAccepted') as Record<string, any>;
     if (!disc.privacyDisclosureAccepted) {
       useLLMStore.getState().setShowPrivacyModal(true, () => startAgentExtraction(prompt, sourceUrl));
       return;
@@ -560,7 +561,7 @@ export function useLLMExtraction() {
     }
 
     // Get LLM config
-    const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
+    const result = await storage.get('llmConfig') as Record<string, any>;
     const config = result.llmConfig;
     if (!config?.apiKey) {
       llm.setError('No API key configured. Go to Settings to add one.');

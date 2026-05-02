@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { storage } from '@platform';
 
 interface PrivacyDisclosureProps {
   onAccept: () => void;
@@ -10,7 +11,7 @@ export function PrivacyDisclosure({ onAccept, onCancel }: PrivacyDisclosureProps
 
   const handleAccept = async () => {
     try {
-      await chrome.storage.local.set({ privacyDisclosureAccepted: true });
+      await storage.set({ privacyDisclosureAccepted: true });
     } catch {}
     onAccept();
   };

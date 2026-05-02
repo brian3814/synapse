@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import { estimateExtractionCost } from '../../../shared/cost-estimator';
 import type { PageComplexity } from '../../../shared/types';
+import { storage } from '@platform';
 
 interface PromptInputProps {
   onSubmit: (prompt: string, sourceUrl?: string) => void;
@@ -44,7 +45,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
       setTabUrl(tabs[0]?.url ?? null);
     });
 
-    chrome.storage.local.get('llmConfig').then((result: Record<string, any>) => {
+    storage.get('llmConfig').then((result: Record<string, any>) => {
       const config = result.llmConfig;
       if (!config?.apiKey) {
         setConfigError('No API key configured. Go to Settings to add one.');
@@ -54,7 +55,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
       if (config?.model) setModel(config.model);
     });
 
-    chrome.storage.local.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
+    storage.get(['usageRecords', 'usageBudget']).then((result: Record<string, any>) => {
       const budget = result.usageBudget;
       if (!budget?.monthlyLimitCents || budget.monthlyLimitCents <= 0) return;
       const records = result.usageRecords ?? [];
@@ -72,7 +73,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
     }).catch(() => {});
 
     // Load the notes toggle setting
-    chrome.storage.local.get(EXTRACTION_NOTES_KEY).then((result: Record<string, any>) => {
+    storage.get(EXTRACTION_NOTES_KEY).then((result: Record<string, any>) => {
       setNotesEnabled(Boolean(result[EXTRACTION_NOTES_KEY]));
     }).catch(() => {});
   }, []);
@@ -80,7 +81,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
   const toggleNotes = async (next: boolean) => {
     setNotesEnabled(next);
     try {
-      await chrome.storage.local.set({ [EXTRACTION_NOTES_KEY]: next });
+      await storage.set({ [EXTRACTION_NOTES_KEY]: next });
     } catch {
       setNotesEnabled(!next);
     }
