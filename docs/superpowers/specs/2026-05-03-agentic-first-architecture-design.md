@@ -206,9 +206,9 @@ MCP server runs in Electron main process. Two transports:
 | `kg_create_node`, `kg_update_node`, `kg_delete_node` | `graphCommands.*` |
 | `kg_create_edge`, `kg_search_nodes`, `kg_get_node` | `graphCommands.*` + `ctx.db.*` |
 | `kg_get_neighbors`, `kg_search_sources`, `kg_get_source_content` | `ctx.db.*` |
-| `kg_extract_text`, `kg_extract_url` | `extractionCommands.*` |
+| `kg_extract_text` (conditional — requires LLM) | `ctx.llm.streamExtraction()` |
 | `kg_save_note`, `kg_read_note`, `kg_search_notes` | `noteCommands.*` + `ctx.db.*` |
-| `kg_query`, `kg_nl_query` | `ctx.db.graphQuery()` + `nlQueryCommands.*` |
+| `kg_query` | `ctx.db.graphQuery()` |
 
 ### MCP Resources
 
