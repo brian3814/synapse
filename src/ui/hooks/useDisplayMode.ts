@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import type { DisplayMode } from '../../shared/types';
 import { DISPLAY_MODE_STORAGE_KEY } from '../../shared/constants';
-import { storage, db, browser } from '@platform';
+import { storage, db, browser, platformId } from '@platform';
 
 function getDisplayMode(): DisplayMode {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
   if (mode === 'tab' || mode === 'sidePanel') return mode;
-  return 'sidePanel';
+  return platformId === 'electron' ? 'tab' : 'sidePanel';
 }
 
 export function useDisplayMode() {
