@@ -551,6 +551,38 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.noteSearch.getAll() };
       }
 
+      // Memory operations
+      case 'memory.addSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.addSemantic(params as any) };
+      case 'memory.getAllSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.getAllSemantic() };
+      case 'memory.getRecentSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.getRecentSemantic((params as any)?.limit) };
+      case 'memory.deleteSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.deleteSemantic((params as any).id) };
+      case 'memory.clearAllSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.clearAllSemantic() };
+      case 'memory.findDuplicate':
+        ensureInit();
+        return { result: await dataStore.memory.findDuplicateSemantic((params as any).content) };
+      case 'memory.touchSemantic':
+        ensureInit();
+        return { result: await dataStore.memory.touchSemantic((params as any).id) };
+      case 'memory.addEpisodic':
+        ensureInit();
+        return { result: await dataStore.memory.addEpisodic(params as any) };
+      case 'memory.getRecentEpisodic':
+        ensureInit();
+        return { result: await dataStore.memory.getRecentEpisodic((params as any)?.limit) };
+      case 'memory.clearAllEpisodic':
+        ensureInit();
+        return { result: await dataStore.memory.clearAllEpisodic() };
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

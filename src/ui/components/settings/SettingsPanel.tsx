@@ -8,6 +8,7 @@ import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, discon
 import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
 import { CustomInstructionsSection } from './CustomInstructionsSection';
+import { MemorySection } from './MemorySection';
 
 export function SettingsPanel() {
   const [provider, setProvider] = useState<LLMProvider>('anthropic');
@@ -119,6 +120,8 @@ export function SettingsPanel() {
       </div>
 
       <CustomInstructionsSection />
+
+      <MemorySection />
 
       <UsageSection />
 

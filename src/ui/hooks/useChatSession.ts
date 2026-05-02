@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { chat } from '../../db/client/db-client';
+import { chat, memory as memoryDb } from '../../db/client/db-client';
 import { storage } from '@platform';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
 import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
 import { assembleSystemPrompt } from '../../core/prompt-assembler';
+import { extractSemanticMemories } from '../../core/memory-extractor';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -121,12 +122,15 @@ export function useChatSession() {
         ? presets.find((p: any) => p.id === activePresetId)
         : null;
 
+      const semanticMemories = await memoryDb.getRecentSemantic(20) as Array<{ category: string; content: string }>;
+      const episodicSummaries = await memoryDb.getRecentEpisodic(3) as Array<{ summary: string }>;
+
       const systemPrompt = assembleSystemPrompt({
         globalInstructions,
         presetPrompt: activePreset?.prompt ?? null,
         presetName: activePreset?.name ?? null,
-        semanticMemories: [],
-        recentSessionSummaries: [],
+        semanticMemories,
+        recentSessionSummaries: episodicSummaries,
       });
 
       // Run agentic chat loop
@@ -185,6 +189,9 @@ export function useChatSession() {
         content: finalText,
         status: 'complete',
       });
+
+      // Fire-and-forget: extract semantic memories from this exchange
+      extractSemanticMemories(input, finalText, sessionId).catch(() => {});
 
       // Bump session activity
       await chat.touchSession(sessionId);
