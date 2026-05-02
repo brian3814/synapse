@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { storage } from '@platform';
+import { storage, notes } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
@@ -19,7 +19,6 @@ async function isNotesEnabled(): Promise<boolean> {
   }
 }
 import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
-import { write as writeNote } from '../../notes/note-store';
 import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';
@@ -973,7 +972,7 @@ export function useLLMExtraction() {
               noteCreatedIds.push(created.id);
               // Write content to OPFS as .md file (canonical source)
               const markdown = generateNoteMarkdown(candidateName, note.content, wikiLinks);
-              await writeNote(created.id, markdown);
+              await notes.write(created.id, markdown);
               // Update FTS search index
               await noteSearch.upsert(created.id, candidateName, stripMarkdownToPlainText(note.content));
             } else {

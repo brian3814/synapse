@@ -2,7 +2,7 @@ import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-
 import { nodes, edges, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
-import { read as readNote } from '../../notes/note-store';
+import { notes } from '@platform';
 import { parseMarkdown } from '../../notes/markdown-utils';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
@@ -345,7 +345,7 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       // Notes: read from OPFS
       const targetNode = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
       if (targetNode?.type === 'note') {
-        const md = await readNote(nodeId);
+        const md = await notes.read(nodeId);
         if (md) {
           const parsed = parseMarkdown(md);
           return JSON.stringify({

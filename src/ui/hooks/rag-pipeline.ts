@@ -11,7 +11,7 @@
 
 import { nodes as nodesApi, edges as edgesApi, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
-import { read as readNote } from '../../notes/note-store';
+import { notes } from '@platform';
 import { parseMarkdown } from '../../notes/markdown-utils';
 import type { DbNode, DbEdge, DbSourceContent } from '../../shared/types';
 
@@ -129,7 +129,7 @@ async function getSourceExcerpts(
         const node = nodeMap.get(nodeId);
         // Notes: read from OPFS (canonical source)
         if (node?.type === 'note') {
-          const md = await readNote(nodeId);
+          const md = await notes.read(nodeId);
           if (md) {
             const parsed = parseMarkdown(md);
             return {

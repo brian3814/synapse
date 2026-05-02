@@ -1,6 +1,6 @@
-import type { NoteStore } from './note-store';
+import type { PlatformNotes } from '../types';
 
-export class OpfsNoteStore implements NoteStore {
+export class ChromeNotes implements PlatformNotes {
   private notesDir: FileSystemDirectoryHandle | null = null;
 
   async init(): Promise<void> {

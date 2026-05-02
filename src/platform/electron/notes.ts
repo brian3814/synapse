@@ -1,6 +1,6 @@
-import type { NoteStore } from './note-store';
+import type { PlatformNotes } from '../types';
 
-export class FsNoteStore implements NoteStore {
+export class ElectronNotes implements PlatformNotes {
   private api = (window as any).electronNotes as {
     init: () => Promise<void>;
     read: (nodeId: string) => Promise<string | null>;

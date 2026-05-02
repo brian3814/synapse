@@ -3,10 +3,9 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { entityResolution, noteSearch } from '../../../db/client/db-client';
-import { write as writeNote } from '../../../notes/note-store';
+import { notes, storage } from '@platform';
 import { generateNoteMarkdown, stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import type { GraphNode } from '../../../shared/types';
-import { storage } from '@platform';
 
 type Action = 'none' | 'merge' | 'relate' | 'note';
 type NoteMode = 'choose' | 'manual-saving' | 'auto-input' | 'auto-generating' | 'auto-preview';
@@ -94,7 +93,7 @@ export function MultiSelectPanel() {
 
     // Write content to OPFS + search index
     const markdown = generateNoteMarkdown(title, content, wikiLinks);
-    await writeNote(noteNode.id, markdown);
+    await notes.write(noteNode.id, markdown);
     await noteSearch.upsert(noteNode.id, title, stripMarkdownToPlainText(content));
 
     // Create mention edges to all selected nodes

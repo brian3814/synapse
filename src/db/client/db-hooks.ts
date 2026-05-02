@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { nodes, edges, initDbClient } from './db-client';
-import { initNoteStore } from '../../notes/note-store';
 import type { DbNode, DbEdge } from '../../shared/types';
 
 // Hook to initialize the database
@@ -10,7 +9,6 @@ export function useDbInit(): { ready: boolean; error: string | null } {
 
   useEffect(() => {
     initDbClient()
-      .then(() => initNoteStore())
       .then(() => setReady(true))
       .catch((e) => {
         console.error('[useDbInit] Failed:', e);

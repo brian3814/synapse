@@ -5,7 +5,7 @@ import { noteSearch, noteFolders, noteAttachments } from '../../../db/client/db-
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
-import { read as readNote, write as writeNote } from '../../../notes/note-store';
+import { notes } from '@platform';
 import { stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import { SYNC_CHANNEL, type SyncEvent } from '../../../shared/sync-events';
 
@@ -40,7 +40,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       setFolderPath(node.folderPath ?? '');
     }
     // Read content from OPFS (canonical source)
-    readNote(nodeId).then((md) => {
+    notes.read(nodeId).then((md) => {
       if (md) {
         const parsed = parseMarkdown(md);
         setContent(parsed.content);
@@ -54,7 +54,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     const channel = new BroadcastChannel(SYNC_CHANNEL);
     channel.onmessage = (e: MessageEvent<SyncEvent>) => {
       if (e.data.type === 'note_content_updated' && e.data.nodeId === nodeId) {
-        readNote(nodeId).then((md) => {
+        notes.read(nodeId).then((md) => {
           if (md) {
             const parsed = parseMarkdown(md);
             setContent(parsed.content);
@@ -97,7 +97,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
 
       if (nodeId) {
         // 1. Write OPFS first (orphaned files are harmless)
-        await writeNote(nodeId, markdown);
+        await notes.write(nodeId, markdown);
         // 2. Update search index
         await noteSearch.upsert(nodeId, title, stripMarkdownToPlainText(content));
         // 3. Update node metadata (no content in properties)
@@ -117,7 +117,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         });
 
         if (node) {
-          await writeNote(node.id, markdown);
+          await notes.write(node.id, markdown);
           await noteSearch.upsert(node.id, title, stripMarkdownToPlainText(content));
           await createWikiLinkEdges(node.id, wikiLinks);
         }
@@ -180,7 +180,7 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         effectiveNodeIdRef.current = nid;
         // Write initial content to OPFS + search index
         const markdown = generateNoteMarkdown(t, content, wikiLinks);
-        writeNote(nid, markdown).catch(() => {});
+        notes.write(nid, markdown).catch(() => {});
         noteSearch.upsert(nid, t, stripMarkdownToPlainText(content)).catch(() => {});
       }
 
