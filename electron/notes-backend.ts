@@ -9,7 +9,7 @@ import {
   mkdirSync,
 } from 'fs';
 
-const NOTES_DIR = join(app.getPath('userData'), 'notes');
+const NOTES_DIR = join(app.getPath('documents'), 'KnowledgeGraph', 'notes');
 
 export function initNotesDir(): void {
   if (!existsSync(NOTES_DIR)) mkdirSync(NOTES_DIR, { recursive: true });
