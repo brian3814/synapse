@@ -563,6 +563,13 @@ import { executeTool as chatExecuteTool } from '../../commands/chat-tool-executo
  * Wrap the Phase 1 chat-tool-executor dispatch into an execute function.
  * Each chat tool delegates to the centralized executeTool(ctx, name, input).
  */
+/**
+ * Wrap the Phase 1 chat-tool-executor for the registry's execute signature.
+ * Returns only the result string — per-run metadata (collectedNodeIds/EdgeIds)
+ * is handled at the chat-agent-loop level where executeToolCmd() is called
+ * directly (Phase 1 Task 7). The registry wrapper is used by ToolDispatcher
+ * in the extraction agent loop, which doesn't need subgraph tracking.
+ */
 function makeChatExecute(toolName: string) {
   return async (input: Record<string, unknown>, ctx: CommandContext): Promise<string> => {
     const execResult = await chatExecuteTool(ctx, toolName, input);

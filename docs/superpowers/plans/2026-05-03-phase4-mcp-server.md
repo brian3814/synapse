@@ -239,32 +239,35 @@ The tools cover the full CRUD surface of the knowledge graph:
 
 ```typescript
 // src/mcp/tools.ts
+//
+// IMPORTANT: This file must NOT import Electron. It is used by both the
+// companion HTTP server (Electron main process) and the standalone stdio
+// binary (no Electron). Platform-specific behavior (event broadcasting)
+// is injected via the EventBroadcaster callback.
 import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import type { CommandContext } from '../commands/types';
-import type { CommandEvent } from '../commands/types';
+import type { CommandContext, CommandEvent } from '../commands/types';
 import * as graphCommands from '../commands/graph-commands';
-import { BrowserWindow } from 'electron';
+import * as noteCommands from '../commands/note-commands';
 
 /**
- * Broadcast command events to all renderer windows so the UI stays in sync.
- * In the companion HTTP context, also emits to MCP clients via SSE.
+ * Optional callback to broadcast command events to renderer windows.
+ * Injected by callers — Electron provides a real one, stdio uses no-op.
  */
-function broadcastEvents(events: CommandEvent[]): void {
-  if (events.length === 0) return;
-  for (const win of BrowserWindow.getAllWindows()) {
-    for (const event of events) {
-      win.webContents.send('db:sync', event);
-    }
-  }
-}
+export type EventBroadcaster = (events: CommandEvent[]) => void;
+
+const noopBroadcaster: EventBroadcaster = () => {};
 
 /**
  * Register all knowledge graph tools on an McpServer instance.
  * Mutating tools use command functions (not raw ctx.db) to get cleanup,
  * provenance, and sync events.
  */
-export function registerTools(server: McpServer, ctx: CommandContext): void {
+export function registerTools(
+  server: McpServer,
+  ctx: CommandContext,
+  broadcast: EventBroadcaster = noopBroadcaster,
+): void {
 
   // ── Node CRUD ─────────────────────────────────────────────────────
 
@@ -286,11 +289,11 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
         name,
         type: type ?? 'entity',
         label: label ?? undefined,
-        properties: properties ? JSON.stringify(properties) : undefined,
+        properties: properties ?? undefined,
         sourceUrl,
       });
       // Broadcast events to renderer windows
-      broadcastEvents(result.events);
+      broadcast(result.events);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
       };
@@ -317,9 +320,9 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
         type,
         label,
         summary,
-        properties: properties ? JSON.stringify(properties) : undefined,
+        properties: properties ?? undefined,
       });
-      broadcastEvents(result.events);
+      broadcast(result.events);
       if (!result.data) {
         return { content: [{ type: 'text' as const, text: `Node ${id} not found` }], isError: true };
       }
@@ -337,7 +340,7 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
     },
     async ({ id }) => {
       const result = await graphCommands.deleteNode(ctx, id);
-      broadcastEvents(result.events);
+      broadcast(result.events);
       return {
         content: [{ type: 'text' as const, text: result.data ? `Deleted node ${id}` : `Node ${id} not found` }],
       };
@@ -365,11 +368,11 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
         targetId,
         label,
         type,
-        properties: properties ? JSON.stringify(properties) : undefined,
+        properties: properties ?? undefined,
         weight,
         directed: true,
       });
-      broadcastEvents(result.events);
+      broadcast(result.events);
       const edge = result.data;
       return { content: [{ type: 'text' as const, text: JSON.stringify(edge, null, 2) }] };
     },
@@ -519,17 +522,14 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
       }),
     },
     async ({ nodeId, title, content }) => {
-      let targetId = nodeId;
-      if (!targetId) {
-        const node = await ctx.db.nodes.create({ name: title, type: 'note' });
-        targetId = node.id;
-      }
-      await ctx.notes.write(targetId, content);
-      // Update the note search index
-      const { stripMarkdownToPlainText } = await import('../notes/markdown-utils');
-      const plainText = stripMarkdownToPlainText(content);
-      await ctx.db.noteSearch.upsert(targetId, title, plainText);
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ nodeId: targetId, title, saved: true }, null, 2) }] };
+      // Use noteCommands (not raw ctx.db) for proper node creation + FTS + wikilinks
+      const result = await noteCommands.saveNote(ctx, {
+        nodeId: nodeId ?? null,
+        name: title,
+        content,
+        isNew: !nodeId,
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ nodeId: result.nodeId, title, saved: true }, null, 2) }] };
     },
   );
 
@@ -818,14 +818,17 @@ Single factory function that creates and configures an `McpServer` with all tool
 // src/mcp/server.ts
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CommandContext } from '../commands/types';
-import { registerTools } from './tools';
+import { registerTools, type EventBroadcaster } from './tools';
 import { registerResources } from './resources';
 
 /**
  * Create a fully-configured MCP server backed by a CommandContext.
  * The caller is responsible for connecting a transport (stdio or HTTP).
+ *
+ * @param broadcast - Optional event broadcaster for sync. Electron callers
+ *   inject one that sends to BrowserWindows. Stdio uses default no-op.
  */
-export function createMCPServer(ctx: CommandContext): McpServer {
+export function createMCPServer(ctx: CommandContext, broadcast?: EventBroadcaster): McpServer {
   const server = new McpServer(
     {
       name: 'kg-desktop',
@@ -844,7 +847,7 @@ export function createMCPServer(ctx: CommandContext): McpServer {
     },
   );
 
-  registerTools(server, ctx);
+  registerTools(server, ctx, broadcast);
   registerResources(server, ctx);
 
   return server;
@@ -900,18 +903,19 @@ import type { PlatformNotes, PlatformStorage } from '../src/platform/types';
 
 // ── Resolve paths (no Electron app module) ──────────────────────────
 
-// Prefer env var (set by Electron app when generating MCP config) over guessing.
-// The Electron app writes KG_USER_DATA into the MCP config JSON it generates.
+// Prefer KG_USER_DATA env var (set by Electron app when generating MCP config).
+// Fallback guesses the path from productName in package.json ("KG Desktop").
+// Electron's app.getPath('userData') uses productName, which may contain spaces.
 function getUserDataPath(): string {
   if (process.env.KG_USER_DATA) return process.env.KG_USER_DATA;
   const home = homedir();
   switch (process.platform) {
     case 'darwin':
-      return join(home, 'Library', 'Application Support', 'kg-desktop');
+      return join(home, 'Library', 'Application Support', 'KG Desktop');
     case 'win32':
-      return join(process.env.APPDATA ?? join(home, 'AppData', 'Roaming'), 'kg-desktop');
+      return join(process.env.APPDATA ?? join(home, 'AppData', 'Roaming'), 'KG Desktop');
     default:
-      return join(home, '.config', 'kg-desktop');
+      return join(home, '.config', 'KG Desktop');
   }
 }
 
@@ -1137,6 +1141,11 @@ Then change the `startCompanionServer()` call (around line 150) from:
 to:
 
 ```typescript
+  // LLM wrapper for MCP is deferred — the Electron LLM backend (handleStreamExtraction
+  // etc.) returns void and reports results via IPC callbacks, which doesn't map to
+  // PlatformLLM's typed return values without substantial adapter work.
+  // For v1, kg_extract_text returns an error when LLM is unavailable.
+  // Future: build a main-process PlatformLLM that calls the Anthropic executor directly.
   startCompanionServer({ dataStore, storage });
 ```
 
@@ -1175,6 +1184,11 @@ const ALLOWED_ORIGINS = new Set([
   'http://127.0.0.1',
 ]);
 
+// Auth token for the MCP endpoint. Generated on startup, printed to stdout
+// so the user can add it to Claude Desktop config. This prevents local-web
+// CSRF attacks on the /mcp endpoint (where Origin can be absent).
+const MCP_AUTH_TOKEN = crypto.randomUUID();
+
 function isOriginAllowed(origin: string | undefined): boolean {
   if (!origin) return true; // non-browser clients (curl, MCP stdio bridge)
   return [...ALLOWED_ORIGINS].some((prefix) => origin.startsWith(prefix));
@@ -1189,7 +1203,7 @@ function cors(req: IncomingMessage, res: ServerResponse): boolean {
   }
   res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id, Authorization');
   res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
   return true;
 }
@@ -1234,8 +1248,17 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
   // ── MCP transport sessions ──────────────────────────────────────
   const transports = new Map<string, NodeStreamableHTTPServerTransport>();
 
+  // Electron-specific event broadcaster — sends sync events to renderer windows.
+  // Injected into createMCPServer so src/mcp/* stays Electron-free.
+  const electronBroadcast: import('../src/mcp/tools').EventBroadcaster = (events) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      for (const event of events) {
+        win.webContents.send('db:sync', event);
+      }
+    }
+  };
+
   // Build the MCP server context once (shared across sessions).
-  // Pass real PlatformLLM so kg_extract_text works via MCP.
   const notes = wrapNotes();
   const storageAdapter = wrapStorage(storage);
   const ctx = createServerCommandContext(dataStore, notes, storageAdapter, llm);
@@ -1282,6 +1305,12 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
 
     if (req.url === '/mcp' && req.method === 'POST') {
       if (!cors(req, res)) return;
+      // Require bearer token for MCP endpoint (prevents local-web CSRF)
+      const authHeader = req.headers.authorization;
+      if (!authHeader || authHeader !== `Bearer ${MCP_AUTH_TOKEN}`) {
+        json(res, 401, { error: 'Unauthorized — pass Bearer token from startup output' });
+        return;
+      }
       const bodyText = await readBody(req);
       let body: any;
       try {
@@ -1298,7 +1327,7 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
         await transports.get(sessionId)!.handleRequest(req, res, body);
       } else if (!sessionId && isInitializeRequest(body)) {
         // New session — create transport and connect MCP server
-        const mcpServer = createMCPServer(ctx);
+        const mcpServer = createMCPServer(ctx, electronBroadcast);
         const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
@@ -1322,7 +1351,12 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
 
     // GET /mcp — SSE stream for server-to-client notifications
     if (req.url === '/mcp' && req.method === 'GET') {
-      cors(res);
+      if (!cors(req, res)) return;
+      const authHeader = req.headers.authorization;
+      if (!authHeader || authHeader !== `Bearer ${MCP_AUTH_TOKEN}`) {
+        json(res, 401, { error: 'Unauthorized' });
+        return;
+      }
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       if (!sessionId || !transports.has(sessionId)) {
         json(res, 400, { error: 'Invalid or missing session ID' });
@@ -1334,7 +1368,12 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
 
     // DELETE /mcp — close session
     if (req.url === '/mcp' && req.method === 'DELETE') {
-      cors(res);
+      if (!cors(req, res)) return;
+      const delAuth = req.headers.authorization;
+      if (!delAuth || delAuth !== `Bearer ${MCP_AUTH_TOKEN}`) {
+        json(res, 401, { error: 'Unauthorized' });
+        return;
+      }
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       if (sessionId && transports.has(sessionId)) {
         await transports.get(sessionId)!.handleRequest(req, res);
@@ -1349,6 +1388,7 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
 
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`[Companion Server] Listening on http://127.0.0.1:${PORT}`);
+    console.log(`[MCP] HTTP transport auth token: ${MCP_AUTH_TOKEN}`);
     console.log(`[Companion Server] MCP endpoint: http://127.0.0.1:${PORT}/mcp`);
   });
 
@@ -1466,20 +1506,28 @@ To connect Claude Desktop, add this to `~/Library/Application Support/Claude/cla
   "mcpServers": {
     "kg-desktop": {
       "command": "node",
-      "args": ["/path/to/kg_extension/dist-electron/mcp-stdio.cjs"]
+      "args": ["/path/to/kg_extension/dist-electron/mcp-stdio.cjs"],
+      "env": {
+        "KG_USER_DATA": "/Users/<you>/Library/Application Support/KG Desktop"
+      }
     }
   }
 }
 ```
 
-For a packaged app (after `npm run dist:mac`), the path would be:
+**Important:** Set `KG_USER_DATA` to the Electron app's actual userData path. On macOS it's `~/Library/Application Support/KG Desktop` (matching `productName` in package.json). Without this env var, the stdio process guesses the path — which works for default installs but may break if the user moved data.
+
+For a packaged app (after `npm run dist:mac`):
 
 ```json
 {
   "mcpServers": {
     "kg-desktop": {
       "command": "node",
-      "args": ["/Applications/KG Desktop.app/Contents/Resources/app/dist-electron/mcp-stdio.cjs"]
+      "args": ["/Applications/KG Desktop.app/Contents/Resources/app/dist-electron/mcp-stdio.cjs"],
+      "env": {
+        "KG_USER_DATA": "/Users/<you>/Library/Application Support/KG Desktop"
+      }
     }
   }
 }

@@ -156,6 +156,9 @@ function dbClientAsDataStore(): DataStore {
     noteAttachments: dbClient.noteAttachments as any,
     noteSearch: dbClient.noteSearch as any,
     stressTest: dbClient.stressTest as any,
+    // memory: added by Harness Phase 2 when db-client.memory namespace exists.
+    // Until then, commands that need memory should check for its existence.
+    memory: (dbClient as any).memory ?? {} as any,
     loadGraph: dbClient.loadGraph as any,
     clearAll: dbClient.clearAll as any,
     graphQuery: (input: unknown) => dbClient.graph.query(input) as any,
@@ -714,7 +717,7 @@ Make these changes:
    - `sourceContent.search(...)` → `ctx.db.sourceContent.search(...)`
    - `sourceContent.getByNodeId(...)` → `ctx.db.sourceContent.getByNodeId(...)`
    - `notes.read(nodeId)` → `ctx.notes.read(nodeId)`
-   - `useGraphStore.getState()` → `ctx.getGraphSnapshot()` (for `get_source_content` case where it reads node type, and `create_node`/`update_node`/`create_edge` cases)
+   - `useGraphStore.getState()` → `await ctx.getGraphSnapshot()` (for `get_source_content` case where it reads node type, and `create_node`/`update_node`/`create_edge` cases). Note: `executeTool` must be async (it already is).
 6. For the `create_node`, `update_node`, `create_edge` cases, import and use graph-commands:
    - `import * as graphCommands from './graph-commands';`
    - Replace `graph.createNode(...)` with `const result = await graphCommands.createNode(ctx, ...); const created = result.data;`
@@ -966,7 +969,7 @@ export async function buildReviewData(
 ): Promise<{ reviewNodes: ReviewNode[]; reviewEdges: ReviewEdge[]; reviewNotes: ReviewNote[] }>
 ```
 
-Replace `useGraphStore.getState()` → `ctx.getGraphSnapshot()` and `entityResolution.findMatches(...)` → `ctx.db.entityResolution.findMatches(...)`.
+Replace `useGraphStore.getState()` → `await ctx.getGraphSnapshot()` and `entityResolution.findMatches(...)` → `ctx.db.entityResolution.findMatches(...)`.
 
 - [ ] **Step 4: Verify build**
 
