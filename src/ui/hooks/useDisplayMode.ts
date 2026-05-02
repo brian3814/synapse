@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { DisplayMode } from '../../shared/types';
 import { DISPLAY_MODE_STORAGE_KEY } from '../../shared/constants';
-import { notifyWorkerDying } from '../../db/client/db-client';
-import { storage } from '@platform';
+import { storage, db } from '@platform';
 
 function getDisplayMode(): DisplayMode {
   const params = new URLSearchParams(window.location.search);
@@ -33,7 +32,7 @@ export function useDisplayMode() {
       });
       // Tell SharedWorker the DedicatedWorker is about to die so surviving
       // tabs can spawn a replacement before requests start timing out.
-      notifyWorkerDying();
+      (db as any).notifyWorkerDying?.();
       // New view is open — close current view (side panel or tab)
       window.close();
     } catch (e) {

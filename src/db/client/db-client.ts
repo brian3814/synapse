@@ -1,165 +1,26 @@
-type WorkerRequest = {
-  requestId: string;
-  action: string;
-  params?: unknown;
-};
+import { db } from '@platform';
 
-type WorkerResponse = {
-  requestId: string;
-  success: boolean;
-  data?: unknown;
-  error?: string;
-};
+let ready = false;
 
-const DB_REQUEST_TIMEOUT_MS = 10_000;
-
-let sharedWorker: SharedWorker | null = null;
-let port: MessagePort | null = null;
-const pendingRequests = new Map<
-  string,
-  { resolve: (data: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
->();
-
-let initPromise: Promise<void> | null = null;
-let sendRequestImpl: ((action: string, params?: unknown) => Promise<unknown>) | null = null;
-
-function initElectronClient(): Promise<void> {
-  const electronDB = (window as any).electronDB as {
-    request: (action: string, params?: unknown) => Promise<{ success: boolean; data?: unknown; error?: string }>;
-    onSync: (callback: (event: any) => void) => () => void;
-  };
-
-  sendRequestImpl = async (action: string, params?: unknown): Promise<unknown> => {
-    const response = await electronDB.request(action, params);
-    if (!response.success) {
-      throw new Error((response as any).error ?? 'DB request failed');
-    }
-    return response.data;
-  };
-
-  const syncChannel = new BroadcastChannel('kg_extension_sync');
-  electronDB.onSync((event) => {
-    syncChannel.postMessage(event);
-  });
-
-  return sendRequestImpl('init', undefined).then(() => {});
+export async function initDbClient(): Promise<void> {
+  if (ready) return;
+  await db.init();
+  ready = true;
 }
 
-function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-export function initDbClient(): Promise<void> {
-  if (initPromise) return initPromise;
-
-  if ((window as any).electronDB) {
-    initPromise = initElectronClient().then(() => {
-      console.log('[DB Client] Database initialized via Electron IPC (better-sqlite3)');
-    });
-    return initPromise;
-  }
-
-  initPromise = new Promise((resolve, reject) => {
-    try {
-      const workerUrl = new URL('/db-shared-worker.js', location.origin).href;
-      sharedWorker = new SharedWorker(workerUrl, { type: 'module' });
-      port = sharedWorker.port;
-
-      port.onmessage = (event: MessageEvent<WorkerResponse>) => {
-        const { requestId, success, data, error } = event.data;
-
-        // SharedWorker is asking us to create the Dedicated Worker
-        if (requestId === '__needs_worker__') {
-          spawnAndAttachWorker();
-          return;
-        }
-
-        const pending = pendingRequests.get(requestId);
-        if (!pending) return;
-
-        clearTimeout(pending.timer);
-        pendingRequests.delete(requestId);
-
-        if (success) {
-          pending.resolve(data);
-        } else {
-          pending.reject(new Error(error ?? 'Unknown DB error'));
-        }
-      };
-
-      sharedWorker.onerror = (event) => {
-        console.error('[DB Client] SharedWorker error:', event);
-        reject(new Error('DB SharedWorker failed to load'));
-      };
-
-      port.start();
-
-      // Send init — SharedWorker will either respond ready or ask us to create a worker
-      sendRequest('init').then(() => {
-        console.log('[DB Client] Database initialized via SharedWorker');
-        resolve();
-      }).catch(reject);
-    } catch (e) {
-      reject(e);
-    }
-  });
-
-  return initPromise;
-}
-
-function spawnAndAttachWorker(): void {
-  const dbWorkerUrl = new URL('/db-worker.js', location.origin).href;
-  const dedicatedWorker = new Worker(dbWorkerUrl, { type: 'module' });
-
-  dedicatedWorker.onerror = (event) => {
-    console.error('[DB Client] Dedicated worker error:', event);
-  };
-
-  const channel = new MessageChannel();
-
-  // Send one end to the Dedicated Worker (it will listen on this port)
-  dedicatedWorker.postMessage({ action: '__attach_port__' }, [channel.port2]);
-
-  // Send the other end to the SharedWorker (it will forward requests through this port)
-  port!.postMessage(
-    { requestId: '__attach_worker__', action: '__attach_worker__' },
-    [channel.port1],
-  );
-}
-
-/**
- * Notify the SharedWorker that this tab/panel is about to close and will take
- * the DedicatedWorker with it. The SharedWorker resets its state and asks any
- * surviving tab to spawn a replacement. Call this before `window.close()`.
- */
-export function notifyWorkerDying(): void {
-  if (!port) return;
-  port.postMessage({ requestId: '__worker_dying__', action: '__worker_dying__' } as WorkerRequest);
+export function isDbReady(): boolean {
+  return ready;
 }
 
 function sendRequest(action: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
-  if (sendRequestImpl) {
-    return sendRequestImpl(action, params);
-  }
-
-  return new Promise((resolve, reject) => {
-    if (!port) {
-      reject(new Error('DB SharedWorker not initialized'));
-      return;
-    }
-
-    const requestId = generateRequestId();
-
-    const timer = setTimeout(() => {
-      pendingRequests.delete(requestId);
-      reject(new Error(`DB request timed out: ${action}`));
-    }, timeoutMs ?? DB_REQUEST_TIMEOUT_MS);
-
-    pendingRequests.set(requestId, { resolve, reject, timer });
-
-    const request: WorkerRequest = { requestId, action, params };
-    port.postMessage(request);
-  });
+  const requestPromise = db.request(action, params);
+  if (!timeoutMs) return requestPromise;
+  return Promise.race([
+    requestPromise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`DB request timed out: ${action}`)), timeoutMs)
+    ),
+  ]);
 }
 
 // Generic query/exec
@@ -456,7 +317,3 @@ export const stressTest = {
   generate: (nodeCount: number) =>
     sendRequest('stressTest.generate', { nodeCount }, 300_000) as Promise<{ nodes: number; edges: number }>,
 };
-
-export function isDbReady(): boolean {
-  return initPromise !== null;
-}

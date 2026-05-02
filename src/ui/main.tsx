@@ -2,11 +2,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { initPlatform } from '@platform';
 
-if ((window as any).electronAPI) {
-  const { installChromeStubs } = await import('../platform/install-chrome-stubs');
-  installChromeStubs();
-}
+await initPlatform();
 
 const root = document.getElementById('root');
 if (root) {
