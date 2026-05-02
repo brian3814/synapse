@@ -391,7 +391,7 @@ export interface ChatAgentTurn {
 }
 
 // Display mode
-export type DisplayMode = 'sidePanel' | 'tab';
+export type DisplayMode = 'sidePanel' | 'tab' | 'desktop';
 
 // Settings
 export interface AppSettings {

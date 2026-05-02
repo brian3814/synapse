@@ -104,9 +104,11 @@ export function Header() {
           <GearIcon />
         </ToolbarButton>
 
-        <ToolbarButton onClick={toggleMode} title={isSidePanel ? 'Pop out to tab' : 'Dock to side panel'}>
-          {isSidePanel ? <ExternalIcon /> : <PanelIcon />}
-        </ToolbarButton>
+        {displayMode !== 'desktop' && (
+          <ToolbarButton onClick={toggleMode} title={isSidePanel ? 'Pop out to tab' : 'Dock to side panel'}>
+            {isSidePanel ? <ExternalIcon /> : <PanelIcon />}
+          </ToolbarButton>
+        )}
       </div>
     </header>
   );

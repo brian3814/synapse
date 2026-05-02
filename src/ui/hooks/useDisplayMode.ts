@@ -4,10 +4,11 @@ import { DISPLAY_MODE_STORAGE_KEY } from '../../shared/constants';
 import { storage, db, browser, platformId } from '@platform';
 
 function getDisplayMode(): DisplayMode {
+  if (platformId === 'electron') return 'desktop';
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
   if (mode === 'tab' || mode === 'sidePanel') return mode;
-  return platformId === 'electron' ? 'tab' : 'sidePanel';
+  return 'sidePanel';
 }
 
 export function useDisplayMode() {
