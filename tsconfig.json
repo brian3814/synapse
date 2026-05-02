@@ -14,7 +14,9 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@platform": ["./src/platform/chrome"],
+      "@platform/*": ["./src/platform/chrome/*"]
     }
   },
   "include": ["src/**/*"],

@@ -17,7 +17,7 @@ function layoutWorkerPlugin(): Plugin {
         configFile: false,
         mode: isDev ? 'development' : 'production',
         base: './',
-        resolve: { alias: { '@': resolve(__dirname, 'src') } },
+        resolve: { alias: { '@': resolve(__dirname, 'src'), '@platform': resolve(__dirname, 'src/platform/electron') } },
         build: {
           outDir,
           emptyOutDir: false,
@@ -46,7 +46,7 @@ function dbWorkerPlugin(): Plugin {
         configFile: false,
         mode: isDev ? 'development' : 'production',
         base: './',
-        resolve: { alias: { '@': resolve(__dirname, 'src') } },
+        resolve: { alias: { '@': resolve(__dirname, 'src'), '@platform': resolve(__dirname, 'src/platform/electron') } },
         build: {
           outDir,
           emptyOutDir: false,
@@ -75,7 +75,7 @@ function dbSharedWorkerPlugin(): Plugin {
         configFile: false,
         mode: isDev ? 'development' : 'production',
         base: './',
-        resolve: { alias: { '@': resolve(__dirname, 'src') } },
+        resolve: { alias: { '@': resolve(__dirname, 'src'), '@platform': resolve(__dirname, 'src/platform/electron') } },
         build: {
           outDir,
           emptyOutDir: false,
@@ -132,7 +132,7 @@ export default defineConfig(({ mode }) => {
       layoutWorkerPlugin(),
     ],
     resolve: {
-      alias: { '@': resolve(__dirname, 'src') },
+      alias: { '@': resolve(__dirname, 'src'), '@platform': resolve(__dirname, 'src/platform/electron') },
     },
     build: {
       outDir,

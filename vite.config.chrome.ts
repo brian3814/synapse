@@ -21,6 +21,7 @@ function contentScriptPlugin(): Plugin {
         resolve: {
           alias: {
             '@': resolve(__dirname, 'src'),
+            '@platform': resolve(__dirname, 'src/platform/chrome'),
           },
         },
         build: {
@@ -56,6 +57,7 @@ function layoutWorkerPlugin(): Plugin {
         resolve: {
           alias: {
             '@': resolve(__dirname, 'src'),
+            '@platform': resolve(__dirname, 'src/platform/chrome'),
           },
         },
         build: {
@@ -94,6 +96,7 @@ function dbWorkerPlugin(): Plugin {
         resolve: {
           alias: {
             '@': resolve(__dirname, 'src'),
+            '@platform': resolve(__dirname, 'src/platform/chrome'),
           },
         },
         build: {
@@ -133,6 +136,7 @@ function dbSharedWorkerPlugin(): Plugin {
         resolve: {
           alias: {
             '@': resolve(__dirname, 'src'),
+            '@platform': resolve(__dirname, 'src/platform/chrome'),
           },
         },
         build: {
@@ -196,6 +200,7 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      '@platform': resolve(__dirname, 'src/platform/chrome'),
     },
   },
   build: {
