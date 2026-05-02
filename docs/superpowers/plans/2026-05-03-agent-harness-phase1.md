@@ -1,12 +1,16 @@
-# Agent Harness Phase 1: Custom Prompts + Tool Registry
+# Agent Harness Phase 1: Custom Prompts + New Tool
+
+> **⚠️ SEQUENCING:** Implement agentic-first Phase 1 (command layer) FIRST. This harness plan adds custom prompts and a new tool on top of the command layer. The `index_notes_folder` tool should use `CommandContext` and register into the unified `src/tools/registry.ts` once agentic-first Phase 2 is done.
+>
+> See: `docs/superpowers/specs/2026-05-03-agentic-first-architecture-design.md` § "Relationship to Agent Harness"
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add custom prompt support (global instructions + per-session presets) and refactor chat tools into an extensible registry, with one new tool (`index_notes_folder`) and quick-action buttons.
+**Goal:** Add custom prompt support (global instructions + per-session presets), one new chat tool (`index_notes_folder`), and quick-action buttons. No tool registry refactor — that's deferred to the agentic-first unified registry (separate spec).
 
-**Architecture:** DB-first approach following existing conventions. Config in chrome.storage (like `llmConfig`). Pure-function prompt assembler. Module-level tool registry replacing the hardcoded switch statement. No test framework configured — verification is TypeScript compilation + manual functional testing.
+**Architecture:** Pure-function prompt assembler. New tool added directly to existing `CHAT_AGENT_TOOLS` array + `executeTool()` switch (no standalone registry). Config in chrome.storage. DB migration creates tables for Phase 2 memory.
 
-**Tech Stack:** TypeScript, React 19, Zustand, Vite, chrome.storage API, SQLite (wa-sqlite / better-sqlite3)
+**Tech Stack:** TypeScript, React 19, Zustand, Vite, chrome.storage API, SQLite
 
 **Spec:** `docs/superpowers/specs/2026-05-03-agent-harness-design.md`
 
@@ -47,11 +51,11 @@ CREATE INDEX IF NOT EXISTS idx_memory_episodic_session ON memory_episodic(sessio
 `;
 ```
 
-Note: `ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT` cannot go here because `chat_sessions` is created via `CREATE TABLE IF NOT EXISTS` in `migrations/index.ts:124-129`, not via a numbered migration. We add the column in that same idempotent block instead.
+Note: `ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT` cannot go in a numbered migration because `chat_sessions` is created via `CREATE TABLE IF NOT EXISTS` in `migrations/index.ts:124-129` (not a numbered migration). We add the column in that same idempotent block instead.
 
 - [ ] **Step 2: Register migration in index.ts**
 
-In `src/db/worker/migrations/index.ts`, add the import and include it in the `migrations` array:
+In `src/db/worker/migrations/index.ts`, add the import and include in the array:
 
 ```ts
 // Add after line 8:
@@ -61,7 +65,7 @@ import * as migration008 from './008-agent-harness';
 const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008];
 ```
 
-Also add the `preset_id` column to the idempotent `chat_sessions` block. Change the `CREATE TABLE IF NOT EXISTS chat_sessions` at line 124 to:
+Add `preset_id` to the idempotent `chat_sessions` block. Change the `CREATE TABLE` at line 124:
 
 ```sql
 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -73,14 +77,13 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 );
 ```
 
-Since this uses `IF NOT EXISTS`, existing databases won't re-create the table. For those, add an idempotent ALTER after line 137:
+Since `IF NOT EXISTS` won't re-create existing tables, add an idempotent ALTER after line 137:
 
 ```ts
-// After the CREATE INDEX for chat_messages (line 137), add:
 try {
   await executeExec(`ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT;`);
 } catch {
-  // Column already exists — expected on subsequent runs
+  // Column already exists
 }
 ```
 
@@ -98,376 +101,7 @@ git commit -m "feat(db): add migration 008 for agent harness memory tables"
 
 ---
 
-### Task 2: Tool Registry
-
-**Files:**
-- Create: `src/shared/chat-tool-registry.ts`
-
-- [ ] **Step 1: Create the tool registry module**
-
-```ts
-// src/shared/chat-tool-registry.ts
-import type { ChatToolDefinition } from './chat-agent-tools';
-import { toAnthropicChatTools } from './chat-agent-tools';
-
-export interface ChatToolRegistration {
-  definition: ChatToolDefinition;
-  executor: (input: Record<string, unknown>) => Promise<string>;
-}
-
-const registry = new Map<string, ChatToolRegistration>();
-
-export function registerChatTool(tool: ChatToolRegistration): void {
-  registry.set(tool.definition.name, tool);
-}
-
-export function getChatToolDefinitions(): ChatToolDefinition[] {
-  return Array.from(registry.values()).map((t) => t.definition);
-}
-
-export function executeChatTool(
-  name: string,
-  input: Record<string, unknown>,
-): Promise<string> {
-  const tool = registry.get(name);
-  if (!tool) return Promise.resolve(JSON.stringify({ error: `Unknown tool: ${name}` }));
-  return tool.executor(input);
-}
-
-export function getAnthropicChatTools() {
-  return toAnthropicChatTools(getChatToolDefinitions());
-}
-```
-
-- [ ] **Step 2: Verify build**
-
-Run: `npx tsc --noEmit`
-Expected: no errors
-
-- [ ] **Step 3: Commit**
-
-```
-git add src/shared/chat-tool-registry.ts
-git commit -m "feat(harness): add chat tool registry with register/execute/getDefinitions"
-```
-
----
-
-### Task 3: Extract Tool Executors from chat-agent-loop.ts
-
-**Files:**
-- Create: `src/core/chat-tool-executors.ts`
-
-This extracts all 10 tool executor cases from the `executeTool()` switch statement in `src/ui/hooks/chat-agent-loop.ts:249-386` into standalone functions. Each function has the same signature: `(input: Record<string, unknown>) => Promise<string>`.
-
-- [ ] **Step 1: Create chat-tool-executors.ts**
-
-```ts
-// src/core/chat-tool-executors.ts
-import { nodes, edges, sourceContent } from '../db/client/db-client';
-import { useGraphStore } from '../graph/store/graph-store';
-import { retrieveRAGContext, formatRAGPrompt } from '../ui/hooks/rag-pipeline';
-import { notes } from '@platform';
-import { parseMarkdown } from '../notes/markdown-utils';
-
-// RAG context tracking for subgraph visualization
-let lastRAGNodeIds: string[] = [];
-let lastRAGEdgeIds: string[] = [];
-
-export function getLastRAGIds(): { nodeIds: string[]; edgeIds: string[] } {
-  return { nodeIds: lastRAGNodeIds, edgeIds: lastRAGEdgeIds };
-}
-
-export async function executeSearchKnowledge(input: Record<string, unknown>): Promise<string> {
-  const context = await retrieveRAGContext(input.query as string);
-  lastRAGNodeIds = context.relevantNodes.map((n) => n.id);
-  lastRAGEdgeIds = context.relevantEdges.map((e) => e.id);
-  return formatRAGPrompt(context);
-}
-
-export async function executeSearchNodes(input: Record<string, unknown>): Promise<string> {
-  const results = await nodes.search(input.query as string, (input.limit as number) ?? 10);
-  return JSON.stringify(
-    (results as any[]).map((n) => ({
-      id: n.id,
-      name: n.name,
-      type: n.type,
-      properties: typeof n.properties === 'string' ? JSON.parse(n.properties) : n.properties,
-    })),
-  );
-}
-
-export async function executeGetNodeDetails(input: Record<string, unknown>): Promise<string> {
-  const node = await nodes.getById(input.nodeId as string);
-  if (!node) return JSON.stringify({ error: 'Node not found' });
-  return JSON.stringify({
-    id: (node as any).id,
-    name: (node as any).name,
-    type: (node as any).type,
-    properties:
-      typeof (node as any).properties === 'string'
-        ? JSON.parse((node as any).properties)
-        : (node as any).properties,
-    sourceUrl: (node as any).source_url,
-  });
-}
-
-export async function executeGetNeighbors(input: Record<string, unknown>): Promise<string> {
-  const result = await nodes.getNeighborhood(
-    input.nodeId as string,
-    Math.min((input.hops as number) ?? 1, 3),
-  );
-  const details = await Promise.all(
-    (result as { nodeIds: string[] }).nodeIds.slice(0, 50).map((id: string) => nodes.getById(id)),
-  );
-  return JSON.stringify(
-    details.filter(Boolean).map((n: any) => ({ id: n.id, name: n.name, type: n.type })),
-  );
-}
-
-export async function executeGetEdgesForNode(input: Record<string, unknown>): Promise<string> {
-  const edgeList = await edges.getForNode(input.nodeId as string);
-  return JSON.stringify(
-    (edgeList as any[]).map((e) => ({
-      id: e.id,
-      sourceId: e.source_id,
-      targetId: e.target_id,
-      label: e.label,
-      type: e.type,
-    })),
-  );
-}
-
-export async function executeSearchSources(input: Record<string, unknown>): Promise<string> {
-  const results = await sourceContent.search(input.query as string, (input.limit as number) ?? 5);
-  return JSON.stringify(
-    (results as any[]).map((s) => ({
-      nodeId: s.node_id,
-      url: s.url,
-      title: s.title,
-      excerpt: s.content?.substring(0, 500),
-    })),
-  );
-}
-
-export async function executeGetSourceContent(input: Record<string, unknown>): Promise<string> {
-  const nodeId = input.nodeId as string;
-  const targetNode = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
-  if (targetNode?.type === 'note') {
-    const md = await notes.read(nodeId);
-    if (md) {
-      const parsed = parseMarkdown(md);
-      return JSON.stringify({
-        url: `note://${nodeId}`,
-        title: targetNode.name,
-        content: parsed.content.substring(0, 5000),
-      });
-    }
-  }
-  const sc = await sourceContent.getByNodeId(nodeId);
-  if (!sc) return JSON.stringify({ error: 'No source content found' });
-  return JSON.stringify({
-    url: (sc as any).url,
-    title: (sc as any).title,
-    content: (sc as any).content?.substring(0, 5000),
-  });
-}
-
-export async function executeCreateNode(input: Record<string, unknown>): Promise<string> {
-  const graph = useGraphStore.getState();
-  const created = await graph.createNode({
-    name: input.name as string,
-    type: input.type as string,
-    properties: (input.properties as Record<string, unknown>) ?? {},
-  });
-  if (!created) return JSON.stringify({ error: 'Failed to create node' });
-  return JSON.stringify({ id: created.id, name: created.name, type: created.type });
-}
-
-export async function executeUpdateNode(input: Record<string, unknown>): Promise<string> {
-  const graph = useGraphStore.getState();
-  const updated = await graph.updateNode({
-    id: input.nodeId as string,
-    name: input.name as string | undefined,
-    type: input.type as string | undefined,
-    properties: (input.properties as Record<string, unknown>) ?? undefined,
-  });
-  if (!updated) return JSON.stringify({ error: 'Failed to update node' });
-  return JSON.stringify({ id: updated.id, name: updated.name });
-}
-
-export async function executeCreateEdge(input: Record<string, unknown>): Promise<string> {
-  const graph = useGraphStore.getState();
-  const created = await graph.createEdge({
-    sourceId: input.sourceId as string,
-    targetId: input.targetId as string,
-    label: input.label as string,
-    type: (input.type as string) ?? 'related',
-  });
-  if (!created) return JSON.stringify({ error: 'Failed to create edge' });
-  return JSON.stringify({ id: created.id, label: created.label });
-}
-```
-
-- [ ] **Step 2: Verify build**
-
-Run: `npx tsc --noEmit`
-Expected: no errors
-
-- [ ] **Step 3: Commit**
-
-```
-git add src/core/chat-tool-executors.ts
-git commit -m "refactor(chat): extract tool executor functions from chat-agent-loop"
-```
-
----
-
-### Task 4: Index Notes Folder Tool
-
-**Files:**
-- Create: `src/core/harness-tools/index-notes-tool.ts`
-
-- [ ] **Step 1: Create the index-notes tool**
-
-```ts
-// src/core/harness-tools/index-notes-tool.ts
-import type { ChatToolRegistration } from '../../shared/chat-tool-registry';
-import { getStoredFolder, requestPermission } from '../../filesystem/folder-access';
-import { indexMarkdownFolder } from '../../filesystem/indexing-pipeline';
-import { useGraphStore } from '../../graph/store/graph-store';
-
-export function createIndexNotesTool(): ChatToolRegistration {
-  return {
-    definition: {
-      name: 'index_notes_folder',
-      description:
-        'Index or re-index the connected markdown notes folder into the knowledge graph. Creates resource nodes for each .md file and edges for wiki-links. Returns indexing statistics.',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-      executionContext: 'ui',
-    },
-    executor: async () => {
-      const handle = await getStoredFolder();
-      if (!handle) {
-        return JSON.stringify({
-          error: 'No folder connected. Connect one in Settings > Markdown Folder.',
-        });
-      }
-
-      const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') {
-        const granted = await requestPermission(handle);
-        if (!granted) {
-          return JSON.stringify({
-            error: 'Permission denied. Please grant folder access in Settings.',
-          });
-        }
-      }
-
-      const result = await indexMarkdownFolder(handle);
-      await useGraphStore.getState().loadAll();
-
-      return JSON.stringify({
-        processed: result.processed,
-        created: result.created,
-        updated: result.updated,
-        skipped: result.skipped,
-      });
-    },
-  };
-}
-```
-
-- [ ] **Step 2: Verify build**
-
-Run: `npx tsc --noEmit`
-Expected: no errors
-
-- [ ] **Step 3: Commit**
-
-```
-git add src/core/harness-tools/index-notes-tool.ts
-git commit -m "feat(harness): add index_notes_folder chat tool"
-```
-
----
-
-### Task 5: Harness Init — Wire Up Registry
-
-**Files:**
-- Create: `src/core/harness-init.ts`
-
-This file registers all built-in chat tools + the new harness tools into the registry. Called once at app startup.
-
-- [ ] **Step 1: Create harness-init.ts**
-
-```ts
-// src/core/harness-init.ts
-import { CHAT_AGENT_TOOLS } from '../shared/chat-agent-tools';
-import { registerChatTool } from '../shared/chat-tool-registry';
-import {
-  executeSearchKnowledge,
-  executeSearchNodes,
-  executeGetNodeDetails,
-  executeGetNeighbors,
-  executeGetEdgesForNode,
-  executeSearchSources,
-  executeGetSourceContent,
-  executeCreateNode,
-  executeUpdateNode,
-  executeCreateEdge,
-} from './chat-tool-executors';
-import { createIndexNotesTool } from './harness-tools/index-notes-tool';
-
-const builtinExecutors: Record<string, (input: Record<string, unknown>) => Promise<string>> = {
-  search_knowledge: executeSearchKnowledge,
-  search_nodes: executeSearchNodes,
-  get_node_details: executeGetNodeDetails,
-  get_neighbors: executeGetNeighbors,
-  get_edges_for_node: executeGetEdgesForNode,
-  search_sources: executeSearchSources,
-  get_source_content: executeGetSourceContent,
-  create_node: executeCreateNode,
-  update_node: executeUpdateNode,
-  create_edge: executeCreateEdge,
-};
-
-let initialized = false;
-
-export function initHarness(): void {
-  if (initialized) return;
-  initialized = true;
-
-  for (const toolDef of CHAT_AGENT_TOOLS) {
-    const executor = builtinExecutors[toolDef.name];
-    if (executor) {
-      registerChatTool({ definition: toolDef, executor });
-    }
-  }
-
-  registerChatTool(createIndexNotesTool());
-}
-```
-
-- [ ] **Step 2: Verify build**
-
-Run: `npx tsc --noEmit`
-Expected: no errors
-
-- [ ] **Step 3: Commit**
-
-```
-git add src/core/harness-init.ts
-git commit -m "feat(harness): add harness-init that registers all chat tools"
-```
-
----
-
-### Task 6: Prompt Assembler
+### Task 2: Prompt Assembler
 
 **Files:**
 - Create: `src/core/prompt-assembler.ts`
@@ -563,37 +197,89 @@ git commit -m "feat(harness): add pure-function prompt assembler with layered co
 
 ---
 
-### Task 7: Refactor chat-agent-loop.ts to Use Registry + Prompt Param
+### Task 3: Add index_notes_folder Tool to Existing Arrays
+
+**Files:**
+- Modify: `src/shared/chat-agent-tools.ts`
+- Modify: `src/ui/hooks/chat-agent-loop.ts`
+
+No new registry — add directly to existing `CHAT_AGENT_TOOLS` and `executeTool()`.
+
+- [ ] **Step 1: Add tool definition to CHAT_AGENT_TOOLS**
+
+In `src/shared/chat-agent-tools.ts`, add to the end of the `CHAT_AGENT_TOOLS` array (before the closing `];` at line 220):
+
+```ts
+  {
+    name: 'index_notes_folder',
+    description:
+      'Index or re-index the connected markdown notes folder into the knowledge graph. Creates resource nodes for each .md file and edges for wiki-links. Returns indexing statistics.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    executionContext: 'ui',
+  },
+```
+
+- [ ] **Step 2: Add executor case to chat-agent-loop.ts**
+
+In `src/ui/hooks/chat-agent-loop.ts`, add imports at the top:
+
+```ts
+import { getStoredFolder, requestPermission } from '../../filesystem/folder-access';
+import { indexMarkdownFolder } from '../../filesystem/indexing-pipeline';
+```
+
+Add a new case in the `executeTool()` switch statement (before the `default:` case at line 383):
+
+```ts
+    case 'index_notes_folder': {
+      const handle = await getStoredFolder();
+      if (!handle) {
+        return JSON.stringify({ error: 'No folder connected. Connect one in Settings > Markdown Folder.' });
+      }
+      const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        const granted = await requestPermission(handle);
+        if (!granted) {
+          return JSON.stringify({ error: 'Permission denied. Please grant folder access in Settings.' });
+        }
+      }
+      const result = await indexMarkdownFolder(handle);
+      await useGraphStore.getState().loadAll();
+      return JSON.stringify({
+        processed: result.processed,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+      });
+    }
+```
+
+- [ ] **Step 3: Verify build**
+
+Run: `npx tsc --noEmit`
+Expected: no errors
+
+- [ ] **Step 4: Commit**
+
+```
+git add src/shared/chat-agent-tools.ts src/ui/hooks/chat-agent-loop.ts
+git commit -m "feat(harness): add index_notes_folder chat tool"
+```
+
+---
+
+### Task 4: Parameterize runChatAgent to Accept systemPrompt
 
 **Files:**
 - Modify: `src/ui/hooks/chat-agent-loop.ts`
 
-This is the core wiring task. Three changes: (1) accept `systemPrompt` param instead of using the hardcoded constant, (2) use registry for tool definitions, (3) use registry for tool execution.
+- [ ] **Step 1: Add systemPrompt to RunChatAgentParams**
 
-- [ ] **Step 1: Update imports and remove old constant**
-
-At the top of `src/ui/hooks/chat-agent-loop.ts`, replace lines 1-66:
-
-Replace:
-```ts
-import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
-```
-With:
-```ts
-import { getAnthropicChatTools, executeChatTool } from '../../shared/chat-tool-registry';
-import { getLastRAGIds } from '../../core/chat-tool-executors';
-```
-
-Remove the entire `CHAT_AGENT_SYSTEM_PROMPT` constant (lines 29-64) and its export (line 66).
-
-Remove these two lines (no longer needed since tools come from registry):
-```ts
-const TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
-```
-
-- [ ] **Step 2: Add systemPrompt to RunChatAgentParams**
-
-Change the `RunChatAgentParams` interface at line 72 to add `systemPrompt`:
+Change the `RunChatAgentParams` interface at line 72:
 
 ```ts
 interface RunChatAgentParams {
@@ -606,9 +292,9 @@ interface RunChatAgentParams {
 }
 ```
 
-- [ ] **Step 3: Use dynamic tools and systemPrompt in runChatAgent**
+- [ ] **Step 2: Destructure and use the param**
 
-In the `runChatAgent` function, destructure the new param:
+In `runChatAgent()`, add `systemPrompt` to destructuring:
 
 ```ts
 export async function runChatAgent({
@@ -621,76 +307,47 @@ export async function runChatAgent({
 }: RunChatAgentParams): Promise<string> {
 ```
 
-In the `sendChatLLMRequest` call (around line 103-113), replace `CHAT_AGENT_SYSTEM_PROMPT` with `systemPrompt` and `TOOL_DEFS` with `getAnthropicChatTools()`:
+In the `sendChatLLMRequest` call (line 108), replace `CHAT_AGENT_SYSTEM_PROMPT` with `systemPrompt`:
 
 ```ts
-    const result = await sendChatLLMRequest(
-      requestId,
-      {
-        provider,
-        model,
         systemPrompt,
-        messages,
-        tools: getAnthropicChatTools(),
-      },
-      onProgress,
-    );
 ```
 
-- [ ] **Step 4: Replace executeTool switch with registry call**
+- [ ] **Step 3: Remove the old constant export**
 
-Replace the `executeTool` call at line 162:
+Delete line 66: `export { CHAT_AGENT_SYSTEM_PROMPT };`
 
-```ts
-        resultStr = await executeChatTool(tc.name, tc.input);
-```
+The constant body (lines 29-64) can remain as a local fallback, or be removed since `prompt-assembler.ts` now owns `BASE_CHAT_SYSTEM_PROMPT`. Remove the constant and its declaration. The import of it (if any external consumer exists) should be redirected to `prompt-assembler.ts`.
 
-Update the `collectIdsFromToolResult` function to use `getLastRAGIds()` instead of the module-level variables. In the `search_knowledge` case of `collectIdsFromToolResult`, change:
-
-```ts
-    if (toolName === 'search_knowledge') {
-      const ragIds = getLastRAGIds();
-      for (const id of ragIds.nodeIds) nodeIds.add(id);
-      for (const id of ragIds.edgeIds) edgeIds.add(id);
-      return;
-    }
-```
-
-- [ ] **Step 5: Remove the old executeTool function and RAG ID variables**
-
-Delete the `executeTool` function (lines 249-386) and the `lastRAGNodeIds`/`lastRAGEdgeIds` variables (lines 246-247) — both are now in `chat-tool-executors.ts`.
-
-- [ ] **Step 6: Verify build**
+- [ ] **Step 4: Verify build**
 
 Run: `npx tsc --noEmit`
-Expected: no errors
+Expected: If there are external imports of `CHAT_AGENT_SYSTEM_PROMPT`, fix them to import `BASE_CHAT_SYSTEM_PROMPT` from `src/core/prompt-assembler.ts`. The only known consumer is `useChatSession.ts` which will be updated in the next task.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```
 git add src/ui/hooks/chat-agent-loop.ts
-git commit -m "refactor(chat): wire chat-agent-loop to tool registry and accept systemPrompt param"
+git commit -m "refactor(chat): accept systemPrompt param instead of hardcoded constant"
 ```
 
 ---
 
-### Task 8: Wire Prompt Assembly into useChatSession
+### Task 5: Wire Prompt Assembly into useChatSession
 
 **Files:**
 - Modify: `src/ui/hooks/useChatSession.ts`
 
-- [ ] **Step 1: Add imports and prompt assembly call**
-
-Add imports at the top of `src/ui/hooks/useChatSession.ts`:
+- [ ] **Step 1: Add imports**
 
 ```ts
 import { storage } from '@platform';
 import { assembleSystemPrompt } from '../../core/prompt-assembler';
 ```
 
-- [ ] **Step 2: Gather context and pass systemPrompt to runChatAgent**
+- [ ] **Step 2: Gather context and assemble prompt before runChatAgent**
 
-In the `sendMessage` callback, after the `fetchLLMConfigAndTypes()` call (line 111) and before the `runChatAgent` call (line 116), add prompt assembly:
+After `fetchLLMConfigAndTypes()` (line 111) and before `runChatAgent` (line 116), add:
 
 ```ts
       const { config } = await fetchLLMConfigAndTypes();
@@ -739,52 +396,7 @@ git commit -m "feat(harness): wire prompt assembler into useChatSession"
 
 ---
 
-### Task 9: Call initHarness from App.tsx
-
-**Files:**
-- Modify: `src/ui/App.tsx`
-
-- [ ] **Step 1: Import and call initHarness**
-
-Add import at the top:
-
-```ts
-import { initHarness } from '../core/harness-init';
-```
-
-In the `ready` useEffect (lines 53-64), call `initHarness()` before `loadAll()`:
-
-```ts
-  useEffect(() => {
-    if (ready) {
-      initHarness();
-      loadAll();
-      loadTypes();
-      const cleanupSync = startSyncListener();
-      const cleanupQuery = registerQueryMessageHandler();
-      return () => {
-        cleanupSync();
-        cleanupQuery();
-      };
-    }
-  }, [ready, loadAll, loadTypes, startSyncListener]);
-```
-
-- [ ] **Step 2: Verify full build**
-
-Run: `npm run build && npm run build:electron 2>&1 | tail -5`
-Expected: both builds succeed
-
-- [ ] **Step 3: Commit**
-
-```
-git add src/ui/App.tsx
-git commit -m "feat(harness): call initHarness on app startup"
-```
-
----
-
-### Task 10: Custom Instructions UI in Settings
+### Task 6: Custom Instructions UI in Settings
 
 **Files:**
 - Create: `src/ui/components/settings/CustomInstructionsSection.tsx`
@@ -845,7 +457,7 @@ export function CustomInstructionsSection() {
 
 - [ ] **Step 2: Add to SettingsPanel**
 
-In `src/ui/components/settings/SettingsPanel.tsx`, add the import:
+In `src/ui/components/settings/SettingsPanel.tsx`, add import:
 
 ```ts
 import { CustomInstructionsSection } from './CustomInstructionsSection';
@@ -875,7 +487,7 @@ git commit -m "feat(harness): add Custom Instructions section to Settings"
 
 ---
 
-### Task 11: Preset Picker UI
+### Task 7: Preset Picker UI + Quick-Action Chips
 
 **Files:**
 - Create: `src/ui/components/chat/PresetPicker.tsx`
@@ -892,8 +504,6 @@ interface Preset {
   id: string;
   name: string;
   prompt: string;
-  allowedTools: string[] | null;
-  model: string | null;
   createdAt: number;
 }
 
@@ -941,8 +551,6 @@ export function PresetPicker() {
       id: crypto.randomUUID(),
       name: newName.trim(),
       prompt: newPrompt.trim(),
-      allowedTools: null,
-      model: null,
       createdAt: Date.now(),
     };
     const updated = [...presets, preset];
@@ -1068,20 +676,19 @@ export function PresetPicker() {
 
 - [ ] **Step 2: Add PresetPicker and quick-action chips to ChatBot**
 
-In `src/ui/components/chat/ChatBot.tsx`:
+In `src/ui/components/chat/ChatBot.tsx`, add import:
 
-Add import at top:
 ```ts
 import { PresetPicker } from './PresetPicker';
 ```
 
-In the `ChatHeader` component, add `<PresetPicker />` next to the session title. Insert after the `SessionPicker` closing tag (around line 155), inside the `<div className="relative flex items-center gap-1 ...">`:
+In the `ChatHeader` component, add `<PresetPicker />` inside the header's left `<div>` (around line 140), after the `SessionPicker` closing:
 
 ```tsx
         <PresetPicker />
 ```
 
-Replace the `SUGGESTION_CHIPS` constant (lines 178-182) with:
+Replace `SUGGESTION_CHIPS` (lines 178-182) with:
 
 ```ts
 interface QuickAction {
@@ -1099,7 +706,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 ```
 
-In the `ChatMessages` component, update the chip rendering (lines 204-213) to use `QUICK_ACTIONS`:
+Update chip rendering (lines 205-213) to use `QUICK_ACTIONS`:
 
 ```tsx
           <div className="flex flex-wrap gap-2 justify-center">
@@ -1118,7 +725,7 @@ In the `ChatMessages` component, update the chip rendering (lines 204-213) to us
 - [ ] **Step 3: Verify full build**
 
 Run: `npm run build && npm run build:electron 2>&1 | tail -5`
-Expected: both builds succeed
+Expected: both succeed
 
 - [ ] **Step 4: Commit**
 
@@ -1129,27 +736,23 @@ git commit -m "feat(harness): add PresetPicker and quick-action chips to chat UI
 
 ---
 
-### Task 12: Final Verification
+### Task 8: Final Verification
 
-- [ ] **Step 1: Full build verification**
+- [ ] **Step 1: Full build**
 
 Run: `npm run build && npm run build:electron`
-Expected: both builds succeed with no errors
+Expected: both succeed with no errors
 
 - [ ] **Step 2: Manual functional test (Electron)**
 
 Run: `npx electron .`
 
-1. Open Settings → verify "Custom Instructions" section appears with textarea
-2. Type instructions, click Save, reload → instructions persist
-3. Open Chat → verify PresetPicker dropdown appears in header
-4. Create a preset → verify it appears in the dropdown
-5. Select the preset, send a message → verify agent response reflects the preset instructions
-6. Verify quick-action chips appear in empty chat state
-7. Click "Index my notes" chip → verify it pre-fills the input
-8. Send "Index my notes folder" → verify the tool executes (may require a folder connected)
-9. Verify existing chat tools (search, create node, etc.) still work
-
-- [ ] **Step 3: Manual functional test (Chrome)**
-
-Load `dist/` as unpacked extension. Repeat steps 1-9 above in the tab view.
+1. Open Settings → verify "Custom Instructions" section with textarea
+2. Type instructions, click Save, reopen settings → instructions persist
+3. Open Chat → verify PresetPicker dropdown in header
+4. Create a preset with name + prompt → appears in dropdown
+5. Select preset, send message → agent response reflects preset instructions
+6. Quick-action chips visible in empty chat state
+7. Click "Index my notes" → pre-fills input
+8. Send "Index my notes folder" → tool executes (requires connected folder)
+9. All existing chat tools still work (search, create node, etc.)

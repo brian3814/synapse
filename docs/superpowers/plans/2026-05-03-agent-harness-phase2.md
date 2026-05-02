@@ -4,13 +4,13 @@
 
 **Goal:** Add persistent semantic memory (user facts/preferences extracted from conversations) and a memory management UI. The agent learns from conversations and uses accumulated knowledge in future sessions.
 
-**Architecture:** Post-turn LLM extraction (fire-and-forget, Haiku model) stores categorized facts in SQLite. Memory is injected into the system prompt via the prompt assembler built in Phase 1. Memory UI is a new section in the Settings modal. DB integration follows the existing DataStore → action-handler → db-client chain.
+**Architecture:** Post-turn LLM extraction (fire-and-forget, Haiku model) stores categorized facts in SQLite. Memory is injected into the system prompt via the prompt assembler built in Phase 1. Memory UI is a new section in the Settings modal. DB integration follows the DataStore → action-handler → db-client chain. Memory repository is added to `DataStore` interface and `SqliteDataStore` implementation.
 
 **Tech Stack:** TypeScript, React 19, Zustand, SQLite, Anthropic API (Haiku for extraction)
 
 **Spec:** `docs/superpowers/specs/2026-05-03-agent-harness-design.md` — Section 3
 
-**Depends on:** Phase 1 complete (prompt-assembler.ts, chat-tool-registry, migration 008)
+**Depends on:** Harness Phase 1 complete (prompt-assembler.ts, migration 008), agentic-first Phase 1 complete (command layer with DataStore-based CommandContext)
 
 ---
 
@@ -150,23 +150,82 @@ git commit -m "feat(harness): add memory query module for semantic and episodic 
 
 ---
 
-### Task 2: Wire Memory Queries into Action Handler + DB Client
+### Task 2: Add MemoryRepository to DataStore + Wire Through
 
 **Files:**
+- Modify: `src/db/data-store.ts`
+- Modify: `src/db/sqlite-data-store.ts`
 - Modify: `src/db/worker/action-handler.ts`
 - Modify: `src/db/client/db-client.ts`
 
-This follows the exact pattern used by `chat.*` — add cases to the action handler, add a namespace to the DB client.
+Follows the full DataStore pattern: interface → implementation → action-handler → db-client. This is the same pattern used for `ChatRepository`, `NodeRepository`, etc.
 
-- [ ] **Step 1: Add memory actions to action-handler.ts**
+- [ ] **Step 1: Add MemoryRepository interface to data-store.ts**
 
-Add import at top of `src/db/worker/action-handler.ts`:
+Add type re-exports after the existing ones (around line 30):
+
+```ts
+export type { SemanticMemory, EpisodicMemory } from './worker/queries/memory-queries';
+```
+
+Add the interface before `DataStore` (around line 242):
+
+```ts
+export interface MemoryRepository {
+  addSemantic(input: { category: string; content: string; sourceSessionId?: string }): Promise<any>;
+  getAllSemantic(): Promise<any[]>;
+  getRecentSemantic(limit?: number): Promise<any[]>;
+  deleteSemantic(id: string): Promise<boolean>;
+  clearAllSemantic(): Promise<number>;
+  findDuplicateSemantic(content: string): Promise<any | null>;
+  touchSemantic(id: string): Promise<void>;
+  addEpisodic(input: { sessionId: string; summary: string; keyTopics?: string[] }): Promise<any>;
+  getRecentEpisodic(limit?: number): Promise<any[]>;
+  clearAllEpisodic(): Promise<number>;
+}
+```
+
+Add `memory: MemoryRepository;` to the `DataStore` interface (after `stressTest`):
+
+```ts
+  stressTest: StressTestRepository;
+  memory: MemoryRepository;
+```
+
+- [ ] **Step 2: Implement in sqlite-data-store.ts**
+
+Add import:
+
+```ts
+import * as memoryQueries from './worker/queries/memory-queries';
+```
+
+Add the `memory` delegation in the returned object:
+
+```ts
+    memory: {
+      addSemantic: memoryQueries.addSemantic,
+      getAllSemantic: memoryQueries.getAllSemantic,
+      getRecentSemantic: memoryQueries.getRecentSemantic,
+      deleteSemantic: memoryQueries.deleteSemantic,
+      clearAllSemantic: memoryQueries.clearAllSemantic,
+      findDuplicateSemantic: memoryQueries.findDuplicateSemantic,
+      touchSemantic: memoryQueries.touchSemantic,
+      addEpisodic: memoryQueries.addEpisodic,
+      getRecentEpisodic: memoryQueries.getRecentEpisodic,
+      clearAllEpisodic: memoryQueries.clearAllEpisodic,
+    },
+```
+
+- [ ] **Step 3: Add memory actions to action-handler.ts**
+
+Add import:
 
 ```ts
 import * as memoryQueries from './queries/memory-queries';
 ```
 
-Add the following cases in the `handleAction` switch statement (alongside the existing `chat.*` cases):
+Add cases in the `handleAction` switch:
 
 ```ts
     case 'memory.addSemantic':
@@ -191,9 +250,7 @@ Add the following cases in the `handleAction` switch statement (alongside the ex
       return memoryQueries.clearAllEpisodic();
 ```
 
-- [ ] **Step 2: Add memory namespace to db-client.ts**
-
-In `src/db/client/db-client.ts`, add a `memory` namespace following the `chat` pattern:
+- [ ] **Step 4: Add memory namespace to db-client.ts**
 
 ```ts
 export const memory = {
@@ -220,16 +277,16 @@ export const memory = {
 };
 ```
 
-- [ ] **Step 3: Verify build**
+- [ ] **Step 5: Verify build**
 
 Run: `npx tsc --noEmit`
 Expected: no errors
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```
-git add src/db/worker/action-handler.ts src/db/client/db-client.ts
-git commit -m "feat(harness): wire memory queries into action handler and db client"
+git add src/db/data-store.ts src/db/sqlite-data-store.ts src/db/worker/action-handler.ts src/db/client/db-client.ts
+git commit -m "feat(harness): add MemoryRepository to DataStore and wire through full chain"
 ```
 
 ---

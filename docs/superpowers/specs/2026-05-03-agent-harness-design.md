@@ -31,13 +31,13 @@ Applies to chat agent only. Extraction agents are unaffected.
   id: string
   name: string
   prompt: string
-  allowedTools: string[] | null   // null = all tools
-  model: string | null            // null = use global default
   createdAt: number
 }>
 
 'harnessActivePresetId': string | null
 ```
+
+`allowedTools` and `model` overrides on presets are deferred until the unified tool registry (agentic-first Phase 2) provides the infrastructure to enforce them at runtime. Adding fields without enforcement creates a false contract.
 
 Rationale: config in chrome.storage matches `llmConfig`, `displayMode`, `usageBudget`.
 
@@ -68,7 +68,7 @@ ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT;
 
 Memory categories: `preference` | `fact` | `instruction` (inspired by Claude Code's user/feedback/project/reference taxonomy, simplified for end-user context).
 
-DB integration follows the DataStore → action-handler → db-client chain, identical to the `chat.*` namespace.
+DB integration follows the DataStore → action-handler → db-client chain, identical to the `chat.*` namespace. Specifically, a `MemoryRepository` interface is added to `DataStore` (`src/db/data-store.ts`), implemented in `SqliteDataStore` (`src/db/sqlite-data-store.ts`), and wired through the action handler and db-client.
 
 ---
 
@@ -137,43 +137,17 @@ Layering order:
 
 ---
 
-## 4. Tool Registry & Action Harness
+## 4. Tool Additions & Future Registry
 
-### Tool Registration Interface
+### No standalone registry in this spec
 
-New file: `src/shared/chat-tool-registry.ts`
+The agentic-first architecture spec (`2026-05-03-agentic-first-architecture-design.md`) defines a unified tool registry in Phase 2 (`src/tools/`) with `UnifiedToolDefinition` that replaces all hardcoded tool arrays. Building a separate `chat-tool-registry.ts` here would create a throwaway abstraction.
 
-```ts
-interface ChatToolRegistration {
-  definition: ChatToolDefinition;  // existing type: name, description, parameters, executionContext
-  executor: (input: Record<string, unknown>) => Promise<string>;
-}
-
-registerChatTool(tool: ChatToolRegistration): void
-getChatToolDefinitions(): ChatToolDefinition[]
-executeChatTool(name: string, input: Record<string, unknown>): Promise<string>
-```
-
-Module-level functions (not a class) — matches codebase convention.
-
-### Refactoring existing tools
-
-The `executeTool()` switch statement in `chat-agent-loop.ts` (~140 lines, 10 cases) is split:
-
-1. Each case → standalone executor function in `src/core/chat-tool-executors.ts`
-2. All 10 existing tools registered via `registerChatTool()` at init in `harness-init.ts`
-3. Switch statement replaced by `executeChatTool(name, input)` — one-line call
-4. `TOOL_DEFS` constant in `chat-agent-loop.ts` replaced by `getAnthropicChatTools()` from registry (called at start of each `runChatAgent()` invocation so newly registered tools are picked up)
-
-### New initialization file
-
-`src/core/harness-init.ts` — called from `App.tsx` on mount (alongside existing `loadAll()` / `loadTypes()`). Registers all built-in tools + harness tools. Must run before any chat session starts.
+Instead, new tools are added directly to the existing `CHAT_AGENT_TOOLS` array in `src/shared/chat-agent-tools.ts` and the `executeTool()` switch in `chat-agent-loop.ts`. When the unified registry lands, these migrate cleanly.
 
 ### Phase 1 new tool: `index_notes_folder`
 
-New file: `src/core/harness-tools/index-notes-tool.ts`
-
-Wraps existing `indexMarkdownFolder()` from `src/filesystem/indexing-pipeline.ts`:
+Added directly to `CHAT_AGENT_TOOLS` (definition) and `executeTool()` switch (executor):
 1. Check if folder connected (`getStoredFolder()`)
 2. If not → return error message
 3. If connected → check permission, run indexing, return stats
@@ -192,13 +166,9 @@ const QUICK_ACTIONS = [
 
 Chips with `partial: true` fill the input and place cursor at end.
 
-### Future tool extension pattern
+### Future tool extension
 
-Adding a new tool = 2 steps:
-1. Create file in `src/core/harness-tools/` returning `ChatToolRegistration`
-2. Call `registerChatTool()` in `harness-init.ts`
-
-No other files need to change.
+New tools are added to `CHAT_AGENT_TOOLS` + `executeTool()` until the unified tool registry (agentic-first Phase 2) provides dynamic registration. At that point, tools move to `src/tools/` and register via `UnifiedToolDefinition`.
 
 ---
 
@@ -207,7 +177,7 @@ No other files need to change.
 | Component | Location | Pattern |
 |---|---|---|
 | `CustomInstructionsSection` | Settings Modal (`SettingsPanel.tsx`) | Textarea + save button. Follows `RelevanceSection` pattern. |
-| `PresetPicker` | Chat header (next to session title) | Dropdown. Create/edit/delete presets. Name + prompt + tool filter + model override. |
+| `PresetPicker` | Chat header (next to session title) | Dropdown. Create/edit/delete presets. Name + prompt text. |
 | `MemorySection` | Settings Modal | Semantic memories listed by category with delete. Episodic summaries collapsible (read-only). Clear-all in danger zone. |
 | Quick-action chips | `ChatBot.tsx` | Extended SUGGESTION_CHIPS. Pre-fill chat input. |
 
@@ -215,23 +185,22 @@ No other files need to change.
 
 ## 6. Phasing
 
-### Phase 1: Custom Prompts + Tool Registry
+### Phase 1: Custom Prompts + New Tool
 
 New files:
 - `src/core/prompt-assembler.ts`
-- `src/shared/chat-tool-registry.ts`
-- `src/core/chat-tool-executors.ts`
-- `src/core/harness-init.ts`
-- `src/core/harness-tools/index-notes-tool.ts`
 - `src/db/worker/migrations/008-agent-harness.ts`
 - `src/ui/components/settings/CustomInstructionsSection.tsx`
 - `src/ui/components/chat/PresetPicker.tsx`
 
 Modified files:
-- `src/ui/hooks/chat-agent-loop.ts` — accept `systemPrompt` param
+- `src/shared/chat-agent-tools.ts` — add `index_notes_folder` tool definition
+- `src/ui/hooks/chat-agent-loop.ts` — accept `systemPrompt` param, add tool executor case
 - `src/ui/hooks/useChatSession.ts` — call assembler, track preset
 - `src/ui/components/settings/SettingsPanel.tsx` — add CustomInstructionsSection
 - `src/ui/components/chat/ChatBot.tsx` — quick-action chips, PresetPicker
+
+No standalone tool registry. New tools are added directly to existing arrays/switch until the agentic-first unified registry (Phase 2 of that spec) provides dynamic registration.
 
 ### Phase 2: Memory System
 
@@ -241,7 +210,8 @@ New files:
 - `src/ui/components/settings/MemorySection.tsx`
 
 Modified files:
-- `src/db/data-store.ts` — add `MemoryRepository` interface
+- `src/db/data-store.ts` — add `MemoryRepository` interface to `DataStore`
+- `src/db/sqlite-data-store.ts` — implement `MemoryRepository` delegating to memory-queries
 - `src/db/worker/action-handler.ts` — add `memory.*` cases
 - `src/db/client/db-client.ts` — add `memory` namespace
 - `src/ui/hooks/useChatSession.ts` — hook memory extraction post-turn
