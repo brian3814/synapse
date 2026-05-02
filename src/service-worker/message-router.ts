@@ -134,6 +134,11 @@ async function handleMessageAsync(
       return { success: true };
     }
 
+    case 'OPEN_SETTINGS_TAB': {
+      await openExtensionTab('openSettings=1');
+      return { success: true };
+    }
+
     case 'AGENT_RUN_START': {
       if (await getUsageBackend().isBudgetExceeded()) {
         throw new Error('Monthly usage budget exceeded. Adjust in Settings > Usage.');

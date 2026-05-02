@@ -342,6 +342,10 @@ export interface OAuthStatusMessage extends ExtensionMessage {
   };
 }
 
+export interface OpenSettingsTabMessage extends ExtensionMessage {
+  type: 'OPEN_SETTINGS_TAB';
+}
+
 // Union of all chrome.runtime messages
 export type RuntimeMessage =
   | PageContentMessage
@@ -378,7 +382,8 @@ export type RuntimeMessage =
   | OAuthStatusMessage
   | ChatLLMRequestMessage
   | ChatLLMRequestWithKeyMessage
-  | ChatLLMStreamMessage;
+  | ChatLLMStreamMessage
+  | OpenSettingsTabMessage;
 
 // Helper to create messages
 export function createMessage<T extends ExtensionMessage>(

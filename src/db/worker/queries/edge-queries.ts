@@ -59,6 +59,13 @@ export async function createEdge(input: {
   const { rows } = await executeQuery<DbEdge>(
     `INSERT INTO edges (id, source_id, target_id, label, type, properties, weight, directed, source_url)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(source_id, target_id, label) DO UPDATE SET
+       type = excluded.type,
+       properties = excluded.properties,
+       weight = excluded.weight,
+       directed = excluded.directed,
+       source_url = excluded.source_url,
+       updated_at = datetime('now')
      RETURNING *;`,
     [
       id,

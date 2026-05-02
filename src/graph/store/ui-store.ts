@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
-type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'llm' | 'notes' | 'intelligence' | 'settings' | 'readingList';
+type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'llm' | 'notes' | 'intelligence' | 'readingList';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 
@@ -25,6 +25,7 @@ interface UIStore {
   panelWidth: number;
   chatSidebarWidth: number;
   focusNodeCallback: ((nodeIds: string | string[]) => void) | null;
+  settingsOpen: boolean;
   /**
    * Which of the three structural layers are visible in the main graph.
    * Default is entity-only — the "what do I know" view. Notes and
@@ -34,6 +35,7 @@ interface UIStore {
 
   setDisplayMode: (mode: DisplayMode) => void;
   setActivePanel: (panel: ActivePanel) => void;
+  setSettingsOpen: (open: boolean) => void;
   forceActivePanel: (panel: ActivePanel) => void;
   setLayoutType: (layout: LayoutType) => void;
   toggleClustering: () => void;
@@ -61,10 +63,12 @@ export const useUIStore = create<UIStore>((set) => ({
   panelWidth: 400,
   chatSidebarWidth: 400,
   focusNodeCallback: null,
+  settingsOpen: false,
   visibleLayers: { entity: true, note: false, resource: false },
   pendingEditNoteId: null,
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
   setActivePanel: (panel) =>
     set((state) => ({
       activePanel: state.activePanel === panel ? 'none' : panel,

@@ -51,8 +51,6 @@ export function SettingsPanel() {
 
   return (
     <div className="p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-100">Settings</h3>
-
       <div className="space-y-3">
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">LLM Provider</label>

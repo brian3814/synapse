@@ -10,6 +10,7 @@ import { useCompanionCapture } from './hooks/useCompanionCapture';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
 import { TabLayout } from './layouts/TabLayout';
+import { SettingsModal } from './components/settings/SettingsModal';
 
 export default function App() {
   const { ready, error: dbError } = useDbInit();
@@ -19,10 +20,21 @@ export default function App() {
   const startSyncListener = useGraphStore((s) => s.startSyncListener);
   const loadTypes = useNodeTypeStore((s) => s.loadTypes);
   const setDisplayMode = useUIStore((s) => s.setDisplayMode);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
 
   useEffect(() => {
     setDisplayMode(displayMode);
   }, [displayMode, setDisplayMode]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('openSettings') === '1') {
+      setSettingsOpen(true);
+      params.delete('openSettings');
+      const clean = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (clean ? '?' + clean : ''));
+    }
+  }, [setSettingsOpen]);
 
   // Initialize reading list store (loads from chrome.storage.local, independent of DB)
   useEffect(() => {
@@ -73,5 +85,10 @@ export default function App() {
     );
   }
 
-  return displayMode === 'sidePanel' ? <SidePanelLayout /> : <TabLayout />;
+  return (
+    <>
+      {displayMode === 'sidePanel' ? <SidePanelLayout /> : <TabLayout />}
+      <SettingsModal />
+    </>
+  );
 }

@@ -55,6 +55,10 @@ export class ChromeBrowser implements PlatformBrowser {
     });
   }
 
+  async openSettingsTab(): Promise<void> {
+    await chrome.runtime.sendMessage({ type: 'OPEN_SETTINGS_TAB' });
+  }
+
   async sendOAuth(type: string): Promise<any> {
     return chrome.runtime.sendMessage({ type });
   }

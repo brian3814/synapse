@@ -1,16 +1,24 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useDisplayMode } from '../hooks/useDisplayMode';
 import { useUIStore } from '../../graph/store/ui-store';
-// graph-store no longer needed here — stats moved to GraphControls
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { HeaderSearch } from './search/HeaderSearch';
+import { browser } from '@platform';
 
 export function Header() {
   const { displayMode, toggleMode } = useDisplayMode();
-  const { activePanel, setActivePanel, clusteringEnabled, toggleClustering, chatOpen, toggleChat } = useUIStore();
+  const { activePanel, setActivePanel, clusteringEnabled, toggleClustering, chatOpen, toggleChat, settingsOpen, setSettingsOpen } = useUIStore();
   const readingListItems = useReadingListStore((s) => s.items);
   const readyCount = Object.values(readingListItems).filter(i => i.status === 'extracted').length;
   const isSidePanel = displayMode === 'sidePanel';
+
+  const handleSettingsClick = useCallback(() => {
+    if (isSidePanel) {
+      (browser as any).openSettingsTab?.();
+    } else {
+      setSettingsOpen(!settingsOpen);
+    }
+  }, [isSidePanel, settingsOpen, setSettingsOpen]);
 
   return (
     <header className="flex items-center gap-2 px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
@@ -97,8 +105,8 @@ export function Header() {
         <div className="w-px h-4 bg-zinc-600 mx-1" />
 
         <ToolbarButton
-          active={activePanel === 'settings'}
-          onClick={() => setActivePanel('settings')}
+          active={settingsOpen}
+          onClick={handleSettingsClick}
           title="Settings"
         >
           <GearIcon />

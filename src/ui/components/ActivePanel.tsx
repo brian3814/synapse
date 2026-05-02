@@ -5,7 +5,6 @@ import { EdgeDetailPanel } from './panels/EdgeDetailPanel';
 import { CreatePanel } from './panels/CreatePanel';
 import { QueryPanel } from './query/QueryPanel';
 import { LLMPanel } from './llm/LLMPanel';
-import { SettingsPanel } from './settings/SettingsPanel';
 import { NotesPanel } from './notes/NotesPanel';
 import { IntelligencePanel } from './intelligence/IntelligencePanel';
 import { ReadingListPanel } from './reading-list/ReadingListPanel';
@@ -30,8 +29,6 @@ export function ActivePanel() {
       return <IntelligencePanel />;
     case 'readingList':
       return <ReadingListPanel />;
-    case 'settings':
-      return <SettingsPanel />;
     default:
       return null;
   }

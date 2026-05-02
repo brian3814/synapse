@@ -66,11 +66,7 @@ export async function executeTransaction(
   await execFn('BEGIN TRANSACTION;');
   try {
     for (const stmt of statements) {
-      if (stmt.params && stmt.params.length > 0) {
-        await queryFn(stmt.sql, stmt.params);
-      } else {
-        await execFn(stmt.sql);
-      }
+      await execFn(stmt.sql, stmt.params);
     }
     await execFn('COMMIT;');
   } catch (e) {
