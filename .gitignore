@@ -29,3 +29,4 @@ release/
 
 # Companion extension build output
 dist-companion/
+publish.sh
