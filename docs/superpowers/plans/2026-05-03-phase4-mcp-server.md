@@ -14,7 +14,7 @@
 │  Transport: stdio  OR  Streamable HTTP (:19876/mcp)  │
 ├──────────────────────────────────────────────────────┤
 │  src/mcp/server.ts                                   │
-│  McpServer — 14 tools + 4 resource templates         │
+│  McpServer — up to 14 tools + 4 resource templates    │
 ├──────────────────────────────────────────────────────┤
 │  src/commands/create-server-context.ts               │
 │  CommandContext backed by DataStore directly          │
@@ -38,7 +38,7 @@
 | File | Responsibility |
 |------|---------------|
 | `src/commands/create-server-context.ts` | Factory: `createServerCommandContext(dataStore, notes, storage)` — headless CommandContext without Zustand |
-| `src/mcp/tools.ts` | 14 MCP tool definitions wrapping commands via CommandContext |
+| `src/mcp/tools.ts` | Up to 14 MCP tool definitions wrapping commands via CommandContext (13 without LLM) |
 | `src/mcp/resources.ts` | 4 MCP resource definitions (graph stats, nodes, notes, sources) |
 | `src/mcp/server.ts` | `createMCPServer(ctx)` — wires tools + resources into McpServer |
 | `src/mcp/index.ts` | Barrel export |
@@ -214,7 +214,7 @@ git commit -m "feat(mcp): add createServerCommandContext factory (DataStore dire
 **Files:**
 - Create: `src/mcp/tools.ts`
 
-14 tools that wrap CommandContext operations. Each tool definition includes a Zod input schema and a handler that calls the appropriate command/db method. Tools return MCP `content` arrays.
+Up to 14 tools that wrap CommandContext operations (13 always available; `kg_extract_text` conditionally registered when LLM is provided). Each tool definition includes a Zod input schema and a handler that calls the appropriate command/db method. Tools return MCP `content` arrays.
 
 The tools cover the full CRUD surface of the knowledge graph:
 
@@ -489,11 +489,8 @@ export function registerTools(
   // ── Extraction ────────────────────────────────────────────────────
 
   // Only register kg_extract_text if a real PlatformLLM was provided.
-  // The stub LLM in createServerCommandContext rejects with 'LLM not configured'.
-  // Stdio context and HTTP without LLM skip this tool rather than always erroring.
-  const hasLLM = llmProvided !== false;
-
-  if (hasLLM) {
+  // Not registered when LLM is unavailable (stdio context, HTTP without LLM).
+  if (llmProvided) {
     server.registerTool(
       'kg_extract_text',
       {
@@ -515,7 +512,7 @@ export function registerTools(
         }
       },
     );
-  );
+  }
 
   // ── Notes ─────────────────────────────────────────────────────────
 
@@ -612,7 +609,7 @@ npm run build:electron-main 2>&1 | tail -5
 
 ```bash
 git add src/mcp/tools.ts
-git commit -m "feat(mcp): add 14 MCP tool definitions wrapping knowledge graph commands"
+git commit -m "feat(mcp): add MCP tool definitions wrapping knowledge graph commands"
 ```
 
 ---
@@ -853,7 +850,7 @@ export function createMCPServer(
         'Use kg_search_nodes to find nodes, kg_get_node to inspect one, kg_get_neighbors to explore the graph.',
         'Use kg_search_notes and kg_read_note to access the user\'s notes.',
         'Use kg_create_node and kg_create_edge to add knowledge to the graph.',
-        'kg_extract_text requires a running desktop app with LLM configured — it will error in stdio-only contexts.',
+        'If kg_extract_text is available, it requires an MCP context with LLM configured.',
       ].join(' '),
     },
   );
@@ -1153,7 +1150,7 @@ to:
   // LLM wrapper for MCP is deferred — the Electron LLM backend (handleStreamExtraction
   // etc.) returns void and reports results via IPC callbacks, which doesn't map to
   // PlatformLLM's typed return values without substantial adapter work.
-  // For v1, kg_extract_text returns an error when LLM is unavailable.
+  // For v1, kg_extract_text is not registered when LLM is unavailable.
   // Future: build a main-process PlatformLLM that calls the Anthropic executor directly.
   startCompanionServer({ dataStore, storage });
 ```
@@ -1580,13 +1577,13 @@ Exposes the knowledge graph to external AI tools via the Model Context Protocol.
 - **stdio** (`dist-electron/mcp-stdio.cjs`): Spawned as a subprocess by Claude Desktop, Cursor, etc.
 - **Streamable HTTP** (`http://127.0.0.1:19876/mcp`): On the existing companion server port.
 
-Both transports share the same `McpServer` instance configured in `src/mcp/server.ts` with 14 tools and 4 resources. The MCP server uses `createServerCommandContext()` to build a headless `CommandContext` backed by `DataStore` directly (no IPC, no Zustand).
+Both transports share the same `McpServer` instance configured in `src/mcp/server.ts` with up to 14 tools and 4 resources. The MCP server uses `createServerCommandContext()` to build a headless `CommandContext` backed by `DataStore` directly (no IPC, no Zustand).
 ```
 
 Add to Key References:
 
 ```markdown
-- **MCP server**: `src/mcp/server.ts` — `createMCPServer()`, `src/mcp/tools.ts` (14 tools), `src/mcp/resources.ts` (4 resources)
+- **MCP server**: `src/mcp/server.ts` — `createMCPServer()`, `src/mcp/tools.ts` (up to 14 tools), `src/mcp/resources.ts` (4 resources)
 - **MCP stdio entry**: `electron/mcp-stdio.ts` — standalone Node entry point for Claude Desktop / Cursor
 - **Server context**: `src/commands/create-server-context.ts` — headless CommandContext factory, passes DataStore directly (no adapter)
 ```

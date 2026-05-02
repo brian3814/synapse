@@ -1,10 +1,12 @@
 # Agent Harness Phase 1: Custom Prompts + New Tool
 
+> **Rollout:** This plan may ship independently — it does not depend on the agentic-first command layer or tool registry. `index_notes_folder` is added to the existing `CHAT_AGENT_TOOLS` array and `executeTool()` switch. When agentic-first Phase 2 (unified registry) lands later, all chat tools (including this one) migrate automatically.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add custom prompt support (global instructions + per-session presets), one new chat tool (`index_notes_folder`), and quick-action buttons.
 
-**Architecture:** Pure-function prompt assembler. `index_notes_folder` registered into the unified tool registry (`src/tools/registry.ts`) with a `CommandContext`-based execute function. Config in chrome.storage. DB migration creates tables for Phase 2 memory.
+**Architecture:** Pure-function prompt assembler. `index_notes_folder` added to existing `CHAT_AGENT_TOOLS` array + `executeTool()` switch (same pattern as the 10 built-in chat tools). Migrates to unified `src/tools/registry.ts` when agentic-first Phase 2 lands. Config in chrome.storage. DB migration creates tables for Phase 2 memory.
 
 **Tech Stack:** TypeScript, React 19, Zustand, Vite, chrome.storage API, SQLite
 

@@ -143,7 +143,7 @@ Layering order:
 
 The agentic-first architecture spec (`2026-05-03-agentic-first-architecture-design.md`) defines a unified tool registry in Phase 2 (`src/tools/`) with `UnifiedToolDefinition` that replaces all hardcoded tool arrays. Building a separate `chat-tool-registry.ts` here would create a throwaway abstraction.
 
-Harness Phase 1 ships independently of the agentic-first command layer. New tools are added directly to the existing `CHAT_AGENT_TOOLS` array and `executeTool()` switch — the same pattern used for all 10 existing chat tools. When the unified registry lands (agentic-first Phase 2), these migrate automatically.
+Harness Phase 1 ships independently of the agentic-first command layer. New tools are added directly to the existing `CHAT_AGENT_TOOLS` array and `executeTool()` switch — the same pattern used for all existing chat tools. When the unified registry lands (agentic-first Phase 2), it dynamically iterates `CHAT_AGENT_TOOLS` at registration time and wraps each tool — so harness additions like `index_notes_folder` are picked up automatically with no manual migration step.
 
 ### Phase 1 new tool: `index_notes_folder`
 

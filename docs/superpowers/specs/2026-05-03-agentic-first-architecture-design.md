@@ -116,7 +116,7 @@ const startExtraction = useCallback(async (text, sourceUrl) => {
 
 ## Phase 2: Tool Registry
 
-**Supersedes** the agent harness chat-only registry (`src/shared/chat-tool-registry.ts` from `docs/superpowers/plans/2026-05-03-agent-harness-phase1.md`). The harness plan should NOT build its own registry — it should register its tools (e.g., `index_notes_folder`) into the unified registry built here.
+**Absorbs** all existing chat tools when it lands — including any added by the harness (e.g., `index_notes_folder`). If harness ships first using old arrays, Phase 2 dynamically iterates `CHAT_AGENT_TOOLS` at registration time and wraps each tool. No standalone `chat-tool-registry.ts` should be built by either plan.
 
 ### Current State
 
@@ -197,7 +197,7 @@ MCP server runs in Electron main process. Two transports:
 - **stdio** — for Claude Desktop / Cursor integration
 - **HTTP-SSE** — extends companion server on port 19876
 
-**Event delivery:** The main process already receives DB sync events (it broadcasts them to renderer windows via `win.webContents.send('db:sync', ...)`). A `MainProcessEventBridge` intercepts these same sync events and forwards them to connected MCP clients as notifications. This is separate from the renderer `eventBus` singleton.
+**Event delivery (v1):** Phase 4 v1 syncs renderer windows only — mutating MCP tools call commands, then broadcast `CommandResult.events` to all `BrowserWindow`s via `webContents.send('db:sync', ...)`. MCP client push notifications (forwarding graph events to connected MCP clients via SSE or notification messages) are a **follow-up** after Phase 3's `EventBus` provides the main-process subscription infrastructure.
 
 ### MCP Tools (from commands)
 
@@ -252,10 +252,15 @@ Chrome extensions cannot run MCP servers. MCP is Electron-only. Chrome access re
 
 ## Relationship to Agent Harness
 
-The agent harness spec (`docs/superpowers/specs/2026-05-03-agent-harness-design.md`) adds custom prompts, memory, and a chat-only tool registry. It was designed before this agentic-first architecture.
+The agent harness spec (`docs/superpowers/specs/2026-05-03-agent-harness-design.md`) adds custom prompts, memory, and new tools. It was designed before this agentic-first architecture.
 
-**Sequencing:** Implement the agentic-first command layer (Phase 1) and tool registry (Phase 2) FIRST. Then the harness builds on top:
-- Harness custom prompts → still works (prompt assembly is orthogonal to commands)
-- Harness tool registry (`chat-tool-registry.ts`) → **SUPERSEDED** by unified `src/tools/registry.ts`. Harness registers its tools (e.g., `index_notes_folder`) into the unified registry instead.
-- Harness memory → should add `MemoryRepository` to `DataStore` (not import memoryQueries directly into action-handler)
-- Harness preset `allowedTools`/`model` → enforced at `ToolDispatcher` level (filter registry by preset's allowedTools list)
+**Either rollout order works:**
+
+- **Harness first:** Harness Phase 1 ships using existing `CHAT_AGENT_TOOLS` array + `executeTool()` switch. Agentic-first Phase 2 (unified registry) later migrates all existing chat tools — including any harness additions like `index_notes_folder`.
+- **Agentic-first first:** Phase 1 (commands) + Phase 2 (registry) ship first. Harness then registers new tools directly into `src/tools/registry.ts`.
+
+**Invariants regardless of order:**
+- Harness custom prompts are orthogonal to both — prompt assembly works with or without the command layer
+- Harness memory must add `MemoryRepository` to `DataStore` (not import memoryQueries directly into action-handler)
+- Harness preset `allowedTools`/`model` enforcement requires the unified registry's `ToolDispatcher` allowlist — defer those preset fields until Phase 2 lands
+- No standalone `chat-tool-registry.ts` — either use old arrays (pre-Phase 2) or the unified registry (post-Phase 2)

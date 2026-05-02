@@ -790,10 +790,11 @@ eventBus.emit()
 **Electron main-process event delivery (Phase 4 concern):**
 - The renderer `eventBus` singleton lives in the renderer process only. It CANNOT be the event source for MCP (which runs in Electron's main process).
 - In Electron, DB sync events already flow through the main process: `db-backend.ts` calls action-handler, which returns `syncEvent`, and `main.ts` broadcasts it to all windows via `win.webContents.send('db:sync', syncEvent)`.
-- Phase 4 will add a `MainProcessEventBridge` that intercepts these same sync events in `main.ts` and forwards them to MCP clients. This is a main-process concern, NOT a renderer concern.
+- Phase 4 v1 syncs renderer windows only — mutating MCP tools broadcast `CommandResult.events` to `BrowserWindow`s. Forwarding events to MCP clients as notifications is a follow-up after the main-process EventBus bridge is built.
 
 **Future phases will:**
-- Phase 4 (MCP server): `MainProcessEventBridge` in `electron/main.ts` intercepts DB sync events and pushes to MCP clients (NOT via renderer eventBus)
+- Phase 4 v1 (MCP server): Mutating tools broadcast events to renderer windows. MCP client push notifications deferred.
+- Post-Phase-4: `MainProcessEventBridge` subscribes to DB sync events in `electron/main.ts` and pushes to connected MCP clients (NOT via renderer eventBus)
 - Commands (`src/commands/`): Call `eventBus.emitAll(result.events)` after command execution for lifecycle events
 
 ---

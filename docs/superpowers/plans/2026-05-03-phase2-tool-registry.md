@@ -23,7 +23,7 @@
 | `src/tools/types.ts` | `UnifiedToolDefinition`, `ToolCategory`, `ToolFilter` types |
 | `src/tools/registry.ts` | `ToolRegistry` class with register/unregister/query/snapshot; singleton `toolRegistry` export |
 | `src/tools/builtin/extraction-tools.ts` | Registers the 9 extraction tools from `agent-tools.ts` |
-| `src/tools/builtin/chat-tools.ts` | Registers the 10 chat tools from `chat-agent-tools.ts` with `execute` wrappers |
+| `src/tools/builtin/chat-tools.ts` | Registers all current chat tools from `chat-agent-tools.ts` with `execute` wrappers |
 | `src/tools/builtin/graph-tools.ts` | New MCP-friendly graph tools (`kg_create_node`, `kg_update_node`, etc.) wrapping graph-commands |
 | `src/tools/builtin/index.ts` | `registerBuiltinTools(registry)` that calls all three registration modules |
 | `src/tools/dispatcher.ts` | `ToolDispatcher` implementing `ToolExecutor` interface from `src/core/agent-loop.ts` |
@@ -548,7 +548,7 @@ git commit -m "feat(tools): register 9 extraction tools as UnifiedToolDefinition
 **Files:**
 - Create: `src/tools/builtin/chat-tools.ts`
 
-This migrates the 10 tools from `src/shared/chat-agent-tools.ts` into `UnifiedToolDefinition` format. Each tool gets an `execute` function that wraps the logic from Phase 1's `src/commands/chat-tool-executor.ts`.
+This migrates all current tools from `src/shared/chat-agent-tools.ts` into `UnifiedToolDefinition` format (10 built-in + any added by harness, e.g. `index_notes_folder`). Each tool gets an `execute` function that wraps the logic from Phase 1's `src/commands/chat-tool-executor.ts`.
 
 - [ ] **Step 1: Create chat-tools.ts**
 
@@ -557,12 +557,9 @@ This migrates the 10 tools from `src/shared/chat-agent-tools.ts` into `UnifiedTo
 import type { ToolRegistry } from '../registry';
 import type { UnifiedToolDefinition } from '../types';
 import type { CommandContext } from '../../commands/types';
+import { CHAT_AGENT_TOOLS } from '../../shared/chat-agent-tools';
 import { executeTool as chatExecuteTool } from '../../commands/chat-tool-executor';
 
-/**
- * Wrap the Phase 1 chat-tool-executor dispatch into an execute function.
- * Each chat tool delegates to the centralized executeTool(ctx, name, input).
- */
 /**
  * Wrap the Phase 1 chat-tool-executor for the registry's execute signature.
  * Returns only the result string — per-run metadata (collectedNodeIds/EdgeIds)
@@ -577,238 +574,29 @@ function makeChatExecute(toolName: string) {
   };
 }
 
-const CHAT_TOOLS: UnifiedToolDefinition[] = [
-  {
-    name: 'search_knowledge',
-    description:
-      'Search the knowledge graph comprehensively. Finds entities by name, expands to connected neighbors (1-hop graph traversal), and retrieves stored source content with URLs. This is the recommended FIRST tool for any question about what the user knows. Returns entities with IDs, relationships, and source excerpts with URLs for citation.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query — use key terms from the user\'s question',
-        },
-      },
-      required: ['query'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('search_knowledge'),
-  },
-  {
-    name: 'search_nodes',
-    description:
-      'Search the knowledge graph for nodes matching a query. Uses full-text search. Returns matching nodes with their type, properties, and ID.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query string',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return (default 10)',
-        },
-      },
-      required: ['query'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('search_nodes'),
-  },
-  {
-    name: 'get_node_details',
-    description:
-      'Get full details of a specific node by ID, including all properties, type, and source URL.',
-    parameters: {
-      type: 'object',
-      properties: {
-        nodeId: {
-          type: 'string',
-          description: 'The ID of the node to retrieve',
-        },
-      },
-      required: ['nodeId'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('get_node_details'),
-  },
-  {
-    name: 'get_neighbors',
-    description:
-      'Get nodes connected to a given node within a specified number of hops.',
-    parameters: {
-      type: 'object',
-      properties: {
-        nodeId: {
-          type: 'string',
-          description: 'The ID of the starting node',
-        },
-        hops: {
-          type: 'number',
-          description: 'Number of hops to traverse (default 1, max 3)',
-        },
-      },
-      required: ['nodeId'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('get_neighbors'),
-  },
-  {
-    name: 'get_edges_for_node',
-    description:
-      'Get all edges connected to a node, with their labels, types, and source/target IDs.',
-    parameters: {
-      type: 'object',
-      properties: {
-        nodeId: {
-          type: 'string',
-          description: 'The ID of the node',
-        },
-      },
-      required: ['nodeId'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('get_edges_for_node'),
-  },
-  {
-    name: 'search_sources',
-    description:
-      'Search stored source content (web page text) for passages matching a query.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query string',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return (default 5)',
-        },
-      },
-      required: ['query'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('search_sources'),
-  },
-  {
-    name: 'get_source_content',
-    description:
-      'Get the stored source text for a specific node.',
-    parameters: {
-      type: 'object',
-      properties: {
-        nodeId: {
-          type: 'string',
-          description: 'The ID of the node whose source content to retrieve',
-        },
-      },
-      required: ['nodeId'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('get_source_content'),
-  },
-  {
-    name: 'create_node',
-    description:
-      'Create a new node in the knowledge graph.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'Name of the node',
-        },
-        type: {
-          type: 'string',
-          description: 'Type/category of the node (e.g. person, company, concept)',
-        },
-        properties: {
-          type: 'object',
-          description: 'Optional key-value properties for the node',
-        },
-      },
-      required: ['name', 'type'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('create_node'),
-  },
-  {
-    name: 'update_node',
-    description:
-      'Update an existing node.',
-    parameters: {
-      type: 'object',
-      properties: {
-        nodeId: {
-          type: 'string',
-          description: 'The ID of the node to update',
-        },
-        name: {
-          type: 'string',
-          description: 'New name for the node',
-        },
-        type: {
-          type: 'string',
-          description: 'New type for the node',
-        },
-        properties: {
-          type: 'object',
-          description: 'Properties to merge into the node',
-        },
-      },
-      required: ['nodeId'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('update_node'),
-  },
-  {
-    name: 'create_edge',
-    description:
-      'Create a relationship between two nodes.',
-    parameters: {
-      type: 'object',
-      properties: {
-        sourceId: {
-          type: 'string',
-          description: 'ID of the source node',
-        },
-        targetId: {
-          type: 'string',
-          description: 'ID of the target node',
-        },
-        label: {
-          type: 'string',
-          description: 'Relationship label (e.g. works_at, located_in)',
-        },
-        type: {
-          type: 'string',
-          description: 'Optional relationship category',
-        },
-      },
-      required: ['sourceId', 'targetId', 'label'],
-    },
-    category: 'chat',
-    executionTarget: 'local',
-    execute: makeChatExecute('create_edge'),
-  },
-];
+/**
+ * Dynamically convert ALL current chat tools from CHAT_AGENT_TOOLS into
+ * UnifiedToolDefinition format. This picks up any tools added by the harness
+ * (e.g. index_notes_folder) or other extensions before Phase 2 landed.
+ */
+function buildChatTools(): UnifiedToolDefinition[] {
+  return CHAT_AGENT_TOOLS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    category: 'chat' as const,
+    executionTarget: 'local' as const,
+    execute: makeChatExecute(tool.name),
+  }));
+}
 
 /**
  * Register all chat tools into the registry.
+ * Iterates CHAT_AGENT_TOOLS dynamically — automatically includes any
+ * tools added before Phase 2 (e.g. harness's index_notes_folder).
  */
 export function registerChatTools(registry: ToolRegistry): void {
-  registry.registerAll(CHAT_TOOLS);
+  registry.registerAll(buildChatTools());
 }
 ```
 
@@ -822,7 +610,7 @@ npm run build 2>&1 | tail -5
 
 ```bash
 git add src/tools/builtin/chat-tools.ts
-git commit -m "feat(tools): register 10 chat tools with execute wrappers"
+git commit -m "feat(tools): register all chat tools with execute wrappers"
 ```
 
 ---
@@ -2078,7 +1866,7 @@ After all 14 tasks:
 - `src/tools/types.ts` — `UnifiedToolDefinition`, `ToolFilter`, `ToolCategory`
 - `src/tools/registry.ts` — `ToolRegistry` class + `toolRegistry` singleton
 - `src/tools/builtin/extraction-tools.ts` — 9 extraction tools registered
-- `src/tools/builtin/chat-tools.ts` — 10 chat tools with execute wrappers
+- `src/tools/builtin/chat-tools.ts` — all current chat tools with execute wrappers (10 built-in + any harness additions)
 - `src/tools/builtin/graph-tools.ts` — 6 MCP-ready graph tools
 - `src/tools/builtin/index.ts` — `registerBuiltinTools()` entry point
 - `src/tools/dispatcher.ts` — `ToolDispatcher` implementing `ToolExecutor`
