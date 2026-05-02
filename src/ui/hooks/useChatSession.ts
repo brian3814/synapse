@@ -4,7 +4,7 @@ import { storage } from '@platform';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
 import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
 import { assembleSystemPrompt } from '../../core/prompt-assembler';
-import { extractSemanticMemories } from '../../core/memory-extractor';
+import { extractSemanticMemories, summarizeSession } from '../../core/memory-extractor';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -219,7 +219,9 @@ export function useChatSession() {
 
   const newSession = useCallback(async () => {
     if (sessionIdRef.current) {
-      await chat.expireSession(sessionIdRef.current).catch(() => {});
+      const expiredId = sessionIdRef.current;
+      await chat.expireSession(expiredId).catch(() => {});
+      summarizeSession(expiredId).catch(() => {});
     }
     sessionIdRef.current = null;
     setMessages([]);

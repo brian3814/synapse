@@ -228,6 +228,22 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     },
     executionContext: 'ui',
   },
+  {
+    name: 'search_memories',
+    description:
+      'Search your memory of what you know about the user — their preferences, facts about them, and past session summaries. Use this when the user asks "what do you remember about me" or when you need to recall prior context.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          description: 'Optional filter: "preference", "fact", "instruction", or "all" (default "all")',
+        },
+      },
+      required: [],
+    },
+    executionContext: 'ui',
+  },
 ];
 
 /** Convert chat tool definitions to Anthropic API tool format */

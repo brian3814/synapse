@@ -1,5 +1,5 @@
 import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
-import { nodes, edges, sourceContent } from '../../db/client/db-client';
+import { nodes, edges, sourceContent, memory } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
 import { notes, llm } from '@platform';
@@ -343,6 +343,37 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       });
       if (!created) return JSON.stringify({ error: 'Failed to create edge' });
       return JSON.stringify({ id: created.id, label: created.label });
+    }
+
+    case 'search_memories': {
+      const allSemantic = await memory.getAllSemantic() as Array<{
+        id: string;
+        category: string;
+        content: string;
+        updated_at: string;
+      }>;
+      const category = (input.category as string) ?? 'all';
+      const filtered = category === 'all'
+        ? allSemantic
+        : allSemantic.filter((m) => m.category === category);
+
+      const recentEpisodic = await memory.getRecentEpisodic(5) as Array<{
+        summary: string;
+        created_at: string;
+      }>;
+
+      return JSON.stringify({
+        semanticMemories: filtered.map((m) => ({
+          category: m.category,
+          content: m.content,
+          lastUsed: m.updated_at,
+        })),
+        recentSessionSummaries: recentEpisodic.map((e) => ({
+          summary: e.summary,
+          date: e.created_at,
+        })),
+        total: filtered.length,
+      });
     }
 
     case 'index_notes_folder': {
