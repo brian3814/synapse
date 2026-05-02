@@ -4,21 +4,71 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chrome Manifest V3 extension providing a local-first knowledge graph with SQLite persistence (wa-sqlite + OP
-FS), 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. The UI runs in the Chrome Side Panel (default) or a full tab.
+Local-first knowledge graph with SQLite persistence, 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. Runs as both a **Chrome Manifest V3 extension** (side panel or full tab) and an **Electron desktop app** from the same codebase via a platform abstraction layer.
 
 ## Build Commands
 
 ```bash
-npm run build     # TypeScript check (tsc) + Vite production build
-npm run dev       # Vite build in watch mode (load dist/ in chrome://extensions)
+# Chrome extension
+npm run build                    # Vite production build → dist/
+npm run dev                      # Vite build in watch mode (load dist/ in chrome://extensions)
+
+# Electron desktop
+npm run build:electron-main      # esbuild main process → dist-electron/main/
+npm run build:electron-renderer  # Vite renderer build → dist-electron/renderer/
+npm run build:electron           # Both main + renderer
+npm run dist:mac                 # Package macOS app via electron-builder
+
+# Companion extension
+npm run build:companion          # Vite build → dist-companion/
 ```
 
-No test framework or linter is configured. After building, load `dist/` as an unpacked extension in `chrome://extensions` (developer mode).
+No test framework or linter is configured. For Chrome, load `dist/` as an unpacked extension in `chrome://extensions` (developer mode). For Electron, run `npx electron .` after building.
 
 ## Architecture
 
-Six execution contexts with different capabilities and API access:
+### Platform Abstraction Layer
+
+The app runs on two platforms from one codebase. UI code imports `@platform` (Vite build-time alias) and never touches `chrome.*` or `ipcRenderer` directly.
+
+```
+┌─────────────────────────────────────────────────┐
+│  UI / React Layer (platform-agnostic)            │
+│  All I/O via: import { storage, db, notes,       │
+│               llm, browser } from '@platform'    │
+├─────────────────────────────────────────────────┤
+│  @platform (build-time alias)                    │
+│  Chrome: src/platform/chrome/  (chrome.* APIs)   │
+│  Electron: src/platform/electron/ (IPC bridge)   │
+├─────────────────────────────────────────────────┤
+│  Background Service (platform-specific)          │
+│  Chrome: Service Worker + Offscreen Document     │
+│  Electron: Main Process (electron/main.ts)       │
+│  Both import shared logic from src/core/         │
+├─────────────────────────────────────────────────┤
+│  External (Anthropic API, SQLite, Filesystem)    │
+└─────────────────────────────────────────────────┘
+```
+
+**Five platform interfaces** in `src/platform/types.ts`:
+
+| Interface | Chrome Implementation | Electron Implementation |
+|---|---|---|
+| `PlatformStorage` | `chrome.storage.local` | IPC → JSON config file |
+| `PlatformDB` | SharedWorker/DedicatedWorker + wa-sqlite | IPC → better-sqlite3 in main process |
+| `PlatformNotes` | OPFS async API | IPC → local filesystem |
+| `PlatformLLM` | Message-based streaming via SW/offscreen | Dedicated IPC channels (`llm:stream-extraction`, `llm:run-agent`, `llm:stream-chat`) |
+| `PlatformBrowser` | `chrome.tabs`, content scripts | Companion extension dispatch or no-op |
+
+**Build-time resolution**: `vite.config.chrome.ts` maps `@platform` → `src/platform/chrome/`. `vite.config.electron.ts` maps `@platform` → `src/platform/electron/`. TypeScript `tsconfig.json` paths point at Chrome as IDE default.
+
+**Platform-specific UI**: Use `import { platformId } from '@platform'` and conditional rendering. Chrome-only features (side panel toggle, OAuth, reading list, contextual relevance) are guarded with `platformId === 'chrome'`.
+
+**Shared core** (`src/core/`): Agent loop, rate-limit retry, usage tracking, and system prompts — imported by both the Chrome offscreen document and Electron main process. Eliminates duplication.
+
+### Chrome Extension Contexts
+
+Six execution contexts (Chrome-only, not relevant for Electron):
 
 | Context | Key Restriction |
 |---|---|
@@ -29,17 +79,15 @@ Six execution contexts with different capabilities and API access:
 | **DB SharedWorker** (`src/db/worker/db-shared-worker.ts`) | Pure coordinator/router. No `Worker` constructor (Pitfall #12), no `chrome.*` APIs. |
 | **DB Dedicated Worker** (`src/db/worker/db-worker.ts`) | Runs wa-sqlite + OPFS. Created by UI thread, bridged to SharedWorker via `MessageChannel`. |
 
-Communication between contexts uses `chrome.runtime.sendMessage` with typed messages in `src/shared/messages.ts`.
+Chrome-context communication uses `chrome.runtime.sendMessage` with typed messages in `src/shared/messages.ts`. These messages are **internal to the Chrome platform layer** — UI code never sends them directly.
+
+### Electron Contexts
+
+Two contexts: **Renderer** (React app, same as Chrome UI) and **Main Process** (`electron/main.ts` — SQLite, LLM, IPC handlers, companion server). Preload (`electron/preload.ts`) exposes a generic `window.electronIPC` bridge with `invoke(channel, ...args)` and `on(channel, cb)`.
 
 ### API Key Security Pattern
 
-UI messages **never carry API keys**. The service worker reads keys from `chrome.storage.local` and injects them before forwarding to the offscreen document. This prevents key leakage via `chrome.runtime.sendMessage` broadcasts (which all extension contexts receive).
-
-```
-UI ─── LLM_REQUEST (no key) ──→ Service Worker ─── LLM_REQUEST (+ apiKey) ──→ Offscreen
-```
-
-Message types reflect this: `LLMRequestMessage` (UI→SW, no key) vs `LLMRequestWithKeyMessage` (SW→offscreen, with key). Same pattern for `AgentRunStartMessage` / `AgentRunStartWithKeyMessage`.
+On Chrome, UI messages never carry API keys. The service worker reads keys from `chrome.storage.local` and injects them before forwarding to the offscreen document. On Electron, the main process reads keys from storage before making LLM API calls.
 
 ## State Management
 
@@ -59,9 +107,9 @@ Stores are independent; hooks like `useLLMExtraction()` orchestrate multi-store 
 
 Two extraction modes, both ending in the same review→apply flow:
 
-**Simple text extraction** (`useLLMExtraction.startExtraction`): Raw text → `LLM_REQUEST` → streaming JSON → parse via `extractionResultSchema` (Zod) → diff with existing graph → review.
+**Simple text extraction** (`useLLMExtraction.startExtraction`): Raw text → `llm.streamExtraction()` → streaming JSON → parse via `extractionResultSchema` (Zod) → diff with existing graph → review.
 
-**Agent page extraction** (`useLLMExtraction.startAgentExtraction`): `AGENT_RUN_START` → offscreen runs agentic tool-use loop (max 15 iterations) → content script tools (`get_page_content`, `get_page_metadata`, `query_selector`, `query_selector_all`, `get_links`, `get_tables`, `get_structured_data`, `fetch_url`) → terminal `save_entities` tool → review.
+**Agent page extraction** (`useLLMExtraction.startAgentExtraction`): `llm.runAgent()` → shared agent loop (`src/core/agent-loop.ts`, max 15 iterations) → platform-specific tool executor (Chrome: content script tools via SW relay; Electron: `fetch_url` directly, content-script tools unavailable) → terminal `save_entities` tool → review.
 
 **Review flow** (`ExtractionReview` replaces old `DiffView`):
 - Converts diff items → `ReviewNode[]`/`ReviewEdge[]` with merge recommendations (fuzzy matching via entity resolution)
@@ -72,7 +120,9 @@ Two extraction modes, both ending in the same review→apply flow:
 
 ## Build System
 
-Vite config (`vite.config.ts`) produces 7 outputs via custom plugins:
+Two Vite configs share the same source via the `@platform` alias:
+
+**`vite.config.chrome.ts`** — produces 7 outputs (Chrome extension):
 
 | Output | Plugin | Format |
 |---|---|---|
@@ -82,7 +132,15 @@ Vite config (`vite.config.ts`) produces 7 outputs via custom plugins:
 | `layout-worker.js` | `layoutWorkerPlugin` | ES module |
 | `content-script.js` | `contentScriptPlugin` | IIFE |
 
-Key config: `base: ''` (chrome-extension:// relative paths), `modulePreload: false` (prevents DOM polyfill in SW).
+Key config: `base: ''` (chrome-extension:// relative paths), `modulePreload: false` (prevents DOM polyfill in SW). `@platform` → `src/platform/chrome/`.
+
+**`vite.config.electron.ts`** — produces 4 outputs (Electron renderer):
+- React SPA + db-worker + db-shared-worker + layout-worker. No service worker, offscreen, or content script.
+- `base: './'` for Electron `file://` or `app://` protocol. `@platform` → `src/platform/electron/`.
+
+**Electron main process** — built separately via `esbuild` (not Vite): `electron/main.ts` + `electron/preload.ts` → `dist-electron/main/`.
+
+**Important:** The `@platform` alias must exist in EVERY `resolve.alias` block across both configs — main build AND all sub-build plugins (contentScript, layoutWorker, dbWorker, dbSharedWorker).
 
 ## Chrome Extension CSP Constraints
 
@@ -95,13 +153,14 @@ CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects
 
 - `src/db/worker/sqlite-engine.ts` — All SQLite ops serialized through a promise queue (prevents wa-sqlite Asyncify corruption). VFS fallback: OPFS → IDB → in-memory. **Critical:** `open_v2` must be inside each VFS try/catch (Pitfall #11).
 - `src/db/worker/migrations/` — Versioned, FTS5 detected at runtime. Migration 002 (FTS) is optional; search falls back to LIKE.
-- `src/db/client/db-client.ts` — UI-thread client with requestId-based response matching and 10s timeouts.
+- `src/db/client/db-client.ts` — Platform-agnostic typed API. Imports `db` from `@platform` and delegates via `db.request(action, params)`. All 30+ typed namespace methods (`nodes`, `edges`, `spatial`, `chat`, etc.) are shared code. Platform transport is in `ChromeDB` (SharedWorker/MessagePort) or `ElectronDB` (IPC to better-sqlite3).
 
-## Note Content Storage (OPFS)
+## Note Content Storage
 
-Note content is stored as `.md` files in OPFS (`notes/{node_id}.md`), NOT in SQLite. The UI thread reads/writes OPFS directly via async API, bypassing the SharedWorker/DedicatedWorker chain. See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) for full ADR.
+Note content is stored as `.md` files, NOT in SQLite. UI code accesses notes via `import { notes } from '@platform'` (`PlatformNotes` interface). See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) for full ADR.
 
-- **`src/notes/opfs-note-store.ts`** — OPFS CRUD: `init()`, `read()`, `write()`, `remove()`, `list()`, `exists()`
+- **Chrome**: `src/platform/chrome/notes.ts` — OPFS async API (`notes/{node_id}.md`)
+- **Electron**: `src/platform/electron/notes.ts` — IPC to main process → local filesystem (user-configurable vault directory)
 - **`src/notes/markdown-utils.ts`** — `stripMarkdownToPlainText()` for FTS tokenization, re-exports `parseMarkdown`/`generateNoteMarkdown`
 - **`note_search` table** (in 001-initial-schema) — Backing table for FTS5 external content. Stores `node_id`, `title`, stripped plain-text `body`.
 - **`notes_fts` virtual table** (in 002-fts-index) — External content FTS5 on `note_search`. Auto-synced via INSERT/DELETE/UPDATE triggers.
@@ -150,10 +209,13 @@ React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.s
 
 ## Key References
 
+- **Platform interfaces**: `src/platform/types.ts` — `PlatformStorage`, `PlatformDB`, `PlatformNotes`, `PlatformLLM`, `PlatformBrowser`, and LLM request/result types
+- **Shared core**: `src/core/` — `agent-loop.ts` (injectable ToolExecutor), `retry.ts` (withRetry), `usage.ts`, `system-prompts.ts`
 - **Types**: `src/shared/types.ts` — `DbNode`, `DbEdge`, `GraphNode`, `GraphEdge`, `LLMConfig`, `ToolCall`, `AgentTurn`, `AgentProgressEvent`
-- **Messages**: `src/shared/messages.ts` — Full typed message protocol, `RuntimeMessage` union
+- **Messages**: `src/shared/messages.ts` — Chrome-internal message protocol (UI code should NOT import this — use `@platform` instead)
 - **Constants**: `src/shared/constants.ts` — Color palette, timeouts, LLM model IDs, layout options
-- **Path alias**: `@/` maps to `src/` in both TypeScript and Vite configs
+- **Path aliases**: `@/` maps to `src/`, `@platform` maps to `src/platform/chrome/` (Chrome build) or `src/platform/electron/` (Electron build)
+- **Platform design spec**: [`docs/superpowers/specs/2026-05-02-platform-abstraction-layer-design.md`](docs/superpowers/specs/2026-05-02-platform-abstraction-layer-design.md)
 - **Detailed docs**: `ARCHITECTURE.md` for full system design, SQLite schema, and 13 documented pitfalls
 - **Search**: [`docs/search.md`](docs/search.md) — FTS5 sanitization, LIKE fallback, UI debounce/stale-cancellation
 - **Pitfalls**: `docs/pitfalls/` — Detailed writeups of specific Chrome extension pitfalls
