@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { nodes as dbNodes, edges as dbEdges, clearAll as dbClearAll, loadGraph, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
-import { notes } from '@platform';
+import { loadGraph } from '../../db/client/db-client';
+import { createUICommandContext } from '../../commands/create-context';
+import * as graphCommands from '../../commands/graph-commands';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
 import { SYNC_CHANNEL, type SyncEvent } from '../../shared/sync-events';
 import { buildAdjacencyMap, type AdjacencyMap } from '../algorithms/adjacency';
@@ -131,20 +132,11 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   createNode: async (input) => {
     try {
-      const row = await dbNodes.create({
-        name: input.name,
-        type: input.type,
-        label: input.label,
-        folderPath: input.folderPath,
-        properties: JSON.stringify(input.properties ?? {}),
-        color: input.color,
-        size: input.size,
-        sourceUrl: input.sourceUrl,
-      });
-      if (!row) return null;
-      const node = dbNodeToGraphNode(row);
-      set((state) => ({ nodes: [...state.nodes, node] }));
-      return node;
+      const ctx = createUICommandContext();
+      const result = await graphCommands.createNode(ctx, input);
+      if (!result.data) return null;
+      set((state) => ({ nodes: [...state.nodes, result.data!] }));
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return null;
@@ -153,26 +145,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   updateNode: async (input) => {
     try {
-      const row = await dbNodes.update({
-        id: input.id,
-        name: input.name,
-        type: input.type,
-        label: input.label,
-        summary: input.summary,
-        folderPath: input.folderPath,
-        properties: input.properties ? JSON.stringify(input.properties) : undefined,
-        x: input.x,
-        y: input.y,
-        z: input.z,
-        color: input.color,
-        size: input.size,
-      });
-      if (!row) return null;
-      const node = dbNodeToGraphNode(row);
+      const ctx = createUICommandContext();
+      const result = await graphCommands.updateNode(ctx, input);
+      if (!result.data) return null;
       set((state) => ({
-        nodes: state.nodes.map((n) => (n.id === node.id ? node : n)),
+        nodes: state.nodes.map((n) => (n.id === result.data!.id ? result.data! : n)),
       }));
-      return node;
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return null;
@@ -181,10 +160,9 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   deleteNode: async (id) => {
     try {
-      // Capture node data before deletion for cleanup
-      const node = get().nodes.find((n) => n.id === id);
-      const success = await dbNodes.delete(id);
-      if (success) {
+      const ctx = createUICommandContext();
+      const result = await graphCommands.deleteNode(ctx, id);
+      if (result.data) {
         set((state) => {
           const edges = state.edges.filter(
             (e) => e.sourceId !== id && e.targetId !== id
@@ -198,20 +176,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
             selectedNodeIds,
           };
         });
-
-        // Best-effort cleanup: remove entity_sources for deleted resource nodes.
-        // entity_sources uses the resource node's ID (not identifier) as the FK.
-        if (node?.type === 'resource') {
-          entitySources.removeAllForResource(node.id).catch(() => {});
-        }
-
-        // Best-effort cleanup: remove OPFS file + search index for deleted notes.
-        if (node?.type === 'note') {
-          noteSearch.delete(node.id).catch(() => {});
-          notes.remove(node.id).catch(() => {});
-        }
       }
-      return success;
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return false;
@@ -220,35 +186,14 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   createEdge: async (input) => {
     try {
-      const row = await dbEdges.create({
-        sourceId: input.sourceId,
-        targetId: input.targetId,
-        label: input.label,
-        type: input.type,
-        properties: JSON.stringify(input.properties ?? {}),
-        weight: input.weight,
-        directed: input.directed,
-        sourceUrl: input.sourceUrl,
-      });
-      if (!row) return null;
-      const edge = dbEdgeToGraphEdge(row);
+      const ctx = createUICommandContext();
+      const result = await graphCommands.createEdge(ctx, input);
+      if (!result.data) return null;
       set((state) => {
-        const edges = [...state.edges, edge];
+        const edges = [...state.edges, result.data!];
         return { edges, adjacency: buildAdjacencyMap(edges) };
       });
-
-      // Record user attribution unless the caller opted out. Extraction
-      // flows pass skipProvenance=true so they can write their own
-      // 'extraction' or 'note' provenance row after this call.
-      if (!input.skipProvenance) {
-        edgeSources
-          .add({ edgeId: edge.id, sourceType: 'user' })
-          .catch(() => {
-            // Best-effort: provenance is observational
-          });
-      }
-
-      return edge;
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return null;
@@ -257,20 +202,14 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   updateEdge: async (input) => {
     try {
-      const row = await dbEdges.update({
-        id: input.id,
-        label: input.label,
-        type: input.type,
-        properties: input.properties ? JSON.stringify(input.properties) : undefined,
-        weight: input.weight,
-      });
-      if (!row) return null;
-      const edge = dbEdgeToGraphEdge(row);
+      const ctx = createUICommandContext();
+      const result = await graphCommands.updateEdge(ctx, input);
+      if (!result.data) return null;
       set((state) => {
-        const edges = state.edges.map((e) => (e.id === edge.id ? edge : e));
+        const edges = state.edges.map((e) => (e.id === result.data!.id ? result.data! : e));
         return { edges, adjacency: buildAdjacencyMap(edges) };
       });
-      return edge;
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return null;
@@ -279,8 +218,9 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   deleteEdge: async (id) => {
     try {
-      const success = await dbEdges.delete(id);
-      if (success) {
+      const ctx = createUICommandContext();
+      const result = await graphCommands.deleteEdge(ctx, id);
+      if (result.data) {
         set((state) => {
           const edges = state.edges.filter((e) => e.id !== id);
           return {
@@ -291,7 +231,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
           };
         });
       }
-      return success;
+      return result.data;
     } catch (e: any) {
       set({ error: e.message });
       return false;
@@ -300,7 +240,8 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
 
   clearAll: async () => {
     try {
-      await dbClearAll();
+      const ctx = createUICommandContext();
+      await graphCommands.clearAll(ctx);
       set({
         nodes: [],
         edges: [],
