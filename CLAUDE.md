@@ -160,7 +160,7 @@ CSP `script-src 'self' 'wasm-unsafe-eval'` blocks all `blob:` URLs. This affects
 Note content is stored as `.md` files, NOT in SQLite. UI code accesses notes via `import { notes } from '@platform'` (`PlatformNotes` interface). See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) for full ADR.
 
 - **Chrome**: `src/platform/chrome/notes.ts` — OPFS async API (`notes/{node_id}.md`)
-- **Electron**: `src/platform/electron/notes.ts` — IPC to main process → local filesystem (user-configurable vault directory)
+- **Electron**: `src/platform/electron/notes.ts` — IPC to main process → local filesystem at `~/Documents/KnowledgeGraph/notes/{node_id}.md`. Path resolved via `app.getPath('documents')` (macOS: `~/Documents/`, Windows: `C:\Users\<user>\Documents\`, Linux: `~/Documents/`). Chosen over `app.getPath('userData')` so notes are user-visible and editable in any text editor.
 - **`src/notes/markdown-utils.ts`** — `stripMarkdownToPlainText()` for FTS tokenization, re-exports `parseMarkdown`/`generateNoteMarkdown`
 - **`note_search` table** (in 001-initial-schema) — Backing table for FTS5 external content. Stores `node_id`, `title`, stripped plain-text `body`.
 - **`notes_fts` virtual table** (in 002-fts-index) — External content FTS5 on `note_search`. Auto-synced via INSERT/DELETE/UPDATE triggers.
