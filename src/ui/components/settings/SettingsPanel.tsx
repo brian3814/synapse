@@ -7,6 +7,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, disconnectFolder, type FolderStatus } from '../../../filesystem/folder-access';
 import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
+import { CustomInstructionsSection } from './CustomInstructionsSection';
 
 export function SettingsPanel() {
   const [provider, setProvider] = useState<LLMProvider>('anthropic');
@@ -116,6 +117,8 @@ export function SettingsPanel() {
           </button>
         </div>
       </div>
+
+      <CustomInstructionsSection />
 
       <UsageSection />
 

@@ -6,6 +6,7 @@ import * as migration004 from './004-indexed-files';
 import * as migration005 from './005-note-node-type';
 import * as migration006 from './006-spatial-index';
 import * as migration007 from './007-reading-list-history';
+import * as migration008 from './008-agent-harness';
 
 interface Migration {
   version: number;
@@ -14,7 +15,7 @@ interface Migration {
   optional?: boolean;
 }
 
-const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007];
+const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008];
 
 // Track whether FTS5 is available for search queries
 let fts5Available = false;
@@ -125,8 +126,14 @@ export async function runMigrations(): Promise<number> {
     id TEXT PRIMARY KEY, title TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_active_at TEXT NOT NULL DEFAULT (datetime('now')),
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'active',
+    preset_id TEXT
   );`);
+  try {
+    await executeExec(`ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT;`);
+  } catch {
+    // Column already exists
+  }
   await executeExec(`CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,

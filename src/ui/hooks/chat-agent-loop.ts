@@ -4,6 +4,8 @@ import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
 import { notes, llm } from '@platform';
 import { parseMarkdown } from '../../notes/markdown-utils';
+import { getStoredFolder, requestPermission } from '../../filesystem/folder-access';
+import { indexMarkdownFolder } from '../../filesystem/indexing-pipeline';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
 
@@ -26,45 +28,6 @@ export interface ChatAgentProgress {
 const MAX_ITERATIONS = 10;
 const TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
 
-const CHAT_AGENT_SYSTEM_PROMPT = `You are a helpful assistant integrated into a personal knowledge graph browser extension. You have access to tools that let you search, read, and modify the user's knowledge graph.
-
-## Citation Rules (MANDATORY)
-- When referencing information from the knowledge graph, you MUST cite the source URL using [Source: url] format.
-- When mentioning ANY entity from the graph, ALWAYS use the clickable format: [Entity Name](node:entity-id). The entity-id comes from the id field in tool results.
-- Every factual claim from the knowledge graph should be traceable to a source or entity.
-- If a tool result includes source URLs, cite them in your answer.
-
-## Tool Usage Strategy
-
-**For knowledge questions ("What do I know about X?", "Tell me about X"):**
-1. Start with search_knowledge — it finds entities, expands to connected neighbors, and retrieves source content in one call
-2. If you need more detail on a specific entity, follow up with get_node_details or get_neighbors
-3. If you need the full source text, use get_source_content
-
-**For graph exploration ("How does X connect to Y?", "What's related to X?"):**
-1. Use search_nodes to find starting entities
-2. Use get_neighbors or get_edges_for_node to trace connections
-3. Explain the paths you find
-
-**For requests to modify the graph:**
-1. First search to check if entities already exist (avoid duplicates)
-2. Use create_node / create_edge to add new data
-3. Use update_node to modify existing entities
-4. Confirm what you created/updated
-
-**When no tools are needed:**
-- Answer general questions using your own knowledge
-- If the question doesn't relate to the graph, just respond normally
-
-## Response Format
-- Use [Entity Name](node:entity-id) for EVERY entity you mention from the graph
-- Use [Source: url] for EVERY source you reference
-- Use markdown formatting (bold, lists, headers)
-- Be concise but thorough
-- If search returns no results, say so clearly`;
-
-export { CHAT_AGENT_SYSTEM_PROMPT };
-
 // ---------------------------------------------------------------------------
 // Main agent loop
 // ---------------------------------------------------------------------------
@@ -74,6 +37,7 @@ interface RunChatAgentParams {
   currentPrompt: string;
   provider: string;
   model: string;
+  systemPrompt: string;
   onProgress: (event: ChatAgentProgress) => void;
 }
 
@@ -82,6 +46,7 @@ export async function runChatAgent({
   currentPrompt,
   provider,
   model,
+  systemPrompt,
   onProgress,
 }: RunChatAgentParams): Promise<string> {
   // Build initial messages: prior turns + current user message
@@ -105,7 +70,7 @@ export async function runChatAgent({
       {
         provider,
         model,
-        systemPrompt: CHAT_AGENT_SYSTEM_PROMPT,
+        systemPrompt,
         messages,
         tools: TOOL_DEFS,
       },
@@ -378,6 +343,28 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
       });
       if (!created) return JSON.stringify({ error: 'Failed to create edge' });
       return JSON.stringify({ id: created.id, label: created.label });
+    }
+
+    case 'index_notes_folder': {
+      const handle = await getStoredFolder();
+      if (!handle) {
+        return JSON.stringify({ error: 'No folder connected. Connect one in Settings > Markdown Folder.' });
+      }
+      const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        const granted = await requestPermission(handle);
+        if (!granted) {
+          return JSON.stringify({ error: 'Permission denied. Please grant folder access in Settings.' });
+        }
+      }
+      const result = await indexMarkdownFolder(handle);
+      await useGraphStore.getState().loadAll();
+      return JSON.stringify({
+        processed: result.processed,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+      });
     }
 
     default:

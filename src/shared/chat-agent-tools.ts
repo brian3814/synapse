@@ -217,6 +217,17 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     },
     executionContext: 'ui',
   },
+  {
+    name: 'index_notes_folder',
+    description:
+      'Index or re-index the connected markdown notes folder into the knowledge graph. Creates resource nodes for each .md file and edges for wiki-links. Returns indexing statistics.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+    executionContext: 'ui',
+  },
 ];
 
 /** Convert chat tool definitions to Anthropic API tool format */

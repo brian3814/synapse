@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { chat } from '../../db/client/db-client';
+import { storage } from '@platform';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
 import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
+import { assembleSystemPrompt } from '../../core/prompt-assembler';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -110,6 +112,23 @@ export function useChatSession() {
       updateMessage(assistantId, { content: '', status: 'executing' });
       const { config } = await fetchLLMConfigAndTypes();
 
+      // Assemble system prompt with harness context
+      const storageData = await storage.get(['harnessGlobalInstructions', 'harnessPresets', 'harnessActivePresetId']);
+      const globalInstructions = (storageData as any).harnessGlobalInstructions ?? null;
+      const presets = (storageData as any).harnessPresets ?? [];
+      const activePresetId = (storageData as any).harnessActivePresetId ?? null;
+      const activePreset = activePresetId
+        ? presets.find((p: any) => p.id === activePresetId)
+        : null;
+
+      const systemPrompt = assembleSystemPrompt({
+        globalInstructions,
+        presetPrompt: activePreset?.prompt ?? null,
+        presetName: activePreset?.name ?? null,
+        semanticMemories: [],
+        recentSessionSummaries: [],
+      });
+
       // Run agentic chat loop
       updateMessage(assistantId, { content: '', status: 'streaming', agentTurns: [] });
 
@@ -118,6 +137,7 @@ export function useChatSession() {
         currentPrompt: input,
         provider: config.provider,
         model: config.model,
+        systemPrompt,
         onProgress: (event: ChatAgentProgress) => {
           switch (event.type) {
             case 'text_chunk':

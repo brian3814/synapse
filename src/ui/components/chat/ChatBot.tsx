@@ -5,6 +5,7 @@ import { useChatSession } from '../../hooks/useChatSession';
 import { useInputHistory } from '../../hooks/useInputHistory';
 import { ChatMessage } from './ChatMessage';
 import { SessionPicker } from './SessionPicker';
+import { PresetPicker } from './PresetPicker';
 
 export function ChatBot() {
   const { chatOpen, chatDisplayMode, toggleChat, setChatDisplayMode } = useUIStore();
@@ -154,6 +155,7 @@ function ChatHeader({
             onClose={() => setPickerOpen(false)}
           />
         )}
+        <PresetPicker />
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
@@ -175,10 +177,17 @@ function ChatHeader({
   );
 }
 
-const SUGGESTION_CHIPS = [
-  'What do I know about...',
-  'Summarize recent pages',
-  'Find connections between...',
+interface QuickAction {
+  label: string;
+  prompt: string;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'Index my notes', prompt: 'Please index my notes folder now.' },
+  { label: 'Find duplicates', prompt: 'Find potential duplicate entities in my graph.' },
+  { label: 'What do I know about...', prompt: 'What do I know about ' },
+  { label: 'Summarize recent pages', prompt: 'Summarize the pages I\'ve recently extracted.' },
+  { label: 'Find connections', prompt: 'Find connections between ' },
 ];
 
 function ChatMessages({
@@ -202,13 +211,13 @@ function ChatMessages({
         </p>
         {sessionReady && onSuggestionClick && (
           <div className="flex flex-wrap gap-2 justify-center">
-            {SUGGESTION_CHIPS.map((chip) => (
+            {QUICK_ACTIONS.map((action) => (
               <button
-                key={chip}
-                onClick={() => onSuggestionClick(chip)}
+                key={action.label}
+                onClick={() => onSuggestionClick(action.prompt)}
                 className="px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-full hover:border-indigo-500/50 hover:text-zinc-200 transition-colors"
               >
-                {chip}
+                {action.label}
               </button>
             ))}
           </div>
