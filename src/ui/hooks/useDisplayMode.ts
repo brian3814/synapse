@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { DisplayMode } from '../../shared/types';
 import { DISPLAY_MODE_STORAGE_KEY } from '../../shared/constants';
-import { storage, db } from '@platform';
+import { storage, db, browser } from '@platform';
 
 function getDisplayMode(): DisplayMode {
   const params = new URLSearchParams(window.location.search);
@@ -26,10 +26,7 @@ export function useDisplayMode() {
 
     // Ask service worker to open the new view, then close this one
     try {
-      await chrome.runtime.sendMessage({
-        type: 'TOGGLE_DISPLAY_MODE',
-        payload: { currentMode: displayMode },
-      });
+      await (browser as any).toggleDisplayMode(displayMode);
       // Tell SharedWorker the DedicatedWorker is about to die so surviving
       // tabs can spawn a replacement before requests start timing out.
       (db as any).notifyWorkerDying?.();

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { storage } from '@platform';
+import { storage, browser } from '@platform';
 
 interface AuthStore {
   authenticated: boolean;
@@ -20,7 +20,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   checkAuth: async () => {
     set({ loading: true, error: null });
     try {
-      const result = await chrome.runtime.sendMessage({ type: 'OAUTH_CHECK' });
+      const result = await (browser as any).sendOAuth('OAUTH_CHECK');
       set({ authenticated: result?.authenticated ?? false, loading: false });
     } catch (e: any) {
       set({ authenticated: false, loading: false, error: e.message });
@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signIn: async () => {
     set({ loading: true, error: null });
     try {
-      const result = await chrome.runtime.sendMessage({ type: 'OAUTH_START' });
+      const result = await (browser as any).sendOAuth('OAUTH_START');
       if (result?.error) {
         set({ loading: false, error: result.error });
       }
@@ -43,7 +43,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signOut: async () => {
     set({ loading: true, error: null });
     try {
-      await chrome.runtime.sendMessage({ type: 'OAUTH_REVOKE' });
+      await (browser as any).sendOAuth('OAUTH_REVOKE');
       set({ authenticated: false, loading: false });
     } catch (e: any) {
       set({ loading: false, error: e.message });
@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         });
       }
     };
-    chrome.runtime.onMessage.addListener(messageListener);
+    const cleanupMessages = (browser as any).onRuntimeMessage(messageListener);
 
     // Also listen for storage changes (token added/removed)
     const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
@@ -73,7 +73,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const cleanupStorage = storage.onChange(storageListener);
 
     return () => {
-      chrome.runtime.onMessage.removeListener(messageListener);
+      cleanupMessages();
       cleanupStorage();
     };
   },

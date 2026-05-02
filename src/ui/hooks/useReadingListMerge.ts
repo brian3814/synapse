@@ -5,6 +5,7 @@ import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { useLLMExtraction, buildDiffItems } from './useLLMExtraction';
 import { readingList as readingListDb, sourceContent } from '../../db/client/db-client';
 import type { ReadingListItem } from '../../shared/types';
+import { browser } from '@platform';
 
 export function useReadingListMerge() {
   const { proceedToReview, applyReview } = useLLMExtraction();
@@ -71,10 +72,7 @@ export function useReadingListMerge() {
           // 2. Source content is already saved by applyReview (it checks llm.sourceUrl + llm.inputText)
 
           // 3. Remove from Chrome reading list via service worker
-          await chrome.runtime.sendMessage({
-            type: 'READING_LIST_REMOVE',
-            payload: { url },
-          });
+          await (browser as any).sendReadingListRemove(url);
 
           // 4. Remove from reading list store
           useReadingListStore.getState().removeItem(url);

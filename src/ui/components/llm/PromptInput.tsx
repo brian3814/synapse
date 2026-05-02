@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import { estimateExtractionCost } from '../../../shared/cost-estimator';
 import type { PageComplexity } from '../../../shared/types';
-import { storage } from '@platform';
+import { storage, browser } from '@platform';
 
 interface PromptInputProps {
   onSubmit: (prompt: string, sourceUrl?: string) => void;
@@ -41,8 +41,8 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
   }, [model, extractionMode, complexity]);
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-      setTabUrl(tabs[0]?.url ?? null);
+    browser.getActiveTab().then((tab) => {
+      setTabUrl(tab?.url ?? null);
     });
 
     storage.get('llmConfig').then((result: Record<string, any>) => {
@@ -68,7 +68,7 @@ export function PromptInput({ onSubmit }: PromptInputProps) {
     }).catch(() => {});
 
     // Analyze page complexity for auto-suggestion
-    chrome.runtime.sendMessage({ type: 'ANALYZE_PAGE' }).then((response: any) => {
+    (browser as any).analyzePage().then((response: any) => {
       if (response?.complexity) setComplexity(response.complexity);
     }).catch(() => {});
 

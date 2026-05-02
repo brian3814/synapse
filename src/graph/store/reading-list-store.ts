@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ReadingListItem } from '../../shared/types';
-import { storage } from '@platform';
+import { storage, browser } from '@platform';
 
 interface ReadingListStore {
   items: Record<string, ReadingListItem>; // keyed by URL
@@ -79,22 +79,19 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
         });
       }
     };
-    chrome.runtime.onMessage.addListener(messageListener);
+    const cleanupMessages = (browser as any).onRuntimeMessage(messageListener);
 
     // Return cleanup function
     return () => {
       cleanupStorage();
-      chrome.runtime.onMessage.removeListener(messageListener);
+      cleanupMessages();
     };
   },
 
   selectItem: (url) => set({ selectedUrl: url }),
 
   retryExtraction: (url) => {
-    chrome.runtime.sendMessage({
-      type: 'READING_LIST_RETRY',
-      payload: { url },
-    }).catch(console.error);
+    (browser as any).sendReadingListRetry(url).catch(console.error);
   },
 
   removeItem: (url) => {

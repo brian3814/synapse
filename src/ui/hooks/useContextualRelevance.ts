@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { nodes as nodesApi } from '../../db/client/db-client';
 import type { DbNode } from '../../shared/types';
-import { storage } from '@platform';
+import { storage, browser, platformId } from '@platform';
 
 export interface RelatedMatch {
   node: DbNode;
@@ -35,9 +35,9 @@ export function useContextualRelevance() {
     }
   }, []);
 
-  // Listen for PAGE_TERMS messages from content script
+  // Listen for PAGE_TERMS messages from content script (Chrome-only)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || platformId !== 'chrome') return;
 
     const listener = async (message: any) => {
       if (message.type !== 'PAGE_TERMS') return;
@@ -72,32 +72,28 @@ export function useContextualRelevance() {
       }
     };
 
-    chrome.runtime.onMessage.addListener(listener);
-    return () => chrome.runtime.onMessage.removeListener(listener);
+    const cleanup = (browser as any).onRuntimeMessage(listener);
+    return cleanup;
   }, [enabled]);
 
-  // Trigger extraction when active tab changes
+  // Trigger extraction when active tab changes (Chrome-only)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || platformId !== 'chrome') return;
 
     const triggerExtraction = async () => {
       try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const tab = tabs[0];
+        const tab = await browser.getActiveTab();
         if (!tab?.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
           return;
         }
         // Ensure content script is available, then request terms
         try {
-          await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PAGE_TERMS' });
+          await (browser as any).extractPageTerms(tab.id);
         } catch {
           // Content script not injected — try injecting first
           try {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['content-script.js'],
-            });
-            await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PAGE_TERMS' });
+            await (browser as any).ensureContentScript(tab.id);
+            await (browser as any).extractPageTerms(tab.id);
           } catch {
             // Cannot inject (e.g. chrome:// pages)
           }
@@ -111,19 +107,11 @@ export function useContextualRelevance() {
     triggerExtraction();
 
     // Trigger on tab activation
-    const tabListener = () => {
+    const cleanupTabListener = (browser as any).onTabActivated(() => {
       triggerExtraction();
-    };
+    });
 
-    try {
-      chrome.tabs.onActivated.addListener(tabListener);
-    } catch {}
-
-    return () => {
-      try {
-        chrome.tabs.onActivated.removeListener(tabListener);
-      } catch {}
-    };
+    return cleanupTabListener;
   }, [enabled]);
 
   return { relatedNodes, loading, currentUrl, enabled, toggleEnabled };

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { storage, notes, llm } from '@platform';
+import { storage, notes, llm, browser } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
@@ -280,11 +280,10 @@ export function useLLMExtraction() {
     }
 
     // Fetch page content: from custom URL or current tab
-    // Note: FETCH_URL and GET_PAGE_CONTENT_QUICK are browser operations (Task 9)
     let pageContent: { title: string; url: string; content: string };
     if (sourceUrl) {
       try {
-        const fetchResult = await chrome.runtime.sendMessage({ type: 'FETCH_URL', payload: { url: sourceUrl } });
+        const fetchResult = await (browser as any).fetchUrl(sourceUrl);
         if (fetchResult?.error) throw new Error(fetchResult.error);
         const content = fetchResult?.content ?? '';
         const titleMatch = content.match(/^#\s+(.+)/m);
@@ -299,8 +298,9 @@ export function useLLMExtraction() {
       }
     } else {
       try {
-        pageContent = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT_QUICK' }) as any;
-        if (!pageContent?.content) throw new Error('No page content received');
+        const result = await (browser as any).getPageContentFull();
+        if (!result?.content) throw new Error('No page content received');
+        pageContent = result;
       } catch (e: any) {
         llmStore.setError(`Failed to get page content: ${e.message}`);
         return;
@@ -506,9 +506,7 @@ export function useLLMExtraction() {
     llmStore.setError(null);
     llmStore.clearAgentTurns();
 
-    // Get active tab (browser operation — will be abstracted in Task 9)
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
+    const tab = await browser.getActiveTab();
     if (!tab?.id) {
       llmStore.setError('No active tab found');
       return;
