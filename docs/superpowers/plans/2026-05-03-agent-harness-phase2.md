@@ -4,9 +4,9 @@
 
 **Goal:** Add persistent semantic memory (user facts/preferences extracted from conversations) and a memory management UI. The agent learns from conversations and uses accumulated knowledge in future sessions.
 
-**Architecture:** Post-turn LLM extraction (fire-and-forget, Haiku model) stores categorized facts in SQLite. Memory is injected into the system prompt via the prompt assembler built in Phase 1. Memory UI is a new section in the Settings modal. DB integration follows the DataStore → action-handler → db-client chain. Memory repository is added to `DataStore` interface and `SqliteDataStore` implementation.
+**Architecture:** Post-turn LLM extraction (fire-and-forget, uses app's configured model with cheapest-available fallback — see `getConfiguredModel()`) stores categorized facts in SQLite. Memory is injected into the system prompt via the prompt assembler built in Phase 1. Memory UI is a new section in the Settings modal. DB integration follows the DataStore → action-handler → db-client chain. Memory repository is added to `DataStore` interface and `SqliteDataStore` implementation.
 
-**Tech Stack:** TypeScript, React 19, Zustand, SQLite, Anthropic API (Haiku for extraction)
+**Tech Stack:** TypeScript, React 19, Zustand, SQLite, Anthropic API (uses app's model config, not hardcoded)
 
 **Spec:** `docs/superpowers/specs/2026-05-03-agent-harness-design.md` — Section 3
 
@@ -158,7 +158,9 @@ git commit -m "feat(harness): add memory query module for semantic and episodic 
 - Modify: `src/db/worker/action-handler.ts`
 - Modify: `src/db/client/db-client.ts`
 
-Follows the full DataStore pattern: interface → implementation → action-handler → db-client. This is the same pattern used for `ChatRepository`, `NodeRepository`, etc.
+Follows the full DataStore pattern: interface in `data-store.ts` → implementation in `sqlite-data-store.ts` → action-handler cases → db-client namespace.
+
+**Architecture note**: The action handler imports query modules directly (Step 3 below). This is the established codebase pattern — ALL 60+ existing action-handler cases do the same (chat, nodes, edges, etc.). The action handler is the worker-side dispatcher that db-client talks to via message passing. SqliteDataStore is the in-process equivalent for direct callers (commands, MCP). Both delegate to the same query modules.
 
 - [ ] **Step 1: Add MemoryRepository interface to data-store.ts**
 
@@ -219,35 +221,31 @@ Add the `memory` delegation in the returned object:
 
 - [ ] **Step 3: Add memory actions to action-handler.ts**
 
-Add import:
+The action-handler already receives `dataStore: DataStore`. Route memory actions through `dataStore.memory.*` — do NOT import memoryQueries directly (that bypasses the DataStore abstraction):
 
 ```ts
-import * as memoryQueries from './queries/memory-queries';
-```
+    // No new import needed — dataStore is already available
 
-Add cases in the `handleAction` switch:
-
-```ts
     case 'memory.addSemantic':
-      return memoryQueries.addSemantic(payload);
+      return { result: await dataStore.memory.addSemantic(payload) };
     case 'memory.getAllSemantic':
-      return memoryQueries.getAllSemantic();
+      return { result: await dataStore.memory.getAllSemantic() };
     case 'memory.getRecentSemantic':
-      return memoryQueries.getRecentSemantic(payload?.limit);
+      return { result: await dataStore.memory.getRecentSemantic(payload?.limit) };
     case 'memory.deleteSemantic':
-      return memoryQueries.deleteSemantic(payload.id);
+      return { result: await dataStore.memory.deleteSemantic(payload.id) };
     case 'memory.clearAllSemantic':
-      return memoryQueries.clearAllSemantic();
+      return { result: await dataStore.memory.clearAllSemantic() };
     case 'memory.findDuplicate':
-      return memoryQueries.findDuplicateSemantic(payload.content);
+      return { result: await dataStore.memory.findDuplicateSemantic(payload.content) };
     case 'memory.touchSemantic':
-      return memoryQueries.touchSemantic(payload.id);
+      return { result: await dataStore.memory.touchSemantic(payload.id) };
     case 'memory.addEpisodic':
-      return memoryQueries.addEpisodic(payload);
+      return { result: await dataStore.memory.addEpisodic(payload) };
     case 'memory.getRecentEpisodic':
-      return memoryQueries.getRecentEpisodic(payload?.limit);
+      return { result: await dataStore.memory.getRecentEpisodic(payload?.limit) };
     case 'memory.clearAllEpisodic':
-      return memoryQueries.clearAllEpisodic();
+      return { result: await dataStore.memory.clearAllEpisodic() };
 ```
 
 - [ ] **Step 4: Add memory namespace to db-client.ts**
@@ -300,8 +298,19 @@ git commit -m "feat(harness): add MemoryRepository to DataStore and wire through
 
 ```ts
 // src/core/memory-extractor.ts
-import { llm } from '@platform';
+import { llm, storage } from '@platform';
 import { memory } from '../db/client/db-client';
+import { LLM_CONFIG_STORAGE_KEY, LLM_MODELS } from '../shared/constants';
+
+async function getConfiguredModel(): Promise<string> {
+  try {
+    const result = await storage.get(LLM_CONFIG_STORAGE_KEY);
+    const config = (result as any)[LLM_CONFIG_STORAGE_KEY];
+    if (config?.model) return config.model;
+  } catch {}
+  // Fallback to cheapest available model
+  return LLM_MODELS.anthropic[LLM_MODELS.anthropic.length - 1].id;
+}
 
 const MEMORY_EXTRACTION_PROMPT = `You extract facts about the user from a conversation exchange. Return a JSON array of objects with "category" and "content" fields. Categories:
 - "preference": how the user likes things done (tone, format, depth, topics of interest)
@@ -326,7 +335,7 @@ export async function extractSemanticMemories(
     const result = await llm.streamChat(
       {
         requestId,
-        model: 'claude-haiku-4-20250414',
+        model: await getConfiguredModel(),
         systemPrompt: MEMORY_EXTRACTION_PROMPT,
         messages: [
           {
