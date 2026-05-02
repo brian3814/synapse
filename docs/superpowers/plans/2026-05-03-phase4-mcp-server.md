@@ -242,9 +242,27 @@ The tools cover the full CRUD surface of the knowledge graph:
 import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import type { CommandContext } from '../commands/types';
+import type { CommandEvent } from '../commands/types';
+import * as graphCommands from '../commands/graph-commands';
+import { BrowserWindow } from 'electron';
+
+/**
+ * Broadcast command events to all renderer windows so the UI stays in sync.
+ * In the companion HTTP context, also emits to MCP clients via SSE.
+ */
+function broadcastEvents(events: CommandEvent[]): void {
+  if (events.length === 0) return;
+  for (const win of BrowserWindow.getAllWindows()) {
+    for (const event of events) {
+      win.webContents.send('db:sync', event);
+    }
+  }
+}
 
 /**
  * Register all knowledge graph tools on an McpServer instance.
+ * Mutating tools use command functions (not raw ctx.db) to get cleanup,
+ * provenance, and sync events.
  */
 export function registerTools(server: McpServer, ctx: CommandContext): void {
 
@@ -263,15 +281,18 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
       }),
     },
     async ({ name, type, label, properties, sourceUrl }) => {
-      const node = await ctx.db.nodes.create({
+      // Use graph-commands (not raw ctx.db) to get cleanup, provenance, and sync events
+      const result = await graphCommands.createNode(ctx, {
         name,
         type: type ?? 'entity',
         label: label ?? undefined,
         properties: properties ? JSON.stringify(properties) : undefined,
         sourceUrl,
       });
+      // Broadcast events to renderer windows
+      broadcastEvents(result.events);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(node, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
       };
     },
   );
@@ -290,7 +311,7 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
       }),
     },
     async ({ id, name, type, label, summary, properties }) => {
-      const node = await ctx.db.nodes.update({
+      const result = await graphCommands.updateNode(ctx, {
         id,
         name,
         type,
@@ -298,10 +319,11 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
         summary,
         properties: properties ? JSON.stringify(properties) : undefined,
       });
-      if (!node) {
+      broadcastEvents(result.events);
+      if (!result.data) {
         return { content: [{ type: 'text' as const, text: `Node ${id} not found` }], isError: true };
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(node, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }] };
     },
   );
 
@@ -314,9 +336,10 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
       }),
     },
     async ({ id }) => {
-      const deleted = await ctx.db.nodes.delete(id);
+      const result = await graphCommands.deleteNode(ctx, id);
+      broadcastEvents(result.events);
       return {
-        content: [{ type: 'text' as const, text: deleted ? `Deleted node ${id}` : `Node ${id} not found` }],
+        content: [{ type: 'text' as const, text: result.data ? `Deleted node ${id}` : `Node ${id} not found` }],
       };
     },
   );
@@ -337,7 +360,7 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
       }),
     },
     async ({ sourceId, targetId, label, type, properties, weight }) => {
-      const edge = await ctx.db.edges.create({
+      const result = await graphCommands.createEdge(ctx, {
         sourceId,
         targetId,
         label,
@@ -346,6 +369,8 @@ export function registerTools(server: McpServer, ctx: CommandContext): void {
         weight,
         directed: true,
       });
+      broadcastEvents(result.events);
+      const edge = result.data;
       return { content: [{ type: 'text' as const, text: JSON.stringify(edge, null, 2) }] };
     },
   );
@@ -875,8 +900,10 @@ import type { PlatformNotes, PlatformStorage } from '../src/platform/types';
 
 // ── Resolve paths (no Electron app module) ──────────────────────────
 
-// Match Electron's userData path convention per platform
+// Prefer env var (set by Electron app when generating MCP config) over guessing.
+// The Electron app writes KG_USER_DATA into the MCP config JSON it generates.
 function getUserDataPath(): string {
+  if (process.env.KG_USER_DATA) return process.env.KG_USER_DATA;
   const home = homedir();
   switch (process.platform) {
     case 'darwin':
@@ -1030,6 +1057,9 @@ async function main(): Promise<void> {
   const dataStore = createSqliteDataStore(initSQLite, resetSQLite);
   await dataStore.init();
 
+  // No PlatformLLM in stdio context — kg_extract_text will return an error.
+  // Standalone LLM config would require loading API keys from storage.json,
+  // which is a future enhancement.
   const ctx = createServerCommandContext(dataStore, notes, storage);
   const server = createMCPServer(ctx);
 
@@ -1137,15 +1167,35 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function cors(res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+// Allowed origins: only the companion extension and local dev tools.
+// Blocks arbitrary web pages from calling mutating MCP tools via CSRF.
+const ALLOWED_ORIGINS = new Set([
+  'chrome-extension://', // companion extension (any ID)
+  'http://localhost',
+  'http://127.0.0.1',
+]);
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true; // non-browser clients (curl, MCP stdio bridge)
+  return [...ALLOWED_ORIGINS].some((prefix) => origin.startsWith(prefix));
+}
+
+function cors(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin;
+  if (!isOriginAllowed(origin)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return false;
+  }
+  res.setHeader('Access-Control-Allow-Origin', origin ?? '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
   res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+  return true;
 }
 
 function json(res: ServerResponse, status: number, data: any): void {
-  cors(res);
+  // CORS headers already set by caller or not needed for same-origin
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
@@ -1175,22 +1225,24 @@ function wrapStorage(sb: StorageBackend): PlatformStorage {
 export interface CompanionServerOptions {
   dataStore: DataStore;
   storage: StorageBackend;
+  llm?: PlatformLLM;
 }
 
 export function startCompanionServer(opts: CompanionServerOptions): void {
-  const { dataStore, storage } = opts;
+  const { dataStore, storage, llm } = opts;
 
   // ── MCP transport sessions ──────────────────────────────────────
   const transports = new Map<string, NodeStreamableHTTPServerTransport>();
 
-  // Build the MCP server context once (shared across sessions)
+  // Build the MCP server context once (shared across sessions).
+  // Pass real PlatformLLM so kg_extract_text works via MCP.
   const notes = wrapNotes();
   const storageAdapter = wrapStorage(storage);
-  const ctx = createServerCommandContext(dataStore, notes, storageAdapter);
+  const ctx = createServerCommandContext(dataStore, notes, storageAdapter, llm);
 
   const server = createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
-      cors(res);
+      if (!cors(req, res)) return;
       res.writeHead(204);
       res.end();
       return;
@@ -1229,7 +1281,7 @@ export function startCompanionServer(opts: CompanionServerOptions): void {
     // ── MCP Streamable HTTP endpoint ────────────────────────────────
 
     if (req.url === '/mcp' && req.method === 'POST') {
-      cors(res);
+      if (!cors(req, res)) return;
       const bodyText = await readBody(req);
       let body: any;
       try {

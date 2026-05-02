@@ -760,10 +760,14 @@ git commit -m "feat(commands): extract chat tool executor to commands layer"
    ```
    (create once before the loop, not inside it)
    
-   And change the call to:
+   And change the call to destructure `ToolExecResult`:
    ```typescript
-   resultStr = await executeToolCmd(ctx, tc.name, tc.input);
+   const toolResult = await executeToolCmd(ctx, tc.name, tc.input);
+   resultStr = toolResult.result;
+   if (toolResult.collectedNodeIds) for (const id of toolResult.collectedNodeIds) collectedNodeIds.add(id);
+   if (toolResult.collectedEdgeIds) for (const id of toolResult.collectedEdgeIds) collectedEdgeIds.add(id);
    ```
+   Remove the old `collectIdsFromToolResult()` call — ID collection is now done per-tool inside the executor.
 
 5. Keep the `retrieveRAGContext` and `formatRAGPrompt` imports from `./rag-pipeline` (these are the thin wrappers from Task 5 — but actually `chat-tool-executor.ts` handles RAG directly now, so these imports may become unused. Check and remove if so.)
 
@@ -794,7 +798,7 @@ The wikilink parser currently imports `useGraphStore` (line 17) and calls `useGr
 1. Replace `import { useGraphStore } from '../graph/store/graph-store';` with `import type { CommandContext } from '../commands/types';`
 2. Replace `import { entityResolution } from '../db/client/db-client';` → remove (use ctx.db)
 3. Change `resolveWikilinks(wikilinks: string[])` to `resolveWikilinks(ctx: CommandContext, wikilinks: string[])`
-4. Inside `resolveWikilinks`, replace `const graph = useGraphStore.getState();` with `const graph = ctx.getGraphSnapshot();`
+4. Inside `resolveWikilinks`, replace `const graph = useGraphStore.getState();` with `const graph = await ctx.getGraphSnapshot();`
 5. Replace `entityResolution.findMatches(wikilink)` with `ctx.db.entityResolution.findMatches(wikilink)`
 6. Change `createWikilinkEdgesForNote(noteNodeId, content)` to `createWikilinkEdgesForNote(ctx: CommandContext, noteNodeId: string, content: string)`
 7. Inside `createWikilinkEdgesForNote`, replace `await resolveWikilinks(wikilinks)` with `await resolveWikilinks(ctx, wikilinks)`
@@ -865,11 +869,11 @@ Copy lines 27-180 from `useLLMExtraction.ts` into `src/commands/extraction-comma
 2. `normalizeExtractedNode` — move as-is (it's already pure, no dependencies).
 
 3. `ensureResourceNode(ctx: CommandContext, sourceUrl, title?)` — replace:
-   - `const graph = useGraphStore.getState();` → `const graph = ctx.getGraphSnapshot();`
+   - `const graph = useGraphStore.getState();` → `const graph = await ctx.getGraphSnapshot();`
    - `await graph.createNode(...)` → `const result = await graphCommands.createNode(ctx, ...); const created = result.data;`
 
 4. `buildDiffItems(ctx: CommandContext, validated)` — replace:
-   - `const graph = useGraphStore.getState();` → `const graph = ctx.getGraphSnapshot();`
+   - `const graph = useGraphStore.getState();` → `const graph = await ctx.getGraphSnapshot();`
    - `await entityResolution.findMatches(node.name)` → `await ctx.db.entityResolution.findMatches(node.name)`
 
 5. Export all three functions and the `NormalizedExtractedNode` interface.
@@ -910,7 +914,7 @@ export async function applyDiff(
 ```
 
 Replace throughout:
-- `useGraphStore.getState()` → `ctx.getGraphSnapshot()` for node lookups
+- `useGraphStore.getState()` → `await ctx.getGraphSnapshot()` for node lookups
 - `graph.createNode(...)` → `graphCommands.createNode(ctx, ...)`
 - `graph.createEdge(...)` → `graphCommands.createEdge(ctx, ...)`
 - `entityResolution.addAlias(...)` → `ctx.db.entityResolution.addAlias(...)`

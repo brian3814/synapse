@@ -219,6 +219,10 @@ export class ToolRegistry {
     if (filter?.executionTarget) {
       results = results.filter((t) => t.executionTarget === filter.executionTarget);
     }
+    if (filter?.allowedNames && filter.allowedNames.length > 0) {
+      const allowed = new Set(filter.allowedNames);
+      results = results.filter((t) => allowed.has(t.name));
+    }
 
     return results;
   }
@@ -561,7 +565,8 @@ import { executeTool as chatExecuteTool } from '../../commands/chat-tool-executo
  */
 function makeChatExecute(toolName: string) {
   return async (input: Record<string, unknown>, ctx: CommandContext): Promise<string> => {
-    return chatExecuteTool(ctx, toolName, input);
+    const execResult = await chatExecuteTool(ctx, toolName, input);
+    return execResult.result;
   };
 }
 
@@ -1171,14 +1176,30 @@ export class ToolDispatcher implements ToolExecutor {
   private registry: ToolRegistry;
   private ctx: CommandContext;
   private contentScriptFallback?: ContentScriptFallback;
+  private allowedToolNames?: Set<string>;
 
   constructor(config: ToolDispatcherConfig) {
     this.registry = config.registry;
     this.ctx = config.ctx;
     this.contentScriptFallback = config.contentScriptFallback;
+    this.allowedToolNames = config.allowedToolNames;
+  }
+
+  /** Get tool definitions filtered by the allowlist (if set). */
+  getTools(filter?: ToolFilter): UnifiedToolDefinition[] {
+    const baseFilter = { ...filter };
+    if (this.allowedToolNames) {
+      baseFilter.allowedNames = [...this.allowedToolNames];
+    }
+    return this.registry.list(baseFilter);
   }
 
   async execute(tc: ToolCall): Promise<{ result: string; error?: string }> {
+    // Enforce allowlist at execution time too (not just prompt exposure)
+    if (this.allowedToolNames && !this.allowedToolNames.has(tc.name)) {
+      return { result: '', error: `Tool "${tc.name}" is not available in this session` };
+    }
+
     const tool = this.registry.get(tc.name);
     if (!tool) {
       return { result: '', error: `Unknown tool: ${tc.name}` };
@@ -1624,7 +1645,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
     notes: {} as any,
     llm: {} as any,
     browser: {} as any,
-    getGraphSnapshot: () => ({ nodes: [], edges: [] }),
+    getGraphSnapshot: async () => ({ nodes: [], edges: [] }),
   };
 
   // Override fetch_url with the offscreen-specific implementation that
@@ -1741,7 +1762,7 @@ function createElectronExtractionDispatcher(): ToolExecutor {
     notes: {} as any,
     llm: {} as any,
     browser: {} as any,
-    getGraphSnapshot: () => ({ nodes: [], edges: [] }),
+    getGraphSnapshot: async () => ({ nodes: [], edges: [] }),
   };
 
   const dispatcher = createToolDispatcher(toolRegistry, minimalCtx);
