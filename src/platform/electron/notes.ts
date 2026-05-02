@@ -31,4 +31,16 @@ export class ElectronNotes implements PlatformNotes {
   exists(nodeId: string): Promise<boolean> {
     return window.electronIPC.invoke('notes:exists', nodeId) as Promise<boolean>;
   }
+
+  getStoragePath(): Promise<string> {
+    return window.electronIPC.invoke('notes:getPath') as Promise<string>;
+  }
+
+  pickNewFolder(): Promise<string | null> {
+    return window.electronIPC.invoke('notes:pickFolder') as Promise<string | null>;
+  }
+
+  moveToFolder(newPath: string): Promise<{ moved: number; errors: string[] }> {
+    return window.electronIPC.invoke('notes:move', newPath) as Promise<{ moved: number; errors: string[] }>;
+  }
 }

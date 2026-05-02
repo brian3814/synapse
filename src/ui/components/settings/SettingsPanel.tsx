@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
-import { storage } from '@platform';
+import { storage, platformId, notes } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
 import { useGraphStore } from '../../../graph/store/graph-store';
@@ -122,6 +122,8 @@ export function SettingsPanel() {
       <UsageSection />
 
       <RelevanceSection />
+
+      {platformId === 'electron' && <NotesStorageSection />}
 
       <FolderSection />
 
@@ -301,6 +303,112 @@ function RelevanceSection() {
             }`}
           />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function NotesStorageSection() {
+  const [currentPath, setCurrentPath] = useState<string>('');
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
+  const [noteCount, setNoteCount] = useState(0);
+  const [moving, setMoving] = useState(false);
+  const [result, setResult] = useState<{ moved: number; errors: string[] } | null>(null);
+
+  const electronNotes = notes as any;
+
+  useEffect(() => {
+    electronNotes.getStoragePath?.().then((p: string) => setCurrentPath(p));
+    notes.list().then((ids: string[]) => setNoteCount(ids.length));
+  }, []);
+
+  const handlePickFolder = async () => {
+    setResult(null);
+    const picked = await electronNotes.pickNewFolder?.();
+    if (picked && picked !== currentPath) {
+      setPendingPath(picked);
+    }
+  };
+
+  const handleConfirmMove = async () => {
+    if (!pendingPath) return;
+    setMoving(true);
+    setResult(null);
+    try {
+      const res = await electronNotes.moveToFolder?.(pendingPath);
+      setResult(res);
+      setCurrentPath(pendingPath);
+      setPendingPath(null);
+      const ids = await notes.list();
+      setNoteCount(ids.length);
+    } catch (e: any) {
+      setResult({ moved: 0, errors: [e.message] });
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-zinc-700 pt-4 mt-4">
+      <h4 className="text-xs font-medium text-zinc-400 mb-2">Notes Storage</h4>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-xs text-zinc-500 mb-1">Location</p>
+          <p className="text-xs text-zinc-200 bg-zinc-800 rounded px-2 py-1.5 font-mono break-all border border-zinc-700">
+            {currentPath}
+          </p>
+          <p className="text-[10px] text-zinc-500 mt-1">
+            {noteCount} {noteCount === 1 ? 'note' : 'notes'} stored as .md files
+          </p>
+        </div>
+
+        {!pendingPath ? (
+          <button
+            onClick={handlePickFolder}
+            className="w-full bg-zinc-700 text-zinc-200 text-sm py-1.5 rounded hover:bg-zinc-600 transition-colors"
+          >
+            Change Location
+          </button>
+        ) : (
+          <div className="space-y-2 bg-amber-950/30 border border-amber-800/40 rounded p-3">
+            <p className="text-xs text-amber-300">Move notes to:</p>
+            <p className="text-xs text-zinc-200 font-mono break-all">{pendingPath}</p>
+            <p className="text-xs text-zinc-400">
+              This will move {noteCount} {noteCount === 1 ? 'note' : 'notes'} from the current location to the new folder.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmMove}
+                disabled={moving}
+                className="flex-1 bg-amber-600 text-white text-sm py-1.5 rounded hover:bg-amber-500 transition-colors disabled:opacity-50"
+              >
+                {moving ? 'Moving...' : 'Move Notes'}
+              </button>
+              <button
+                onClick={() => setPendingPath(null)}
+                disabled={moving}
+                className="flex-1 bg-zinc-700 text-zinc-300 text-sm py-1.5 rounded hover:bg-zinc-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className={`text-xs ${result.errors.length > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+            {result.moved > 0 && <p>Moved {result.moved} {result.moved === 1 ? 'note' : 'notes'} successfully.</p>}
+            {result.errors.length > 0 && (
+              <div className="mt-1">
+                <p className="text-red-400">{result.errors.length} {result.errors.length === 1 ? 'error' : 'errors'}:</p>
+                {result.errors.map((e, i) => (
+                  <p key={i} className="text-red-400/80 text-[10px] ml-2">{e}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

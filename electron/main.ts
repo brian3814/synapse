@@ -55,6 +55,7 @@ app.whenReady().then(() => {
 
   const storage = new StorageBackend();
   setLLMStorage(storage);
+  notesBackend.setStorage(storage);
 
   ipcMain.handle('storage:get', (_event, keys) => {
     return storage.get(keys);
@@ -110,6 +111,18 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:exists', (_event, nodeId: string) => {
     return notesBackend.noteExists(nodeId);
+  });
+
+  ipcMain.handle('notes:getPath', () => {
+    return notesBackend.getNotesPath();
+  });
+
+  ipcMain.handle('notes:pickFolder', async () => {
+    return notesBackend.pickNotesFolder();
+  });
+
+  ipcMain.handle('notes:move', (_event, newPath: string) => {
+    return notesBackend.moveNotes(newPath);
   });
 
   ipcMain.handle('runtime:sendMessage', async (_event, message) => {
