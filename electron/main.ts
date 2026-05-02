@@ -3,7 +3,7 @@ import path from 'path';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
-import { handleRuntimeMessage, setStorage as setLLMStorage } from './llm-backend';
+import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat } from './llm-backend';
 import { startCompanionServer } from './companion-server';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
@@ -119,6 +119,19 @@ app.whenReady().then(() => {
       }
     });
     return result;
+  });
+
+  // Dedicated LLM IPC handlers — send directly to requesting renderer
+  ipcMain.handle('llm:stream-extraction', async (event, payload) => {
+    handleStreamExtraction(payload, (channel, ...args) => event.sender.send(channel, ...args));
+  });
+
+  ipcMain.handle('llm:run-agent', async (event, payload) => {
+    handleRunAgent(payload, (channel, ...args) => event.sender.send(channel, ...args));
+  });
+
+  ipcMain.handle('llm:stream-chat', async (event, payload) => {
+    handleStreamChat(payload, (channel, ...args) => event.sender.send(channel, ...args));
   });
 
   startCompanionServer();

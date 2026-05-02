@@ -1,36 +1,34 @@
 import type { PlatformNotes } from '../types';
 
-export class ElectronNotes implements PlatformNotes {
-  private api = (window as any).electronNotes as {
-    init: () => Promise<void>;
-    read: (nodeId: string) => Promise<string | null>;
-    write: (nodeId: string, markdown: string) => Promise<void>;
-    remove: (nodeId: string) => Promise<void>;
-    list: () => Promise<string[]>;
-    exists: (nodeId: string) => Promise<boolean>;
+declare const window: Window & {
+  electronIPC: {
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    on(channel: string, cb: (...args: unknown[]) => void): () => void;
   };
+};
 
+export class ElectronNotes implements PlatformNotes {
   async init(): Promise<void> {
-    await this.api.init();
+    await window.electronIPC.invoke('notes:init');
   }
 
   read(nodeId: string): Promise<string | null> {
-    return this.api.read(nodeId);
+    return window.electronIPC.invoke('notes:read', nodeId) as Promise<string | null>;
   }
 
   write(nodeId: string, markdown: string): Promise<void> {
-    return this.api.write(nodeId, markdown);
+    return window.electronIPC.invoke('notes:write', nodeId, markdown) as Promise<void>;
   }
 
   remove(nodeId: string): Promise<void> {
-    return this.api.remove(nodeId);
+    return window.electronIPC.invoke('notes:remove', nodeId) as Promise<void>;
   }
 
   list(): Promise<string[]> {
-    return this.api.list();
+    return window.electronIPC.invoke('notes:list') as Promise<string[]>;
   }
 
   exists(nodeId: string): Promise<boolean> {
-    return this.api.exists(nodeId);
+    return window.electronIPC.invoke('notes:exists', nodeId) as Promise<boolean>;
   }
 }

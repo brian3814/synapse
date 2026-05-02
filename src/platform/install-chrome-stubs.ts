@@ -6,28 +6,28 @@ const tabsStub = {
   create: (_props: any) => Promise.resolve({ id: 0 }),
 };
 
+declare const window: Window & {
+  electronIPC?: {
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    on(channel: string, cb: (...args: unknown[]) => void): () => void;
+  };
+};
+
 export function installChromeStubs(): void {
   if (typeof globalThis.chrome?.runtime?.id === 'string') {
     return;
   }
 
-  const eStorage = (window as any).electronStorage as {
-    get: (keys?: any) => Promise<Record<string, any>>;
-    set: (items: any) => Promise<void>;
-    remove: (keys: any) => Promise<void>;
-    onChanged: (cb: (changes: any, areaName: string) => void) => () => void;
-  } | undefined;
-
-  const eRuntime = (window as any).electronRuntime as {
-    sendMessage: (message: any) => Promise<any>;
-    onMessage: (cb: (message: any) => void) => () => void;
+  const eIPC = (window as any).electronIPC as {
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    on(channel: string, cb: (...args: unknown[]) => void): () => void;
   } | undefined;
 
   // Storage stubs
   const changeListeners: Listener[] = [];
 
-  if (eStorage) {
-    eStorage.onChanged((changes, areaName) => {
+  if (eIPC) {
+    eIPC.on('storage:changed', (changes: unknown, areaName: unknown) => {
       for (const fn of changeListeners) {
         fn(changes, areaName);
       }
@@ -36,9 +36,9 @@ export function installChromeStubs(): void {
 
   const storageStub = {
     local: {
-      get: (keys?: any) => eStorage ? eStorage.get(keys) : Promise.resolve({}),
-      set: (items: any) => eStorage ? eStorage.set(items) : Promise.resolve(),
-      remove: (keys: any) => eStorage ? eStorage.remove(keys) : Promise.resolve(),
+      get: (keys?: any) => eIPC ? eIPC.invoke('storage:get', keys) : Promise.resolve({}),
+      set: (items: any) => eIPC ? eIPC.invoke('storage:set', items) : Promise.resolve(),
+      remove: (keys: any) => eIPC ? eIPC.invoke('storage:remove', keys) : Promise.resolve(),
     },
     session: {
       get: (_keys?: any) => Promise.resolve({}),
@@ -57,8 +57,8 @@ export function installChromeStubs(): void {
   // Runtime stubs
   const messageListeners: Listener[] = [];
 
-  if (eRuntime) {
-    eRuntime.onMessage((message) => {
+  if (eIPC) {
+    eIPC.on('runtime:broadcast', (message: unknown) => {
       for (const fn of messageListeners) {
         fn(message, {}, () => {});
       }
@@ -67,8 +67,8 @@ export function installChromeStubs(): void {
 
   const runtimeStub = {
     sendMessage: (message: any, callback?: (response: any) => void) => {
-      if (eRuntime) {
-        const promise = eRuntime.sendMessage(message);
+      if (eIPC) {
+        const promise = eIPC.invoke('runtime:sendMessage', message);
         if (callback) {
           promise.then(callback).catch(() => callback(undefined));
           return;
@@ -99,12 +99,8 @@ export function installChromeStubs(): void {
   };
 
   // Wire companion capture events to runtime message listeners
-  const eCompanion = (window as any).electronCompanion as {
-    onCapture: (cb: (data: { title: string; url: string; content: string }) => void) => () => void;
-  } | undefined;
-
-  if (eCompanion) {
-    eCompanion.onCapture((data) => {
+  if (eIPC) {
+    eIPC.on('companion:capture', (data: unknown) => {
       for (const fn of messageListeners) {
         fn({ type: 'COMPANION_PAGE_CAPTURED', payload: data }, {}, () => {});
       }
