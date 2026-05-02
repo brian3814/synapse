@@ -2,35 +2,6 @@ import { nodes, edges } from '../../db/client/db-client';
 import { graphQuerySchema } from '../../db/worker/query-engine/schema';
 import { storage } from '@platform';
 
-export function streamFromOffscreen(
-  requestId: string,
-  onChunk: (text: string) => void
-): Promise<{ content?: string; error?: string }> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('LLM stream timed out after 120s'));
-    }, 120_000);
-
-    const listener = (message: any) => {
-      if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-      const { chunk, done, content, error } = message.payload;
-      if (chunk) onChunk(chunk);
-      if (done) {
-        cleanup();
-        resolve({ content, error });
-      }
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      chrome.runtime.onMessage.removeListener(listener);
-    };
-
-    chrome.runtime.onMessage.addListener(listener);
-  });
-}
-
 export async function fetchLLMConfigAndTypes() {
   const [nodeTypesList, edgeTypesList, storageResult] = await Promise.all([
     nodes.getTypes(),

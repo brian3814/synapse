@@ -2,7 +2,7 @@ import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-
 import { nodes, edges, sourceContent } from '../../db/client/db-client';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-pipeline';
-import { notes } from '@platform';
+import { notes, llm } from '@platform';
 import { parseMarkdown } from '../../notes/markdown-utils';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
@@ -196,10 +196,10 @@ export async function runChatAgent({
 }
 
 // ---------------------------------------------------------------------------
-// LLM request via chrome.runtime messaging (UI -> SW -> Offscreen -> stream back)
+// LLM request via platform abstraction
 // ---------------------------------------------------------------------------
 
-function sendChatLLMRequest(
+async function sendChatLLMRequest(
   requestId: string,
   payload: {
     provider: string;
@@ -215,47 +215,27 @@ function sendChatLLMRequest(
   stopReason?: string;
   error?: string;
 }> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve({ error: 'Chat LLM request timed out after 120s' });
-    }, 120_000);
-
-    const listener = (message: any) => {
-      if (message.type !== 'CHAT_LLM_STREAM' || message.payload?.requestId !== requestId) return;
-      const p = message.payload;
-
-      if (p.textChunk) {
-        onProgress({ type: 'text_chunk', textChunk: p.textChunk });
-      }
-
-      if (p.done) {
-        cleanup();
-        if (p.error) {
-          resolve({ error: p.error });
-        } else {
-          resolve({
-            textContent: p.textContent,
-            toolCalls: p.toolCalls,
-            stopReason: p.stopReason,
-          });
-        }
-      }
+  try {
+    const result = await llm.streamChat(
+      {
+        requestId,
+        model: payload.model,
+        systemPrompt: payload.systemPrompt,
+        messages: payload.messages,
+        tools: payload.tools,
+      },
+      (textChunk) => {
+        onProgress({ type: 'text_chunk', textChunk });
+      },
+    );
+    return {
+      textContent: result.textContent,
+      toolCalls: result.toolCalls,
+      stopReason: result.stopReason,
     };
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      chrome.runtime.onMessage.removeListener(listener);
-    };
-
-    chrome.runtime.onMessage.addListener(listener);
-
-    // Send request to service worker
-    chrome.runtime.sendMessage({
-      type: 'CHAT_LLM_REQUEST',
-      payload: { requestId, ...payload },
-    });
-  });
+  } catch (e: any) {
+    return { error: e.message };
+  }
 }
 
 // ---------------------------------------------------------------------------

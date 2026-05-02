@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { storage, notes } from '@platform';
+import { storage, notes, llm } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
@@ -22,54 +22,7 @@ import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch
 import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';
-import type { DiffItem, ExtractedNoteCandidate, AgentProgressEvent, EntityMatch } from '../../shared/types';
-
-function streamFromOffscreen(
-  requestId: string,
-  onChunk: (text: string) => void
-): Promise<{ content?: string; error?: string }> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('LLM stream timed out after 120s'));
-    }, 120_000);
-
-    const listener = (message: any) => {
-      if (message.type === 'RATE_LIMIT_WAIT' && message.payload?.requestId === requestId) {
-        useLLMStore.getState().setRateLimitWait({
-          retryAfterMs: message.payload.retryAfterMs,
-          startedAt: Date.now(),
-          retryCount: message.payload.retryCount,
-          maxRetries: message.payload.maxRetries,
-        });
-        return;
-      }
-
-      if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-      const { chunk, done, content, error, errorType, inputTokens, outputTokens, model } = message.payload;
-      if (chunk) onChunk(chunk);
-      if (done) {
-        // Rate-limit errors are retried by the service worker — don't resolve yet
-        if (error && (errorType === 'rate_limit' || errorType === 'overloaded')) return;
-
-        cleanup();
-        useLLMStore.getState().setRateLimitWait(null);
-        if (inputTokens != null && model) {
-          const costCents = computeCostCents(model, inputTokens, outputTokens ?? 0);
-          useLLMStore.getState().setLastUsage({ inputTokens, outputTokens: outputTokens ?? 0, costCents });
-        }
-        resolve({ content, error });
-      }
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      chrome.runtime.onMessage.removeListener(listener);
-    };
-
-    chrome.runtime.onMessage.addListener(listener);
-  });
-}
+import type { DiffItem, ExtractedNoteCandidate, EntityMatch } from '../../shared/types';
 
 /**
  * Normalizes an LLM-extracted node to the three-layer model:
@@ -235,18 +188,18 @@ export function useLLMExtraction() {
       return;
     }
 
-    const llm = useLLMStore.getState();
-    llm.setInputText(text);
-    llm.setSourceUrl(sourceUrl ?? null);
-    llm.setError(null);
+    const llmStore = useLLMStore.getState();
+    llmStore.setInputText(text);
+    llmStore.setSourceUrl(sourceUrl ?? null);
+    llmStore.setError(null);
 
     // Start agent run with steps
-    const requestId = llm.startAgentRun([
+    llmStore.startAgentRun([
       { id: 'extract', label: 'Extracting entities via LLM' },
       { id: 'parse', label: 'Parsing response' },
     ]);
 
-    llm.setStatus('extracting');
+    llmStore.setStatus('extracting');
 
     try {
       const result = await storage.get('llmConfig') as Record<string, any>;
@@ -257,33 +210,31 @@ export function useLLMExtraction() {
 
       const notesOn = await isNotesEnabled();
 
-      // Send LLM_REQUEST with requestId — offscreen reads apiKey from storage directly
-      chrome.runtime.sendMessage({
-        type: 'LLM_REQUEST',
-        requestId,
-        payload: {
-          provider: config.provider,
-          model: config.model,
+      const streamResult = await llm.streamExtraction(
+        {
           prompt: text,
+          model: config.model,
           systemPrompt: getQuickExtractSystemPrompt(notesOn),
-          notesEnabled: notesOn,
         },
-      });
+        (chunk) => {
+          useLLMStore.getState().appendToCurrentStep(chunk);
+        },
+        (info) => {
+          useLLMStore.getState().setRateLimitWait({
+            ...info,
+            startedAt: Date.now(),
+          });
+        },
+      );
 
-      // Listen for stream chunks
-      const streamResult = await streamFromOffscreen(requestId, (chunk) => {
-        useLLMStore.getState().appendToCurrentStep(chunk);
-      });
-
-      if (streamResult.error) {
-        throw new Error(streamResult.error);
-      }
+      useLLMStore.getState().setRateLimitWait(null);
+      const costCents = computeCostCents(config.model, streamResult.inputTokens, streamResult.outputTokens);
+      useLLMStore.getState().setLastUsage({ inputTokens: streamResult.inputTokens, outputTokens: streamResult.outputTokens, costCents });
 
       // Complete extract step, advance to parse step
       useLLMStore.getState().completeCurrentStep();
       useLLMStore.getState().advanceStep();
 
-      // Get the content from the stream result or from the step output
       const content = streamResult.content
         ?? useLLMStore.getState().agentRun?.steps[0]?.output
         ?? '';
@@ -296,11 +247,11 @@ export function useLLMExtraction() {
       const parsed = JSON.parse(jsonMatch[0]);
       const validated = extractionResultSchema.parse(parsed);
 
-      const { items, notes } = await buildDiffItems(validated);
+      const { items, notes: extractedNotes } = await buildDiffItems(validated);
 
       // Complete parse step
       useLLMStore.getState().completeCurrentStep();
-      useLLMStore.getState().setDiff({ items, notes });
+      useLLMStore.getState().setDiff({ items, notes: extractedNotes });
       useLLMStore.getState().setStatus('extracted');
     } catch (e: any) {
       const llmState = useLLMStore.getState();
@@ -317,18 +268,19 @@ export function useLLMExtraction() {
       return;
     }
 
-    const llm = useLLMStore.getState();
-    llm.setError(null);
+    const llmStore = useLLMStore.getState();
+    llmStore.setError(null);
 
     // Get LLM config
     const result = await storage.get('llmConfig') as Record<string, any>;
     const config = result.llmConfig;
     if (!config?.apiKey) {
-      llm.setError('No API key configured. Go to Settings to add one.');
+      llmStore.setError('No API key configured. Go to Settings to add one.');
       return;
     }
 
     // Fetch page content: from custom URL or current tab
+    // Note: FETCH_URL and GET_PAGE_CONTENT_QUICK are browser operations (Task 9)
     let pageContent: { title: string; url: string; content: string };
     if (sourceUrl) {
       try {
@@ -342,7 +294,7 @@ export function useLLMExtraction() {
           content,
         };
       } catch (e: any) {
-        llm.setError(`Failed to fetch URL: ${e.message}`);
+        llmStore.setError(`Failed to fetch URL: ${e.message}`);
         return;
       }
     } else {
@@ -350,20 +302,20 @@ export function useLLMExtraction() {
         pageContent = await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT_QUICK' }) as any;
         if (!pageContent?.content) throw new Error('No page content received');
       } catch (e: any) {
-        llm.setError(`Failed to get page content: ${e.message}`);
+        llmStore.setError(`Failed to get page content: ${e.message}`);
         return;
       }
     }
 
-    llm.setInputText(pageContent.content);
-    llm.setSourceUrl(pageContent.url);
+    llmStore.setInputText(pageContent.content);
+    llmStore.setSourceUrl(pageContent.url);
 
-    const requestId = llm.startAgentRun([
+    llmStore.startAgentRun([
       { id: 'extract', label: 'Quick extracting entities via LLM' },
       { id: 'parse', label: 'Parsing response' },
     ]);
 
-    llm.setStatus('extracting');
+    llmStore.setStatus('extracting');
 
     const notesOn = await isNotesEnabled();
 
@@ -372,23 +324,26 @@ export function useLLMExtraction() {
         ? `${prompt}\n\n---\n\nPage content:\n\n${pageContent.content}`
         : `Extract entities and relationships from the following web page:\n\n${pageContent.content}`;
 
-      chrome.runtime.sendMessage({
-        type: 'LLM_REQUEST',
-        requestId,
-        payload: {
-          provider: config.provider,
-          model: config.model,
+      const streamResult = await llm.streamExtraction(
+        {
           prompt: userContent,
+          model: config.model,
           systemPrompt: getQuickExtractSystemPrompt(notesOn),
-          notesEnabled: notesOn,
         },
-      });
+        (chunk) => {
+          useLLMStore.getState().appendToCurrentStep(chunk);
+        },
+        (info) => {
+          useLLMStore.getState().setRateLimitWait({
+            ...info,
+            startedAt: Date.now(),
+          });
+        },
+      );
 
-      const streamResult = await streamFromOffscreen(requestId, (chunk) => {
-        useLLMStore.getState().appendToCurrentStep(chunk);
-      });
-
-      if (streamResult.error) throw new Error(streamResult.error);
+      useLLMStore.getState().setRateLimitWait(null);
+      const costCents = computeCostCents(config.model, streamResult.inputTokens, streamResult.outputTokens);
+      useLLMStore.getState().setLastUsage({ inputTokens: streamResult.inputTokens, outputTokens: streamResult.outputTokens, costCents });
 
       useLLMStore.getState().completeCurrentStep();
       useLLMStore.getState().advanceStep();
@@ -402,10 +357,10 @@ export function useLLMExtraction() {
 
       const parsed = JSON.parse(jsonMatch[0]);
       const validated = extractionResultSchema.parse(parsed);
-      const { items, notes } = await buildDiffItems(validated);
+      const { items, notes: extractedNotes } = await buildDiffItems(validated);
 
       useLLMStore.getState().completeCurrentStep();
-      useLLMStore.getState().setDiff({ items, notes });
+      useLLMStore.getState().setDiff({ items, notes: extractedNotes });
       useLLMStore.getState().setStatus('extracted');
     } catch (e: any) {
       const llmState = useLLMStore.getState();
@@ -415,11 +370,11 @@ export function useLLMExtraction() {
   }, []);
 
   const applyDiff = useCallback(async () => {
-    const llm = useLLMStore.getState();
-    const diff = llm.diff;
+    const llmStore = useLLMStore.getState();
+    const diff = llmStore.diff;
     if (!diff) return;
 
-    llm.setStatus('merging');
+    llmStore.setStatus('merging');
 
     try {
       const graph = useGraphStore.getState();
@@ -436,7 +391,7 @@ export function useLLMExtraction() {
             name: extracted.name,
             type: extracted.type,
             properties: extracted.properties,
-            sourceUrl: llm.sourceUrl ?? undefined,
+            sourceUrl: llmStore.sourceUrl ?? undefined,
           });
           if (created) {
             nodeIdMap.set(extracted.name.toLowerCase(), created.id);
@@ -478,25 +433,25 @@ export function useLLMExtraction() {
             sourceId,
             targetId,
             label: extracted.label,
-            sourceUrl: llm.sourceUrl ?? undefined,
+            sourceUrl: llmStore.sourceUrl ?? undefined,
             skipProvenance: true,
           });
         }
       }
 
       // Save source content if we have text and a URL
-      if (llm.sourceUrl && llm.inputText) {
+      if (llmStore.sourceUrl && llmStore.inputText) {
         try {
           // Find or create the resource node for this URL
-          const resourceNodeId = nodeIdMap.get(llm.sourceUrl.toLowerCase())
+          const resourceNodeId = nodeIdMap.get(llmStore.sourceUrl.toLowerCase())
             ?? useGraphStore.getState().nodes.find(
-              (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
+              (n) => n.sourceUrl === llmStore.sourceUrl && n.type === 'resource'
             )?.id;
 
           await sourceContent.save({
             nodeId: resourceNodeId,
-            url: llm.sourceUrl,
-            content: llm.inputText,
+            url: llmStore.sourceUrl,
+            content: llmStore.inputText,
           });
         } catch (e) {
           console.warn('[Extraction] Failed to save source content:', e);
@@ -506,9 +461,9 @@ export function useLLMExtraction() {
       // Link entity nodes to their source resource (parallelized per Pitfall #20).
       // The three-layer model tracks this in entity_sources with a relation_type
       // distinction (about/mention). Direct extraction without notes defaults to 'about'.
-      if (llm.sourceUrl) {
+      if (llmStore.sourceUrl) {
         const resourceNode = useGraphStore.getState().nodes.find(
-          (n) => n.sourceUrl === llm.sourceUrl && n.type === 'resource'
+          (n) => n.sourceUrl === llmStore.sourceUrl && n.type === 'resource'
         );
         if (resourceNode) {
           const entityNodeIds: string[] = [];
@@ -547,15 +502,15 @@ export function useLLMExtraction() {
       return;
     }
 
-    const llm = useLLMStore.getState();
-    llm.setError(null);
-    llm.clearAgentTurns();
+    const llmStore = useLLMStore.getState();
+    llmStore.setError(null);
+    llmStore.clearAgentTurns();
 
-    // Get active tab
+    // Get active tab (browser operation — will be abstracted in Task 9)
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
     if (!tab?.id) {
-      llm.setError('No active tab found');
+      llmStore.setError('No active tab found');
       return;
     }
 
@@ -563,17 +518,17 @@ export function useLLMExtraction() {
     const result = await storage.get('llmConfig') as Record<string, any>;
     const config = result.llmConfig;
     if (!config?.apiKey) {
-      llm.setError('No API key configured. Go to Settings to add one.');
+      llmStore.setError('No API key configured. Go to Settings to add one.');
       return;
     }
     if (config.provider !== 'anthropic') {
-      llm.setError('Page extraction requires an Anthropic API key. Configure one in Settings.');
+      llmStore.setError('Page extraction requires an Anthropic API key. Configure one in Settings.');
       return;
     }
 
     const runId = crypto.randomUUID();
-    llm.setStatus('agent-running');
-    llm.setSourceUrl(sourceUrl ?? tab.url ?? null);
+    llmStore.setStatus('agent-running');
+    llmStore.setSourceUrl(sourceUrl ?? tab.url ?? null);
 
     const notesOn = await isNotesEnabled();
 
@@ -584,88 +539,79 @@ export function useLLMExtraction() {
       agentPrompt = `${agentPrompt}\n\nIMPORTANT: Extract from this URL instead of the current tab: ${sourceUrl}\nUse fetch_url to retrieve its content.`;
     }
 
-    // Send AGENT_RUN_START — offscreen reads apiKey from storage directly
-    chrome.runtime.sendMessage({
-      type: 'AGENT_RUN_START',
-      payload: {
-        runId,
-        userPrompt: agentPrompt,
-        tabId: tab.id,
-        provider: config.provider,
-        model: config.model,
-        notesEnabled: notesOn,
-      },
-    });
+    try {
+      await llm.runAgent(
+        {
+          runId,
+          userPrompt: agentPrompt,
+          model: config.model,
+          tabId: tab.id,
+          notesEnabled: notesOn,
+        },
+        async (event) => {
+          const store = useLLMStore.getState();
 
-    // Listen for AGENT_PROGRESS events
-    const listener = async (message: any) => {
-      if (message.type !== 'AGENT_PROGRESS' || message.payload?.runId !== runId) return;
-
-      const event: AgentProgressEvent = message.payload.event;
-      const store = useLLMStore.getState();
-
-      switch (event.type) {
-        case 'llm_start':
-          store.addAgentTurn({ type: 'thinking', content: '' });
-          break;
-        case 'llm_chunk':
-          store.appendToLastTurn(event.text ?? '');
-          break;
-        case 'tool_call':
-          if (event.toolCall) {
-            store.addAgentTurn({
-              type: 'tool_call',
-              content: '',
-              toolName: event.toolCall.name,
-              toolInput: event.toolCall.input,
-            });
-          }
-          break;
-        case 'tool_result':
-          store.addAgentTurn({
-            type: 'tool_result',
-            content: event.toolResult ?? event.toolError ?? '',
-            toolName: event.toolCall?.name,
-          });
-          break;
-        case 'extraction_complete': {
-          chrome.runtime.onMessage.removeListener(listener);
-          if (event.inputTokens != null && event.model) {
-            const costCents = computeCostCents(event.model, event.inputTokens, event.outputTokens ?? 0);
-            useLLMStore.getState().setLastUsage({ inputTokens: event.inputTokens, outputTokens: event.outputTokens ?? 0, costCents });
-          }
-          if (event.extractionResult) {
-            try {
-              const validated = extractionResultSchema.parse(event.extractionResult);
-              const { items, notes } = await buildDiffItems(validated);
-              useLLMStore.getState().setDiff({ items, notes });
-              useLLMStore.getState().setStatus('extracted');
-            } catch (e: any) {
-              useLLMStore.getState().setError(`Failed to parse extraction result: ${e.message}`);
+          switch (event.type) {
+            case 'llm_start':
+              store.addAgentTurn({ type: 'thinking', content: '' });
+              break;
+            case 'llm_chunk':
+              store.appendToLastTurn(event.text ?? '');
+              break;
+            case 'tool_call':
+              if (event.toolCall) {
+                store.addAgentTurn({
+                  type: 'tool_call',
+                  content: '',
+                  toolName: event.toolCall.name,
+                  toolInput: event.toolCall.input,
+                });
+              }
+              break;
+            case 'tool_result':
+              store.addAgentTurn({
+                type: 'tool_result',
+                content: event.toolResult ?? event.toolError ?? '',
+                toolName: event.toolCall?.name,
+              });
+              break;
+            case 'extraction_complete': {
+              if (event.inputTokens != null && event.model) {
+                const costCents = computeCostCents(event.model, event.inputTokens, event.outputTokens ?? 0);
+                useLLMStore.getState().setLastUsage({ inputTokens: event.inputTokens, outputTokens: event.outputTokens ?? 0, costCents });
+              }
+              if (event.extractionResult) {
+                try {
+                  const validated = extractionResultSchema.parse(event.extractionResult);
+                  const { items, notes: extractedNotes } = await buildDiffItems(validated);
+                  useLLMStore.getState().setDiff({ items, notes: extractedNotes });
+                  useLLMStore.getState().setStatus('extracted');
+                } catch (e: any) {
+                  useLLMStore.getState().setError(`Failed to parse extraction result: ${e.message}`);
+                }
+              }
+              break;
             }
+            case 'error':
+              useLLMStore.getState().setError(event.error ?? 'Agent loop failed');
+              break;
+            case 'done':
+              // If status is still agent-running, agent finished without calling save_entities
+              if (useLLMStore.getState().status === 'agent-running') {
+                useLLMStore.getState().setError('Agent finished without extracting any entities. Try a more specific prompt.');
+              }
+              break;
           }
-          break;
-        }
-        case 'error':
-          chrome.runtime.onMessage.removeListener(listener);
-          useLLMStore.getState().setError(event.error ?? 'Agent loop failed');
-          break;
-        case 'done':
-          chrome.runtime.onMessage.removeListener(listener);
-          // If status is still agent-running, agent finished without calling save_entities
-          if (useLLMStore.getState().status === 'agent-running') {
-            useLLMStore.getState().setError('Agent finished without extracting any entities. Try a more specific prompt.');
-          }
-          break;
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(listener);
+        },
+      );
+    } catch (e: any) {
+      useLLMStore.getState().setError(e.message);
+    }
   }, []);
 
   const proceedToReview = useCallback(async () => {
-    const llm = useLLMStore.getState();
-    const diff = llm.diff;
+    const llmStore = useLLMStore.getState();
+    const diff = llmStore.diff;
     if (!diff) return;
 
     const graph = useGraphStore.getState();
@@ -781,12 +727,12 @@ export function useLLMExtraction() {
 
     useExtractionReviewStore
       .getState()
-      .initialize(reviewNodes, reviewEdges, reviewNotes, llm.sourceUrl);
+      .initialize(reviewNodes, reviewEdges, reviewNotes, llmStore.sourceUrl);
     useLLMStore.getState().setStatus('reviewing');
   }, []);
 
   const applyReview = useCallback(async () => {
-    const llm = useLLMStore.getState();
+    const llmStore = useLLMStore.getState();
     const reviewStore = useExtractionReviewStore.getState();
     const activeNodes = reviewStore.activeNodes();
     const activeEdges = reviewStore.activeEdges();
@@ -801,7 +747,7 @@ export function useLLMExtraction() {
       return;
     }
 
-    llm.setStatus('merging');
+    llmStore.setStatus('merging');
 
     try {
       const graph = useGraphStore.getState();
@@ -811,8 +757,8 @@ export function useLLMExtraction() {
       // In the three-layer model, resources are system-owned — the LLM never emits
       // them, and the merge always anchors its provenance to a real resource node.
       let resourceNode: { id: string; identifier: string | null; sourceUrl: string } | null = null;
-      if (llm.sourceUrl) {
-        resourceNode = await ensureResourceNode(llm.sourceUrl);
+      if (llmStore.sourceUrl) {
+        resourceNode = await ensureResourceNode(llmStore.sourceUrl);
       }
 
       // First pass: create/merge entity nodes (and any other non-resource nodes)
@@ -850,7 +796,7 @@ export function useLLMExtraction() {
             type: node.type,
             label: node.label,
             properties: node.properties,
-            sourceUrl: llm.sourceUrl ?? undefined,
+            sourceUrl: llmStore.sourceUrl ?? undefined,
           });
           if (created) {
             tempIdToRealId.set(node.tempId, created.id);
@@ -896,7 +842,7 @@ export function useLLMExtraction() {
             sourceId,
             targetId,
             label: edge.label,
-            sourceUrl: llm.sourceUrl ?? undefined,
+            sourceUrl: llmStore.sourceUrl ?? undefined,
             skipProvenance: true,
           });
           if (created) {
@@ -965,7 +911,7 @@ export function useLLMExtraction() {
                 wikiLinks,
                 ...(resourceNode ? { resourceId: resourceNode.id } : {}),
               },
-              sourceUrl: llm.sourceUrl ?? undefined,
+              sourceUrl: llmStore.sourceUrl ?? undefined,
             });
             if (created) {
               noteNodeId = created.id;
@@ -1054,12 +1000,12 @@ export function useLLMExtraction() {
       }
 
       // Save source content linked to the system-owned resource node.
-      if (llm.sourceUrl && llm.inputText && resourceNode) {
+      if (llmStore.sourceUrl && llmStore.inputText && resourceNode) {
         try {
           await sourceContent.save({
             nodeId: resourceNode.id,
-            url: llm.sourceUrl,
-            content: llm.inputText,
+            url: llmStore.sourceUrl,
+            content: llmStore.inputText,
           });
         } catch (e) {
           console.warn('[Extraction] Failed to save source content:', e);

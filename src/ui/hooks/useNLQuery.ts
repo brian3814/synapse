@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { graph } from '../../db/client/db-client';
 import { buildNLQuerySystemPrompt } from '../components/query/nl-query-prompt';
-import { streamFromOffscreen, fetchLLMConfigAndTypes, parseJsonFromLLMResponse } from './nl-query-utils';
+import { fetchLLMConfigAndTypes, parseJsonFromLLMResponse } from './nl-query-utils';
+import { llm } from '@platform';
 import type { QueryResult } from '../../db/worker/query-engine/types';
 
 type NLQueryStatus = 'idle' | 'streaming' | 'executing' | 'done' | 'error';
@@ -24,26 +25,17 @@ export function useNLQuery() {
       const { nodeTypesList, edgeTypesList, config } = await fetchLLMConfigAndTypes();
 
       const systemPrompt = buildNLQuerySystemPrompt(nodeTypesList, edgeTypesList);
-      const requestId = crypto.randomUUID();
 
-      chrome.runtime.sendMessage({
-        type: 'LLM_REQUEST',
-        requestId,
-        payload: {
-          provider: config.provider,
-          model: config.model,
+      const streamResult = await llm.streamExtraction(
+        {
           prompt: input,
+          model: config.model,
           systemPrompt,
         },
-      });
-
-      const streamResult = await streamFromOffscreen(requestId, (chunk) => {
-        setStreamText((prev) => prev + chunk);
-      });
-
-      if (streamResult.error) {
-        throw new Error(streamResult.error);
-      }
+        (chunk) => {
+          setStreamText((prev) => prev + chunk);
+        },
+      );
 
       const content = streamResult.content ?? '';
       const { rawJson, validated } = parseJsonFromLLMResponse(content);

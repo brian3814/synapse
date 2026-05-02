@@ -3,7 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { entityResolution, noteSearch } from '../../../db/client/db-client';
-import { notes, storage } from '@platform';
+import { notes, storage, llm } from '@platform';
 import { generateNoteMarkdown, stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import type { GraphNode } from '../../../shared/types';
 
@@ -268,60 +268,20 @@ export function MultiSelectPanel() {
         .join('\n');
 
       const userPrompt = `Entities:\n${nodeContext}\n\nInstruction: ${noteInstruction}`;
-      const requestId = crypto.randomUUID();
 
-      // Send LLM request
-      chrome.runtime.sendMessage({
-        type: 'LLM_REQUEST',
-        requestId,
-        payload: {
-          provider: config.provider,
-          model: config.model,
+      const result = await llm.streamExtraction(
+        {
           prompt: userPrompt,
+          model: config.model,
           systemPrompt: NOTE_SYSTEM_PROMPT,
         },
-      });
-
-      // Listen for stream chunks
-      const result = await new Promise<{ content?: string; error?: string }>((resolve) => {
-        const timeout = setTimeout(() => {
-          cleanup();
-          resolve({ error: 'LLM request timed out after 120s' });
-        }, 120_000);
-
-        const listener = (message: any) => {
-          if (abortRef.current) {
-            cleanup();
-            resolve({ error: 'Cancelled' });
-            return;
-          }
-          if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-          const { chunk, done, content, error, errorType } = message.payload;
-          if (chunk) {
-            setNoteStreaming((prev) => prev + chunk);
-          }
-          if (done) {
-            if (error && (errorType === 'rate_limit' || errorType === 'overloaded')) return;
-            cleanup();
-            resolve({ content, error });
-          }
-        };
-
-        const cleanup = () => {
-          clearTimeout(timeout);
-          chrome.runtime.onMessage.removeListener(listener);
-        };
-
-        chrome.runtime.onMessage.addListener(listener);
-      });
+        (chunk) => {
+          if (abortRef.current) return;
+          setNoteStreaming((prev) => prev + chunk);
+        },
+      );
 
       if (abortRef.current) return;
-
-      if (result.error) {
-        setNoteError(result.error);
-        setNoteMode('auto-input');
-        return;
-      }
 
       setNotePreview(result.content ?? '');
       setNoteMode('auto-preview');

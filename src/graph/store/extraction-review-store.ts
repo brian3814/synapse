@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { storage } from '@platform';
+import { storage, llm } from '@platform';
 
 // --- Types ---
 
@@ -568,8 +568,6 @@ export const useExtractionReviewStore = create<ExtractionReviewStore>((set, get)
       let suggestedKeys: Record<string, string> = {};
 
       if (llmConfig?.apiKey) {
-        const requestId = crypto.randomUUID();
-
         const prompt = `Given these relationships from the perspective of "${node.name}", suggest the property key name from each adjacent node's perspective. Return ONLY a JSON object mapping each edge label to the suggested property key.
 
 Relationships:
@@ -579,39 +577,11 @@ Example: if Python --[has_framework]--> Django, and Python is being converted, D
 
 Return JSON like: {"has_framework": "written_in"}`;
 
-        chrome.runtime.sendMessage({
-          type: 'LLM_REQUEST',
-          requestId,
-          payload: {
-            provider: llmConfig.provider,
-            model: llmConfig.model,
-            prompt,
-          },
-        });
-
         try {
-          const result = await new Promise<{ content?: string; error?: string }>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              cleanup();
-              reject(new Error('Timeout'));
-            }, 30_000);
-
-            const listener = (message: any) => {
-              if (message.type !== 'LLM_STREAM_CHUNK' || message.payload?.requestId !== requestId) return;
-              const { done, content, error } = message.payload;
-              if (done) {
-                cleanup();
-                resolve({ content, error });
-              }
-            };
-
-            const cleanup = () => {
-              clearTimeout(timeout);
-              chrome.runtime.onMessage.removeListener(listener);
-            };
-
-            chrome.runtime.onMessage.addListener(listener);
-          });
+          const result = await llm.streamExtraction(
+            { prompt, model: llmConfig.model },
+            () => {}, // no streaming UI needed
+          );
 
           if (result.content) {
             const jsonMatch = result.content.match(/\{[\s\S]*\}/);
