@@ -11,7 +11,9 @@ export const ANTHROPIC_OAUTH = {
   clientId: 'PLACEHOLDER_CLIENT_ID', // Replace with UUID from Anthropic OAuth app registration
   scopes: ['user:profile', 'user:inference'],
   get redirectUri(): string {
-    return chrome.identity.getRedirectURL('callback');
+    return typeof chrome !== 'undefined' && chrome.identity
+      ? chrome.identity.getRedirectURL('callback')
+      : '';
   },
 } as const;
 

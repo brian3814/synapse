@@ -1,6 +1,9 @@
 import { graph } from './db-client';
+import { platformId } from '@platform';
 
 export function registerQueryMessageHandler(): () => void {
+  if (platformId !== 'chrome') return () => {};
+
   const listener = (
     message: { type: string; payload?: unknown },
     _sender: chrome.runtime.MessageSender,
@@ -11,7 +14,7 @@ export function registerQueryMessageHandler(): () => void {
       graph.query(payload.query).then(sendResponse).catch((e: Error) => {
         sendResponse({ error: e.message });
       });
-      return true; // Keep channel open for async response
+      return true;
     }
 
     if (message.type === 'MUTATION_EXECUTE') {
