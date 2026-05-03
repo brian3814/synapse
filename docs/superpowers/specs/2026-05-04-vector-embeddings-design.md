@@ -42,6 +42,12 @@ Electron Main Process
 - `src/platform/types.ts` — New `PlatformEmbedding` interface; Electron implementation wraps IPC, Chrome implementation is a no-op stub
 - No changes to Chrome extension — embeddings are desktop-only
 
+**Chrome isolation constraints:**
+- `src/embeddings/types.ts` must contain ONLY TypeScript type/interface declarations. No runtime imports from `@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`, or any Node.js module. All runtime code stays in `electron/embeddings/`.
+- Both `src/platform/chrome/index.ts` and `src/platform/electron/index.ts` must export an `embedding` symbol. The Chrome export is a frozen no-op object so that `import { embedding } from '@platform'` resolves on both platforms without runtime errors.
+- The `semantic_search` tool must NOT be added to the shared `CHAT_AGENT_TOOLS` constant in `src/shared/chat-agent-tools.ts`. Instead, `chat-agent-loop.ts` assembles the tool list dynamically: on Electron with embeddings enabled, append `semantic_search` to the tool array sent to the LLM. On Chrome, the LLM never sees this tool.
+- Migration 009 creates only regular tables (`embedding_metadata`, `embedding_dismissals`) — no sqlite-vec virtual tables. Must be marked `optional: true` matching the FTS5 migration pattern, so any unexpected SQL failure on Chrome skips gracefully.
+
 ## Embedding Provider Abstraction
 
 ### Interface
@@ -74,7 +80,7 @@ interface EmbeddingConfig {
 
 ### Implementations
 
-**`electron/embeddings/onnx-provider.ts`** — Loads `all-MiniLM-L6-v2` via `@huggingface/transformers`. Model files cached in `app.getPath('userData')/models/`. First run triggers download (~23MB quantized, ~90MB full). `embedBatch` processes in chunks of 32 for memory efficiency.
+**`electron/embeddings/onnx-provider.ts`** — Loads `all-MiniLM-L6-v2` via `@huggingface/transformers`. Model files cached in `app.getPath('userData')/models/`. First run triggers download (~23MB quantized, ~90MB full). `embedBatch` processes in chunks of 32 (standard model) or 8-16 (full model to limit peak memory). ONNX inference runs in a `worker_threads` Worker to avoid blocking the Electron main thread — the worker receives text, returns Float32Array vectors, and the main thread handles sqlite-vec inserts.
 
 **`electron/embeddings/openai-provider.ts`** — Calls OpenAI embeddings API. `embedBatch` sends up to 100 texts per request (API limit). Handles rate limiting with exponential backoff (reuses `withRetry` from `src/core/retry.ts`).
 
@@ -87,9 +93,9 @@ sqlite-vec integrates with the existing `better-sqlite3` instance in the Electro
 ### Schema
 
 ```sql
--- Migration 009-embeddings.ts (runs on both platforms)
+-- Migration 009-embeddings.ts (runs on both platforms, optional: true)
 CREATE TABLE embedding_metadata (
-  node_id TEXT PRIMARY KEY,
+  node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
   provider_id TEXT NOT NULL,
   dimensions INTEGER NOT NULL,
   embedded_at TEXT NOT NULL,
@@ -97,12 +103,29 @@ CREATE TABLE embedding_metadata (
 );
 
 CREATE TABLE embedding_dismissals (
-  node_id_a TEXT NOT NULL,
-  node_id_b TEXT NOT NULL,
+  node_id_a TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  node_id_b TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   dismissed_at TEXT NOT NULL,
   PRIMARY KEY (node_id_a, node_id_b)
 );
 ```
+
+Both tables use `ON DELETE CASCADE` referencing `nodes(id)` so node deletion automatically cleans up embedding metadata and dismissals without application-level hooks.
+
+The `similar_pairs` cache table is also created by `EmbeddingService.initialize()` (alongside `vec_nodes`), not in the migration:
+
+```sql
+-- Created by EmbeddingService (Electron-only, alongside vec_nodes)
+CREATE TABLE IF NOT EXISTS similar_pairs (
+  node_id_a TEXT NOT NULL,
+  node_id_b TEXT NOT NULL,
+  similarity REAL NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (node_id_a, node_id_b)
+);
+```
+
+Updated incrementally by the embedding queue — each newly embedded node's top-3 neighbors are upserted. Cleared on provider switch or full re-embed.
 
 The `vec_nodes` virtual table is NOT created in the migration — it requires the sqlite-vec extension which is only available in Electron. Instead, `EmbeddingService.initialize()` creates it on first enable:
 
@@ -120,17 +143,19 @@ This matches the pattern of migration 002 (FTS5) which is also runtime-condition
 
 - **Insert/update:** `INSERT INTO vec_nodes(node_id, embedding) VALUES (?, ?)` — sqlite-vec accepts Float32Array as buffer
 - **KNN search:** `SELECT node_id, distance FROM vec_nodes WHERE embedding MATCH ? ORDER BY distance LIMIT ?`
-- **Find duplicate pairs:** Query each node against top-K neighbors, filter by threshold, exclude dismissed pairs, sort by similarity descending
-- **Dimension change:** `DROP TABLE vec_nodes` → recreate with new dimension → re-batch
+- **Find duplicate pairs:** Maintained incrementally — when the queue embeds a node, it queries that node's top-3 neighbors and upserts into a `similar_pairs` cache table. The Intelligence Panel reads from this cache (fast, no O(n²) scan). Cache is invalidated on provider switch or full re-embed.
+- **Dimension change:** `DROP TABLE vec_nodes` → recreate with new dimension → re-batch. Recovery: if `vec_nodes` doesn't exist on startup (crash during switch), `EmbeddingService.initialize()` recreates it via `CREATE VIRTUAL TABLE IF NOT EXISTS` and uses `embedding_metadata` rows as the re-embed work queue.
 
 ### Extension Loading
 
+`better-sqlite3` disables `loadExtension()` by default. The database must be opened with extensions enabled, or `db.unsafeMode(true)` called before loading. The `better-sqlite3-engine.ts` initialization must be updated to allow extension loading when embeddings are configured.
+
 ```typescript
 // electron/embeddings/vec-store.ts
-db.loadExtension('vec0');
+db.loadExtension('/path/to/vec0');  // path resolved from extraResources
 ```
 
-sqlite-vec ships prebuilt for macOS/Windows/Linux. Platform-appropriate `.dylib`/`.dll`/`.so` bundled via `electron-builder` `extraResources`.
+sqlite-vec ships prebuilt for macOS/Windows/Linux. Platform-appropriate `.dylib`/`.dll`/`.so` bundled via `electron-builder` `extraResources`. The extension path is resolved at runtime via `app.getPath('exe')` + relative resource path.
 
 ## Background Embedding Queue
 
@@ -180,7 +205,7 @@ New section in `IntelligencePanel.tsx` below "Potential Connections". Only visib
 2. Main process: for each embedded node, query sqlite-vec top-3 neighbors → filter by `similarityThreshold` → exclude dismissed pairs → sort descending → return top 20 pairs
 3. Each pair: `{ nodeA: {id, name, type, label, connectionCount, summary}, nodeB: {...}, similarity: number }`
 
-**Performance:** The all-pairs scan is O(n) KNN queries. Results are cached in the EmbeddingService and invalidated by a generation counter that increments whenever the queue processes an item. The panel reads the cache; only the first open after embedding changes triggers recomputation.
+**Performance:** Similar pairs are computed incrementally — the embedding queue updates a `similar_pairs` cache table as each node is embedded (O(1) KNN query per embed, amortized). The Intelligence Panel reads directly from this cache, so opening the panel is a fast table scan, not an O(n²) all-pairs computation.
 
 ### Expandable Detail Cards
 
@@ -238,7 +263,7 @@ When `useChatContextStore.addNodes()` fires with new nodes:
 1. Run `semanticSearch` against each attached node's embedding for top-3 similar (excluding already-attached)
 2. Show `+ N related` indicator on chip bar
 3. Click expands dropdown of suggested nodes with similarity scores and one-click add
-4. Non-blocking — suggestions load async
+4. Non-blocking — suggestions load async with abort controller (new `addNodes` call cancels stale suggestion requests, matching `searchIdRef` pattern in `HeaderSearch.tsx`)
 5. Disappears when user starts typing
 
 ### `semantic_search` Chat Tool
@@ -254,7 +279,9 @@ When `useChatContextStore.addNodes()` fires with new nodes:
 }
 ```
 
-Returns node IDs + names + similarity scores. Agent calls existing `get_node`/`read_note` to drill deeper. Registered in chat tool set alongside `search_nodes`.
+Returns node IDs + names + similarity scores. Agent calls existing `get_node`/`read_note` to drill deeper.
+
+**Registration:** The tool is NOT added to the shared `CHAT_AGENT_TOOLS` array (which is compiled into both Chrome and Electron builds). Instead, `chat-agent-loop.ts` dynamically appends it to the tool list when `platformId === 'electron'` and embeddings are enabled. This ensures Chrome never sees the tool.
 
 ### Graceful Degradation
 
@@ -303,6 +330,8 @@ New "Embeddings" section in settings with guided descriptions for every option.
 
 Confirmation dialog: "Switching providers requires re-embedding all nodes. Existing embeddings will be discarded. This may take a few minutes. Continue?"
 
+**Provider switch sequence:** (1) User confirms in dialog → (2) new config written to `PlatformStorage` → (3) `EmbeddingService.switchProvider()`: dispose old provider → (4) `DROP TABLE vec_nodes` + `DELETE FROM similar_pairs` + `DELETE FROM embedding_metadata` → (5) create `vec_nodes` with new dimensions → (6) initialize new provider → (7) `batchProcess` all nodes with progress reporting. If interrupted at any step, startup recovery recreates missing tables and uses empty `embedding_metadata` as signal to re-batch.
+
 ### API Key Security
 
 OpenAI API key stored via `PlatformStorage` (same pattern as Anthropic key — never exposed to renderer, read only in main process).
@@ -335,10 +364,10 @@ OpenAI API key stored via `PlatformStorage` (same pattern as Anthropic key — n
 | Modify | `src/platform/types.ts` | Add PlatformEmbedding interface |
 | Modify | `electron/main.ts` | Register embedding IPC handlers |
 | Modify | `src/ui/components/intelligence/IntelligencePanel.tsx` | Add SimilarNodes section |
-| Modify | `src/ui/hooks/rag-pipeline.ts` | Add semantic search + RRF blending |
+| Modify | `src/commands/rag-commands.ts` | Add semantic search + RRF blending |
 | Modify | `src/ui/components/search/HeaderSearch.tsx` | Add semantic fallback |
-| Modify | `src/shared/chat-agent-tools.ts` | Register semantic_search tool |
-| Modify | `src/ui/hooks/chat-agent-loop.ts` | Handle semantic_search tool execution |
+| Modify | `src/ui/hooks/chat-agent-loop.ts` | Dynamic semantic_search tool registration + execution |
+| Modify | `electron/better-sqlite3-engine.ts` | Enable extension loading for sqlite-vec |
 | Modify | `src/ui/components/chat/ContextChipBar.tsx` | Add auto-suggest UI |
 | Modify | `src/ui/components/chat/ChatBot.tsx` | Wire ContextSuggestions |
 | Modify | `electron/db-backend.ts` | Notify EmbeddingService on node mutations |
