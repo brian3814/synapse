@@ -8,6 +8,7 @@ import { useUIStore } from '../../../graph/store/ui-store';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { GraphControls } from './GraphControls';
+import { GraphContextMenu } from './GraphContextMenu';
 import { spatial } from '../../../db/client/db-client';
 import { SMALL_GRAPH_THRESHOLD } from '../../../shared/constants';
 
@@ -33,6 +34,11 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const setFocusNodeCallback = useUIStore((s) => s.setFocusNodeCallback);
 
   const [windowed, setWindowed] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    screenX: number;
+    screenY: number;
+    nodeId: string | null;
+  } | null>(null);
 
   // Register focus-node callback for chat node links + header search clicks.
   // Accepts a single id (pan+zoom to that node, show detail) or an array
@@ -117,6 +123,13 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     [addNodesToSelection, selectNodes, forceActivePanel]
   );
 
+  const handleContextMenu = useCallback(
+    (screenX: number, screenY: number, nodeId: string | null) => {
+      setContextMenu({ screenX, screenY, nodeId });
+    },
+    []
+  );
+
   // Auto-compute shortest path when exactly 2 nodes selected
   useEffect(() => {
     const renderer = graphRef.current?.getRenderer();
@@ -164,9 +177,18 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
         onEdgeClick={handleEdgeClick}
         onCanvasClick={handleCanvasClick}
         onLassoSelect={handleLassoSelect}
+        onContextMenu={handleContextMenu}
         compact={compact}
       />
       {!compact && <GraphControls graphRef={graphRef} />}
+      {contextMenu && (
+        <GraphContextMenu
+          screenX={contextMenu.screenX}
+          screenY={contextMenu.screenY}
+          nodeId={contextMenu.nodeId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
