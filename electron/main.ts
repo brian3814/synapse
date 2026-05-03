@@ -3,6 +3,7 @@ import path from 'path';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
+import * as filesBackend from './files-backend';
 import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat } from './llm-backend';
 import { startCompanionServer } from './companion-server';
 
@@ -123,6 +124,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:move', (_event, newPath: string) => {
     return notesBackend.moveNotes(newPath);
+  });
+
+  ipcMain.handle('files:read', (_event, filePath: string) => {
+    return filesBackend.readFile(filePath);
+  });
+  ipcMain.handle('files:write', (_event, filePath: string, content: string) => {
+    filesBackend.writeFile(filePath, content);
+  });
+  ipcMain.handle('files:remove', (_event, filePath: string) => {
+    filesBackend.removeFile(filePath);
+  });
+  ipcMain.handle('files:list', (_event, prefix: string) => {
+    return filesBackend.listFiles(prefix);
   });
 
   ipcMain.handle('runtime:sendMessage', async (_event, message) => {

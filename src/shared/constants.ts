@@ -69,3 +69,6 @@ export const SMALL_GRAPH_THRESHOLD = 10000;
 export const LAYOUT_OPTIONS = [
   { id: 'forceDirected2d', label: 'Force Directed 2D' },
 ] as const;
+
+export const KG_INDEX_FILENAME = '_kg_index.md';
+export const FOLDER_THRESHOLD_DEFAULT = 15;

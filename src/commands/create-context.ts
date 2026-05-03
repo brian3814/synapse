@@ -1,9 +1,8 @@
 import * as dbClient from '../db/client/db-client';
-import { storage, notes, llm, browser } from '@platform';
+import { storage, notes, files, llm, browser } from '@platform';
 import { useGraphStore } from '../graph/store/graph-store';
 import type { CommandContext } from './types';
 import type { DataStore } from '../db/data-store';
-import type { PlatformFiles } from '../platform/types';
 
 function dbClientAsDataStore(): DataStore {
   return {
@@ -38,19 +37,12 @@ function dbClientAsDataStore(): DataStore {
   };
 }
 
-const notImplementedFiles: PlatformFiles = {
-  read: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
-  write: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
-  remove: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
-  list: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
-};
-
 export function createUICommandContext(): CommandContext {
   return {
     db: dbClientAsDataStore(),
     storage,
     notes,
-    files: notImplementedFiles,
+    files,
     llm,
     browser,
     getGraphSnapshot: () => {
