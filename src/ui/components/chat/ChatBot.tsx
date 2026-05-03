@@ -6,6 +6,9 @@ import { useInputHistory } from '../../hooks/useInputHistory';
 import { ChatMessage } from './ChatMessage';
 import { SessionPicker } from './SessionPicker';
 import { PresetPicker } from './PresetPicker';
+import { ContextChipBar } from './ContextChipBar';
+import { NodeAutocomplete } from './NodeAutocomplete';
+import { useChatContextStore } from '../../../graph/store/chat-context-store';
 
 export function ChatBot() {
   const { chatOpen, chatDisplayMode, toggleChat, setChatDisplayMode } = useUIStore();
@@ -15,6 +18,7 @@ export function ChatBot() {
   const displayMode = useUIStore((s) => s.displayMode);
   const isSidePanel = displayMode === 'sidePanel';
   const history = useInputHistory();
+  const clearAttached = useChatContextStore((s) => s.clear);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -26,6 +30,7 @@ export function ChatBot() {
     history.push(input.trim());
     sendMessage(input.trim());
     setInput('');
+    clearAttached();
   };
 
   const handleNodeLinkClick = (nodeId: string) => {
@@ -249,25 +254,77 @@ function ChatInput({
   isProcessing: boolean;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }) {
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteQuery, setAutocompleteQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleInputChange = (value: string) => {
+    setInput(value);
+
+    const atIdx = value.lastIndexOf('@');
+    if (atIdx !== -1 && (atIdx === 0 || value[atIdx - 1] === ' ')) {
+      const query = value.slice(atIdx + 1);
+      if (!query.includes(' ')) {
+        setAutocompleteQuery(query);
+        setShowAutocomplete(true);
+        return;
+      }
+    }
+    setShowAutocomplete(false);
+  };
+
+  const handleAutocompleteSelect = () => {
+    const atIdx = input.lastIndexOf('@');
+    if (atIdx !== -1) {
+      setInput(input.slice(0, atIdx));
+    }
+    setShowAutocomplete(false);
+    inputRef.current?.focus();
+  };
+
+  const handleAutocompleteDismiss = () => {
+    setShowAutocomplete(false);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDownWrapped = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showAutocomplete && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) {
+      return;
+    }
+    onKeyDown(e);
+  };
+
   return (
-    <form onSubmit={onSubmit} className="flex gap-2 p-3 border-t border-zinc-700 shrink-0">
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Ask about your knowledge graph..."
-        className="flex-1 bg-zinc-800 text-sm text-zinc-100 px-3 py-1.5 rounded border border-zinc-700 focus:border-indigo-500 focus:outline-none"
-        disabled={isProcessing}
-      />
-      <button
-        type="submit"
-        disabled={isProcessing || !input.trim()}
-        className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isProcessing ? '...' : 'Ask'}
-      </button>
-    </form>
+    <div className="shrink-0 border-t border-zinc-700">
+      <ContextChipBar />
+      <form ref={formRef} onSubmit={onSubmit} className="relative flex gap-2 p-3">
+        {showAutocomplete && (
+          <NodeAutocomplete
+            query={autocompleteQuery}
+            onSelect={handleAutocompleteSelect}
+            onDismiss={handleAutocompleteDismiss}
+          />
+        )}
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onKeyDown={handleKeyDownWrapped}
+          placeholder="Ask about your knowledge graph... (@ to mention nodes)"
+          className="flex-1 bg-zinc-800 text-sm text-zinc-100 px-3 py-1.5 rounded border border-zinc-700 focus:border-indigo-500 focus:outline-none"
+          disabled={isProcessing}
+        />
+        <button
+          type="submit"
+          disabled={isProcessing || !input.trim()}
+          className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isProcessing ? '...' : 'Ask'}
+        </button>
+      </form>
+    </div>
   );
 }
 

@@ -7,12 +7,11 @@ interface NodeAutocompleteProps {
   query: string;
   onSelect: () => void;
   onDismiss: () => void;
-  anchorRef: React.RefObject<HTMLElement | null>;
 }
 
 const MAX_RESULTS = 8;
 
-export function NodeAutocomplete({ query, onSelect, onDismiss, anchorRef }: NodeAutocompleteProps) {
+export function NodeAutocomplete({ query, onSelect, onDismiss }: NodeAutocompleteProps) {
   const nodes = useGraphStore((s) => s.nodes);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
   const addNodes = useChatContextStore((s) => s.addNodes);
