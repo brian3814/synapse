@@ -1,10 +1,12 @@
 # Agent Harness Phase 3: Session Continuity & Polish
 
+> **PARTIALLY SUPERSEDED (2026-05-03):** Task 3 (`search_memories` tool) is superseded by `manage_memory` with `action: 'list'`. See [`2026-05-03-file-based-memory-and-folder-index-design.md`](../specs/2026-05-03-file-based-memory-and-folder-index-design.md). Tasks 1-2 (episodic summarization) remain valid and were already implemented.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add episodic memory (auto-generated session summaries for continuity across sessions) and a `search_memories` chat tool so the agent can explicitly query its own memory.
+**Goal:** Add episodic memory (auto-generated session summaries for continuity across sessions) ~~and a `search_memories` chat tool so the agent can explicitly query its own memory~~ *(search_memories replaced by `manage_memory`)*.
 
-**Architecture:** Episodic summaries are generated on session expiry via a fire-and-forget LLM call, stored in `memory_episodic` (created in Phase 1 migration). The prompt assembler already supports `recentSessionSummaries` — Phase 2 passed empty arrays, this phase fills them. The `search_memories` tool uses the existing tool registry from Phase 1.
+**Architecture:** Episodic summaries are generated on session expiry via a fire-and-forget LLM call, stored in `memory_episodic` (created in Phase 1 migration). The prompt assembler already supports `recentSessionSummaries` — Phase 2 passed empty arrays, this phase fills them. ~~The `search_memories` tool uses the existing tool registry from Phase 1.~~ *Replaced by `manage_memory` tool in the file-based memory spec.*
 
 **Tech Stack:** TypeScript, React 19, SQLite, Anthropic API (Haiku for summarization)
 

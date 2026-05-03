@@ -1,10 +1,12 @@
 # Agent Harness Phase 2: Memory System
 
+> **SUPERSEDED (2026-05-03):** This plan was executed (SQLite semantic memory was built) but the approach is now superseded by file-based memory. See [`2026-05-03-file-based-memory-and-folder-index-design.md`](../specs/2026-05-03-file-based-memory-and-folder-index-design.md). Do NOT re-execute this plan. The code it produced (`memory-queries.ts`, `MemoryRepository`, `memory-extractor.ts` semantic functions, `MemorySection.tsx`) will be replaced/deprecated by the file-based implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add persistent semantic memory (user facts/preferences extracted from conversations) and a memory management UI. The agent learns from conversations and uses accumulated knowledge in future sessions.
+**Goal:** ~~Add persistent semantic memory (user facts/preferences extracted from conversations) and a memory management UI.~~ *Superseded — semantic memory is now file-based.*
 
-**Architecture:** Post-turn LLM extraction (fire-and-forget, uses app's configured model with cheapest-available fallback — see `getConfiguredModel()`) stores categorized facts in SQLite. Memory is injected into the system prompt via the prompt assembler built in Phase 1. Memory UI is a new section in the Settings modal. DB integration follows the DataStore → action-handler → db-client chain. Memory repository is added to `DataStore` interface and `SqliteDataStore` implementation.
+**Architecture:** ~~Post-turn LLM extraction stores categorized facts in SQLite.~~ *Superseded — the `manage_memory` chat tool writes markdown files instead.* Memory is injected into the system prompt via the prompt assembler built in Phase 1 *(this part is still correct, only the source changes from DB to files)*.
 
 **Tech Stack:** TypeScript, React 19, Zustand, SQLite, Anthropic API (uses app's model config, not hardcoded)
 

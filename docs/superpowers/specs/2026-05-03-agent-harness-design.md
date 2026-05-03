@@ -8,7 +8,9 @@ This design adds a harness layer to the **chat agent only** — the interaction 
 
 **Approach**: DB-first ("Extended Session"), following every existing architectural convention. Inspired by Claude Code's harness (categorized file-based memory, agent presets with tool selection, rich tool registration), adapted for a browser extension / Electron app where SQLite replaces the filesystem.
 
-> **Partial supersession notice (2026-05-03):** Section 3 (Semantic Memory), Phase 2 (Memory System), Phase 3's `search_memories` tool, and related verification steps are superseded by [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md). Semantic memory is now file-based (Claude Code pattern) using a `manage_memory` tool. Episodic memory (session summaries) remains in SQLite as originally specified. Sections 1, 2, 5, and Phase 1 remain canonical.
+> **Partial supersession notice (2026-05-03):** Section 3 (Semantic Memory), Phase 2 (Memory System), Phase 3's `search_memories` tool, and related verification steps are superseded by [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md). Semantic memory is now file-based (Claude Code pattern) using a `manage_memory` tool. Episodic memory (session summaries) remains in SQLite as originally specified.
+>
+> **What remains canonical:** Section 1 data architecture for chrome.storage keys (`harnessGlobalInstructions`, `harnessPresets`, `harnessActivePresetId`), `memory_episodic` table, and `preset_id` column. The `memory_semantic` table definition is retained for migration compatibility only (table exists in DB but is not actively read/written by new code). Sections 2 (Prompt Assembly), 5 (UI except MemorySection), and Phase 1 remain canonical.
 
 ## Scope
 
