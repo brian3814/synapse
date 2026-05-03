@@ -3,6 +3,8 @@ import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession'
 import { ChatToolCall } from './ChatToolCall';
 import { ChatReferencedEntities } from './ChatReferencedEntities';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
+import { useGraphStore } from '../../../graph/store/graph-store';
+import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -14,6 +16,12 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
     return (
       <div className="flex justify-end" style={{ marginBottom: '0.75rem' }}>
         <div className="group relative max-w-[85%] bg-indigo-600/20 border border-indigo-500/30 text-zinc-200 text-sm px-3 py-2 rounded-lg">
+          {message.attachedContext && message.attachedContext.nodeIds.length > 0 && (
+            <AttachedContextChips
+              nodeIds={message.attachedContext.nodeIds}
+              onNodeClick={onNodeClick}
+            />
+          )}
           {message.content}
           <CopyButton text={message.content} position="bottom-1 right-1" />
         </div>
@@ -75,6 +83,51 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AttachedContextChips({
+  nodeIds,
+  onNodeClick,
+}: {
+  nodeIds: string[];
+  onNodeClick?: (nodeId: string) => void;
+}) {
+  const nodes = useGraphStore((s) => s.nodes);
+  const getColorForType = useNodeTypeStore((s) => s.getColorForType);
+
+  const resolved = nodeIds.map((id) => {
+    const node = nodes.find((n) => n.id === id);
+    return node
+      ? { id, name: node.name, type: node.type, color: node.color ?? getColorForType(node.type), exists: true }
+      : { id, name: id.slice(0, 8), type: '', color: '#666', exists: false };
+  });
+
+  return (
+    <div className="flex flex-wrap gap-1 mb-1.5">
+      {resolved.map((node) => (
+        <button
+          key={node.id}
+          onClick={() => node.exists && onNodeClick?.(node.id)}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs transition-colors ${
+            node.exists ? 'cursor-pointer hover:brightness-125' : 'opacity-50 cursor-default'
+          }`}
+          style={{
+            backgroundColor: node.color + '20',
+            borderColor: node.color + '33',
+            color: node.color + 'cc',
+            border: '1px solid',
+          }}
+          title={node.exists ? `${node.type}: ${node.name}` : 'Node no longer exists'}
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: node.color }}
+          />
+          <span className="truncate" style={{ maxWidth: '80px' }}>{node.name}</span>
+        </button>
+      ))}
     </div>
   );
 }
