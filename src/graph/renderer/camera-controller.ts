@@ -32,6 +32,7 @@ export class CameraController {
   private onPointerDownBound: (e: PointerEvent) => void;
   private onPointerMoveBound: (e: PointerEvent) => void;
   private onPointerUpBound: (e: PointerEvent) => void;
+  private onContextMenuBound: (e: MouseEvent) => void;
 
   // External callbacks
   onNodeHitTest?: (screenX: number, screenY: number) => string | null;
@@ -44,6 +45,7 @@ export class CameraController {
   onLassoEnd?: (start: { x: number; y: number }, end: { x: number; y: number }, modifiers: Modifiers) => void;
   onFrustumChange?: (bounds: FrustumBounds, zoom: number) => void;
   onFrustumChangeInternal?: () => void;
+  onContextMenu?: (screenX: number, screenY: number) => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -56,12 +58,14 @@ export class CameraController {
     this.onPointerDownBound = this.onPointerDown.bind(this);
     this.onPointerMoveBound = this.onPointerMove.bind(this);
     this.onPointerUpBound = this.onPointerUp.bind(this);
+    this.onContextMenuBound = this.handleContextMenu.bind(this);
 
     canvas.addEventListener('wheel', this.onWheelBound, { passive: false });
     canvas.addEventListener('pointerdown', this.onPointerDownBound);
     canvas.addEventListener('pointermove', this.onPointerMoveBound);
     canvas.addEventListener('pointerup', this.onPointerUpBound);
     canvas.addEventListener('pointerleave', this.onPointerUpBound);
+    canvas.addEventListener('contextmenu', this.onContextMenuBound);
   }
 
   private updateFrustum() {
@@ -212,6 +216,11 @@ export class CameraController {
     }
   }
 
+  private handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    this.onContextMenu?.(e.clientX, e.clientY);
+  }
+
   startDrag(nodeId: string) {
     this.isPanning = false;
     this.isDragging = true;
@@ -305,5 +314,6 @@ export class CameraController {
     this.canvas.removeEventListener('pointermove', this.onPointerMoveBound);
     this.canvas.removeEventListener('pointerup', this.onPointerUpBound);
     this.canvas.removeEventListener('pointerleave', this.onPointerUpBound);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenuBound);
   }
 }

@@ -16,6 +16,7 @@ interface GraphCanvasProps {
   onEdgeClick?: (edgeId: string) => void;
   onCanvasClick?: (modifiers: Modifiers) => void;
   onLassoSelect?: (nodeIds: Set<string>, additive: boolean) => void;
+  onContextMenu?: (screenX: number, screenY: number, nodeId: string | null) => void;
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void;
   theme?: Partial<RenderTheme>;
   compact?: boolean;
@@ -70,6 +71,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
         propsRef.current.onNodeDragEnd?.(nodeId, x, y);
         spatial.batchUpdatePositions([{ id: nodeId, x, y }]).catch(() => {});
         layoutRef.current?.unpin(nodeId);
+      });
+      renderer.on('contextMenu', ({ screenX, screenY, nodeId }) => {
+        propsRef.current.onContextMenu?.(screenX, screenY, nodeId);
       });
 
       // Layout runner (only used for non-windowed mode)

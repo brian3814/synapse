@@ -123,6 +123,12 @@ export class GraphRenderer implements GraphRendererInstance {
       this.emit('nodeDragStart', { nodeId });
     };
     this.cameraController.onClick = (sx, sy, modifiers) => this.handleClick(sx, sy, modifiers);
+    this.cameraController.onContextMenu = (sx, sy) => {
+      const result = hitTest(sx, sy, this.nodes, this.edges, this.nodeMap,
+        this.cameraController.camera, this.renderer.domElement, this.spatialHash);
+      const nodeId = (result.type === 'node' && result.id) ? result.id : null;
+      this.emit('contextMenu', { screenX: sx, screenY: sy, nodeId });
+    };
     this.cameraController.onPointerMoveWorld = (sx, sy) => this.handleHover(sx, sy);
     this.cameraController.onDragMove = (wx, wy) => this.handleDragMove(wx, wy);
     this.cameraController.onDragEnd = (nodeId, worldX, worldY) => {

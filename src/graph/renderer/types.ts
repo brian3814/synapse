@@ -78,7 +78,7 @@ export interface FrustumBounds {
 
 export type ZoomLevel = 'far' | 'medium' | 'close';
 
-export type GraphEventType = 'nodeClick' | 'edgeClick' | 'canvasClick' | 'nodeHover' | 'nodeDragStart' | 'nodeDragEnd' | 'lassoSelect';
+export type GraphEventType = 'nodeClick' | 'edgeClick' | 'canvasClick' | 'nodeHover' | 'nodeDragStart' | 'nodeDragEnd' | 'lassoSelect' | 'contextMenu';
 
 export interface Modifiers {
   ctrl: boolean;
@@ -93,4 +93,5 @@ export interface GraphEventMap {
   nodeDragStart: { nodeId: string };
   nodeDragEnd: { nodeId: string; x: number; y: number };
   lassoSelect: { nodeIds: Set<string>; additive: boolean };
+  contextMenu: { screenX: number; screenY: number; nodeId: string | null };
 }
