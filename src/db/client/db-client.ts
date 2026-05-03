@@ -319,20 +319,6 @@ export const stressTest = {
 };
 
 export const memory = {
-  addSemantic: (input: { category: string; content: string; sourceSessionId?: string }) =>
-    sendRequest('memory.addSemantic', input),
-  getAllSemantic: () =>
-    sendRequest('memory.getAllSemantic'),
-  getRecentSemantic: (limit?: number) =>
-    sendRequest('memory.getRecentSemantic', { limit }),
-  deleteSemantic: (id: string) =>
-    sendRequest('memory.deleteSemantic', { id }),
-  clearAllSemantic: () =>
-    sendRequest('memory.clearAllSemantic'),
-  findDuplicate: (content: string) =>
-    sendRequest('memory.findDuplicate', { content }),
-  touchSemantic: (id: string) =>
-    sendRequest('memory.touchSemantic', { id }),
   addEpisodic: (input: { sessionId: string; summary: string; keyTopics?: string[] }) =>
     sendRequest('memory.addEpisodic', input),
   getRecentEpisodic: (limit?: number) =>

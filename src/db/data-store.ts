@@ -28,7 +28,7 @@ export type { NoteSearchResult } from './worker/queries/note-search-queries';
 export type { ClusterSummary, InterClusterEdge } from './worker/queries/spatial-queries';
 export type { EdgeProvenanceType } from './worker/queries/edge-source-queries';
 export type { EntityRelationType } from './worker/queries/entity-source-queries';
-export type { SemanticMemory, EpisodicMemory } from './worker/queries/memory-queries';
+export type { EpisodicMemory } from './worker/queries/memory-queries';
 
 // Import for use in interface signatures
 import type { ResolvedEntity } from './worker/queries/entity-resolution-queries';
@@ -243,13 +243,6 @@ export interface StressTestRepository {
 }
 
 export interface MemoryRepository {
-  addSemantic(input: { category: string; content: string; sourceSessionId?: string }): Promise<any>;
-  getAllSemantic(): Promise<any[]>;
-  getRecentSemantic(limit?: number): Promise<any[]>;
-  deleteSemantic(id: string): Promise<boolean>;
-  clearAllSemantic(): Promise<number>;
-  findDuplicateSemantic(content: string): Promise<any | null>;
-  touchSemantic(id: string): Promise<void>;
   addEpisodic(input: { sessionId: string; summary: string; keyTopics?: string[] }): Promise<any>;
   getRecentEpisodic(limit?: number): Promise<any[]>;
   clearAllEpisodic(): Promise<number>;

@@ -229,18 +229,40 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     executionContext: 'ui',
   },
   {
-    name: 'search_memories',
+    name: 'manage_memory',
     description:
-      'Search your memory of what you know about the user — their preferences, facts about them, and past session summaries. Use this when the user asks "what do you remember about me" or when you need to recall prior context.',
+      'Create, update, or delete memories about the user. Use when you learn something worth remembering (preferences, facts, instructions) or when the user asks you to remember/forget something.',
     parameters: {
       type: 'object',
       properties: {
-        category: {
+        action: {
           type: 'string',
-          description: 'Optional filter: "preference", "fact", "instruction", or "all" (default "all")',
+          enum: ['create', 'update', 'delete', 'list'],
+          description: 'The operation to perform',
+        },
+        filename: {
+          type: 'string',
+          description: 'e.g. preference_concise.md (required for update/delete)',
+        },
+        type: {
+          type: 'string',
+          enum: ['preference', 'fact', 'instruction'],
+          description: 'Memory category',
+        },
+        name: {
+          type: 'string',
+          description: 'Kebab-case identifier (e.g. prefers-typescript)',
+        },
+        description: {
+          type: 'string',
+          description: 'One-line summary for the memory index',
+        },
+        content: {
+          type: 'string',
+          description: 'Memory content (markdown)',
         },
       },
-      required: [],
+      required: ['action'],
     },
     executionContext: 'ui',
   },

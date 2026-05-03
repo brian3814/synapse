@@ -2,6 +2,7 @@ import type { CommandContext } from './types';
 import { retrieveRAGContext, formatRAGPrompt } from './rag-commands';
 import { parseMarkdown } from '../notes/markdown-utils';
 import * as graphCommands from './graph-commands';
+import * as memoryCommands from './memory-commands';
 
 export interface ToolExecResult {
   result: string;
@@ -173,37 +174,9 @@ export async function executeTool(
       };
     }
 
-    case 'search_memories': {
-      const allSemantic = await ctx.db.memory.getAllSemantic() as Array<{
-        id: string;
-        category: string;
-        content: string;
-        updated_at: string;
-      }>;
-      const category = (input.category as string) ?? 'all';
-      const filtered = category === 'all'
-        ? allSemantic
-        : allSemantic.filter((m) => m.category === category);
-
-      const recentEpisodic = await ctx.db.memory.getRecentEpisodic(5) as Array<{
-        summary: string;
-        created_at: string;
-      }>;
-
-      return {
-        result: JSON.stringify({
-          semanticMemories: filtered.map((m) => ({
-            category: m.category,
-            content: m.content,
-            lastUsed: m.updated_at,
-          })),
-          recentSessionSummaries: recentEpisodic.map((e) => ({
-            summary: e.summary,
-            date: e.created_at,
-          })),
-          total: filtered.length,
-        }),
-      };
+    case 'manage_memory': {
+      const result = await memoryCommands.executeManageMemory(ctx, input);
+      return { result };
     }
 
     case 'index_notes_folder': {

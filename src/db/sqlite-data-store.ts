@@ -219,13 +219,6 @@ export function createSqliteDataStore(
     },
 
     memory: {
-      addSemantic: memoryQueries.addSemantic,
-      getAllSemantic: memoryQueries.getAllSemantic,
-      getRecentSemantic: memoryQueries.getRecentSemantic,
-      deleteSemantic: memoryQueries.deleteSemantic,
-      clearAllSemantic: memoryQueries.clearAllSemantic,
-      findDuplicateSemantic: memoryQueries.findDuplicateSemantic,
-      touchSemantic: memoryQueries.touchSemantic,
       addEpisodic: memoryQueries.addEpisodic,
       getRecentEpisodic: memoryQueries.getRecentEpisodic,
       clearAllEpisodic: memoryQueries.clearAllEpisodic,
