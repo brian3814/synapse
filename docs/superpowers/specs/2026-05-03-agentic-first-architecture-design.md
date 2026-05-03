@@ -65,6 +65,7 @@ interface CommandContext {
   db: DataStore;            // the existing 16-repository interface (src/db/data-store.ts)
   storage: PlatformStorage;
   notes: PlatformNotes;
+  files: PlatformFiles;     // path-safe file I/O (memory/, etc.) — added by file-based memory design
   llm: PlatformLLM;
   browser: PlatformBrowser;
   getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
@@ -261,6 +262,6 @@ The agent harness spec (`docs/superpowers/specs/2026-05-03-agent-harness-design.
 
 **Invariants regardless of order:**
 - Harness custom prompts are orthogonal to both — prompt assembly works with or without the command layer
-- Harness memory must add `MemoryRepository` to `DataStore` (not import memoryQueries directly into action-handler)
+- Episodic memory (session summaries) remains in `DataStore` via `MemoryRepository` (episodic methods only). Semantic memory is file-backed via `memoryCommands.*` using `ctx.files` — see `2026-05-03-file-based-memory-and-folder-index-design.md`
 - Harness preset `allowedTools`/`model` enforcement requires the unified registry's `ToolDispatcher` allowlist — defer those preset fields until Phase 2 lands
 - No standalone `chat-tool-registry.ts` — either use old arrays (pre-Phase 2) or the unified registry (post-Phase 2)

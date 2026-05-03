@@ -154,6 +154,7 @@ const noopBrowser: PlatformBrowser = {
 export function createServerCommandContext(
   dataStore: DataStore,
   notes: PlatformNotes,
+  files: PlatformFiles,
   storage: PlatformStorage,
   llm?: PlatformLLM,
 ): CommandContext {
@@ -168,6 +169,7 @@ export function createServerCommandContext(
     db: dataStore,
     storage,
     notes,
+    files,
     llm: llmStub,
     browser: noopBrowser,
     getGraphSnapshot: async () => {

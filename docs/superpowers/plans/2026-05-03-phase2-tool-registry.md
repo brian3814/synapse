@@ -577,7 +577,11 @@ function makeChatExecute(toolName: string) {
 /**
  * Dynamically convert ALL current chat tools from CHAT_AGENT_TOOLS into
  * UnifiedToolDefinition format. This picks up any tools added by the harness
- * (e.g. index_notes_folder) or other extensions before Phase 2 landed.
+ * (e.g. index_notes_folder, manage_memory) or other extensions before Phase 2 landed.
+ *
+ * NOTE: `search_memories` was removed from CHAT_AGENT_TOOLS by the file-based
+ * memory implementation (superseded by manage_memory with action:'list').
+ * It will NOT appear here. See 2026-05-03-file-based-memory-and-folder-index-design.md.
  */
 function buildChatTools(): UnifiedToolDefinition[] {
   return CHAT_AGENT_TOOLS.map((tool) => ({

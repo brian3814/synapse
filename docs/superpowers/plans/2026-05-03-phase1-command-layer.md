@@ -68,6 +68,7 @@ export interface CommandContext {
   db: DataStore;
   storage: PlatformStorage;
   notes: PlatformNotes;
+  files: PlatformFiles;     // path-safe file I/O for memory/, index files, etc.
   llm: PlatformLLM;
   browser: PlatformBrowser;
   /** Async to support both renderer (Promise.resolve of Zustand) and server (DB query). */

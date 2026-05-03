@@ -8,6 +8,8 @@ This design adds a harness layer to the **chat agent only** — the interaction 
 
 **Approach**: DB-first ("Extended Session"), following every existing architectural convention. Inspired by Claude Code's harness (categorized file-based memory, agent presets with tool selection, rich tool registration), adapted for a browser extension / Electron app where SQLite replaces the filesystem.
 
+> **Partial supersession notice (2026-05-03):** Section 3 (Semantic Memory), Phase 2 (Memory System), Phase 3's `search_memories` tool, and related verification steps are superseded by [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md). Semantic memory is now file-based (Claude Code pattern) using a `manage_memory` tool. Episodic memory (session summaries) remains in SQLite as originally specified. Sections 1, 2, 5, and Phase 1 remain canonical.
+
 ## Scope
 
 Three features, designed as a complete system but implemented in phases:
@@ -106,7 +108,9 @@ Layering order:
 
 ## 3. Memory System
 
-### Semantic Memory (facts/preferences)
+> **SUPERSEDED:** Semantic memory below is replaced by file-based memory (Claude Code pattern). See [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md). The `manage_memory` chat tool replaces both auto-extraction and `search_memories`. Only **Episodic Memory** (session summaries in SQLite) below remains active.
+
+### ~~Semantic Memory (facts/preferences)~~ — SUPERSEDED
 
 **Extraction**: After each completed assistant turn, a fire-and-forget LLM call extracts facts.
 - Uses cheapest model (Haiku)
@@ -202,28 +206,17 @@ Modified files:
 
 No standalone tool registry. New tools are added directly to existing arrays/switch until the agentic-first unified registry (Phase 2 of that spec) provides dynamic registration.
 
-### Phase 2: Memory System
+### ~~Phase 2: Memory System~~ — SUPERSEDED
 
-New files:
-- `src/core/memory-extractor.ts`
-- `src/db/worker/queries/memory-queries.ts`
-- `src/ui/components/settings/MemorySection.tsx`
+> Replaced by file-based memory. See [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md). Implementation uses `src/commands/memory-commands.ts` + `PlatformFiles` interface instead of SQLite `memory_semantic`.
 
-Modified files:
-- `src/db/data-store.ts` — add `MemoryRepository` interface to `DataStore`
-- `src/db/sqlite-data-store.ts` — implement `MemoryRepository` delegating to memory-queries
-- `src/db/worker/action-handler.ts` — add `memory.*` cases
-- `src/db/client/db-client.ts` — add `memory` namespace
-- `src/ui/hooks/useChatSession.ts` — hook memory extraction post-turn
-- `src/core/prompt-assembler.ts` — memory retrieval in assembly
+### Phase 3: Continuity & Polish — PARTIALLY SUPERSEDED
 
-### Phase 3: Continuity & Polish
-
-- Episodic summarization on session expiry
-- Session summaries in prompt assembly
-- `search_memories` chat tool
-- Memory deduplication/conflict resolution
-- Token budget management
+- Episodic summarization on session expiry *(still active)*
+- Session summaries in prompt assembly *(still active)*
+- ~~`search_memories` chat tool~~ → replaced by `manage_memory` tool
+- ~~Memory deduplication/conflict resolution~~ → handled by `manage_memory` file-level dedup
+- Token budget management *(moved to file-based memory spec)*
 
 ---
 
@@ -237,13 +230,11 @@ Modified files:
 5. Type "index my notes folder" → agent calls `index_notes_folder` tool, returns stats
 6. Quick-action chips appear and pre-fill chat input
 
-### Phase 2 verification
-1. Have a conversation mentioning preferences ("I prefer concise answers")
-2. Check Settings → Memory section shows extracted fact with category `preference`
-3. Start a new session → LLM response reflects remembered preference
-4. Delete a memory → subsequent sessions no longer reflect it
+### ~~Phase 2 verification~~ — SUPERSEDED
 
-### Phase 3 verification
-1. Complete a session → episodic summary auto-generated
-2. New session → LLM references prior session context
-3. Use `search_memories` tool → agent retrieves and cites specific memories
+> See verification in [`2026-05-03-file-based-memory-and-folder-index-design.md`](2026-05-03-file-based-memory-and-folder-index-design.md).
+
+### Phase 3 verification — UPDATED
+1. Complete a session → episodic summary auto-generated *(unchanged)*
+2. New session → LLM references prior session context via episodic summaries *(unchanged)*
+3. ~~Use `search_memories` tool~~ → Use `manage_memory` with `action: 'list'` to retrieve memories

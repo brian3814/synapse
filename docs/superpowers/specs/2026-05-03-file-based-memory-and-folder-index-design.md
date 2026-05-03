@@ -83,6 +83,8 @@ Each memory file:
 name: {kebab-case-name}
 description: {one-line summary for index}
 type: {preference|fact|instruction}
+created_at: {ISO 8601 date}
+updated_at: {ISO 8601 date}
 ---
 
 {memory content — can be multi-line}
@@ -184,6 +186,18 @@ Replaces the auto-extraction pipeline. Added to `CHAT_AGENT_TOOLS` + `chat-tool-
 }
 ```
 
+**Validation rules** (enforced in `memoryCommands.*` executor):
+- `create` requires: `type`, `name`, `description`, `content`
+- `update` requires: `filename`, plus at least one of `type`/`description`/`content`
+- `delete` requires: `filename`
+- `list` requires: nothing
+- `filename` must match `/^[a-z0-9_-]+\.md$/` (no slashes, no path traversal)
+- `filename` must not be `MEMORY.md` (reserved for the derived index)
+- `name` must match `/^[a-z0-9-]+$/` (kebab-case only)
+- `type` must be one of `preference`, `fact`, `instruction`
+- `content` must not be empty for `create`
+- Frontmatter fields in generated files are YAML-escaped to prevent injection
+
 ### Prompt Assembly Changes
 
 Replace the DB-based memory loading in `useChatSession.ts`:
@@ -199,6 +213,13 @@ After:
 ```
 
 `loadAllForPrompt` scans `memory/`, parses each file's frontmatter and body, returns `Array<{category, content}>`. The `assembleSystemPrompt` interface is unchanged.
+
+**Prompt budgeting:**
+- Each memory file should include `created_at` and `updated_at` in frontmatter (ISO date strings, set by `memoryCommands.write`)
+- `loadAllForPrompt` sorts by `updated_at DESC` (most recently touched first)
+- Cap: include memories until the total exceeds ~500 tokens (~2000 chars). Truncate remaining.
+- At 10-50 memories (typical), all fit within budget. The cap matters only if the user accumulates 100+ memories.
+- If memory count exceeds 50, `loadAllForPrompt` logs a warning suggesting the user prune stale memories.
 
 Episodic summaries: `memoryDb.getRecentEpisodic(3)` stays unchanged (SQLite).
 
