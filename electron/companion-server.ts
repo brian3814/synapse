@@ -61,6 +61,29 @@ export function startCompanionServer(): void {
       return;
     }
 
+    if (req.url === '/api/reading-queue' && req.method === 'POST') {
+      try {
+        const body = await readBody(req);
+        const { url, title } = JSON.parse(body);
+
+        if (!url) {
+          json(res, 400, { error: 'No URL provided' });
+          return;
+        }
+
+        const windows = BrowserWindow.getAllWindows();
+        console.log(`[Companion Server] Reading queue: "${title}" (${url}), broadcasting to ${windows.length} windows`);
+        for (const win of windows) {
+          win.webContents.send('companion:reading-queue', { url, title: title ?? url });
+        }
+
+        json(res, 200, { success: true });
+      } catch (e: any) {
+        json(res, 400, { error: e.message });
+      }
+      return;
+    }
+
     json(res, 404, { error: 'Not found' });
   });
 

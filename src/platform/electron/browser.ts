@@ -26,6 +26,12 @@ export class ElectronBrowser implements PlatformBrowser {
     });
   }
 
+  onReadingQueue(cb: (data: { url: string; title: string }) => void): () => void {
+    return window.electronIPC.on('companion:reading-queue', (data: unknown) => {
+      cb(data as { url: string; title: string });
+    });
+  }
+
   // --- Stubs for Chrome-specific methods (no-ops on Electron) ---
 
   async analyzePage(): Promise<any> {

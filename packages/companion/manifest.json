@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "KG Desktop Companion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Captures rendered page content and sends to KG Desktop for extraction",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "contextMenus"],
   "host_permissions": ["http://127.0.0.1:19876/*"],
   "action": {
     "default_title": "Capture page for KG Desktop"

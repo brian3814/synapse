@@ -32,6 +32,10 @@ export class ChromeBrowser implements PlatformBrowser {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }
 
+  onReadingQueue(_cb: (data: { url: string; title: string }) => void): () => void {
+    return () => {};
+  }
+
   // --- Chrome-specific methods (not on PlatformBrowser interface) ---
 
   async analyzePage(): Promise<any> {

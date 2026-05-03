@@ -64,44 +64,96 @@ function capturePageContent(): { title: string; url: string; content: string } {
   return { title, url, content };
 }
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !tab.url) return;
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'kg-extract-page',
+    title: 'Extract with KG app',
+    contexts: ['page', 'link'],
+  });
+  chrome.contextMenus.create({
+    id: 'kg-reading-queue',
+    title: 'Add to KG app reading queue',
+    contexts: ['page', 'link'],
+  });
+});
+
+function showBadge(tabId: number, success: boolean): void {
+  chrome.action.setBadgeText({ text: success ? '✓' : '✗', tabId });
+  chrome.action.setBadgeBackgroundColor({ color: success ? '#22c55e' : '#ef4444', tabId });
+  setTimeout(() => chrome.action.setBadgeText({ text: '', tabId }), 2000);
+}
+
+async function captureAndSend(tabId: number): Promise<void> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: capturePageContent,
+  });
+
+  const captured = results?.[0]?.result;
+  if (!captured?.content) {
+    throw new Error('No content captured');
+  }
+
+  const response = await fetch(`${DESKTOP_URL}/api/capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(captured),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Desktop returned ${response.status}`);
+  }
+}
+
+async function addToReadingQueue(url: string, title: string): Promise<void> {
+  const response = await fetch(`${DESKTOP_URL}/api/reading-queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, title }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Desktop returned ${response.status}`);
+  }
+}
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.id || !tab.url) return;
 
   if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-    chrome.action.setBadgeText({ text: '✗', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#ef4444', tabId: tab.id });
-    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 2000);
+    showBadge(tab.id, false);
     return;
   }
 
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: capturePageContent,
-    });
-
-    const captured = results?.[0]?.result;
-    if (!captured?.content) {
-      throw new Error('No content captured');
+    if (info.menuItemId === 'kg-extract-page') {
+      await captureAndSend(tab.id);
+      showBadge(tab.id, true);
+    } else if (info.menuItemId === 'kg-reading-queue') {
+      const targetUrl = info.linkUrl ?? tab.url;
+      const title = tab.title ?? targetUrl;
+      await addToReadingQueue(targetUrl, title);
+      showBadge(tab.id, true);
     }
+  } catch (e: any) {
+    console.error('[Companion] Context menu action failed:', e);
+    showBadge(tab.id, false);
+  }
+});
 
-    const response = await fetch(`${DESKTOP_URL}/api/capture`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(captured),
-    });
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id || !tab.url) return;
 
-    if (!response.ok) {
-      throw new Error(`Desktop returned ${response.status}`);
-    }
+  if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    showBadge(tab.id, false);
+    return;
+  }
 
-    chrome.action.setBadgeText({ text: '✓', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#22c55e', tabId: tab.id });
-    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 2000);
+  try {
+    await captureAndSend(tab.id);
+    showBadge(tab.id, true);
   } catch (e: any) {
     console.error('[Companion] Capture failed:', e);
-    chrome.action.setBadgeText({ text: '✗', tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: '#ef4444', tabId: tab.id });
-    setTimeout(() => chrome.action.setBadgeText({ text: '', tabId: tab.id }), 3000);
+    showBadge(tab.id, false);
   }
 });

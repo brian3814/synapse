@@ -109,4 +109,5 @@ export interface PlatformBrowser {
   getPageContent(tabId: number): Promise<string>;
   executeTool(tabId: number, tool: string, params: Record<string, unknown>): Promise<string>;
   onPageCapture(cb: (data: { title: string; url: string; content: string }) => void): () => void;
+  onReadingQueue(cb: (data: { url: string; title: string }) => void): () => void;
 }
