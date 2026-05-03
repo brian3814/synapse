@@ -4,23 +4,25 @@
 
 Two enhancements to the knowledge graph extension:
 
-1. **Per-folder index.md** — When indexing a markdown folder, generate a human-readable `index.md` in each folder/subfolder as a table-of-contents. Combined with harness engineering, show a proactive notification when a folder exceeds a file threshold, prompting the user to reorganize.
+1. **Per-folder `_kg_index.md`** — When indexing a markdown folder, generate a human-readable `_kg_index.md` in each folder/subfolder as a table-of-contents. Combined with harness engineering, show a proactive notification when a folder exceeds a file threshold, prompting the user to reorganize.
 
 2. **File-based memory (Claude Code pattern)** — Replace the SQLite `memory_semantic` table with individual markdown files the agent reads/writes via a `manage_memory` tool. Users can view, edit, add, delete, and export memories. Episodic session summaries remain in SQLite.
 
-**Supersedes**: Section 3 (semantic memory) of `docs/superpowers/specs/2026-05-03-agent-harness-design.md`. The `memory_semantic` table and its DataStore/db-client plumbing become unused for semantic memory. `memory_episodic` and its infrastructure remain.
+**Supersedes**: Section 3 (semantic memory), Phase 2 (memory system), verification steps referencing semantic DB, and the `search_memories` tool in `docs/superpowers/specs/2026-05-03-agent-harness-design.md`. The `memory_semantic` table and its DataStore/db-client plumbing become unused. `memory_episodic` and its infrastructure remain.
 
-**Compatible with**: `docs/superpowers/specs/2026-05-03-agentic-first-architecture-design.md` — the command layer, tool registry, and MCP server are storage-agnostic.
+**Compatible with**: `docs/superpowers/specs/2026-05-03-agentic-first-architecture-design.md` — with one update: the agentic-first spec's reference to "MemoryRepository in DataStore" should read "episodic memory remains in DataStore; semantic memory is file-backed via CommandContext."
 
 ---
 
-## Feature 1: Per-folder index.md
+## Feature 1: Per-folder `_kg_index.md`
 
 ### Behavior
 
-After `indexMarkdownFolder()` completes successfully, it generates/updates an `index.md` in each folder (and subfolder) that was processed.
+After `indexMarkdownFolder()` completes successfully, it generates/updates a `_kg_index.md` in each folder (and subfolder) that was processed.
 
-### index.md Format
+The filename `_kg_index.md` is chosen to avoid collision with user-authored `index.md` files (common in Obsidian, MkDocs, and manual note systems). The underscore prefix signals "generated/internal."
+
+### _kg_index.md Format
 
 ```markdown
 # Index: {folder-relative-path}/
@@ -40,9 +42,9 @@ After `indexMarkdownFolder()` completes successfully, it generates/updates an `i
 ```
 
 - The summary is derived from: frontmatter `description` field > first H1 heading > first non-empty paragraph (truncated to 80 chars)
-- index.md is written LAST (after all files in that folder are indexed)
-- index.md is excluded from indexing (not created as a node)
-- If index.md already exists, it is overwritten entirely (no merge logic)
+- `_kg_index.md` is written LAST (after all files in that folder are indexed)
+- `_kg_index.md` is excluded from indexing (not created as a node)
+- If `_kg_index.md` already exists, it is overwritten entirely (it's a generated cache, not user content)
 
 ### Threshold Notification
 
@@ -54,16 +56,16 @@ After `indexMarkdownFolder()` completes successfully, it generates/updates an `i
 
 ### Agent Context
 
-- The prompt assembler does NOT auto-inject index.md content
-- Instead, the agent can read index.md via the existing `get_source_content` tool or a new lightweight tool if needed
-- The `index_notes_folder` tool response already includes stats; the agent can follow up by reading index.md for details
+- The prompt assembler does NOT auto-inject `_kg_index.md` content
+- The `index_notes_folder` tool response includes the generated index content inline (appended to the stats JSON), so the agent has folder structure context without needing a follow-up read
+- No separate tool needed to read the index — it's part of the indexing response
 
 ### Files to modify
 
-- `src/filesystem/indexing-pipeline.ts` — add `generateIndexFiles()` step after indexing
-- `src/filesystem/indexing-pipeline.ts` — exclude `index.md` from file discovery
+- `src/filesystem/indexing-pipeline.ts` — add `generateIndexFiles()` step after indexing; exclude `_kg_index.md` from file discovery
 - `src/ui/components/settings/SettingsPanel.tsx` — add toast/notification after sync
-- `src/shared/constants.ts` — add `FOLDER_THRESHOLD_DEFAULT = 15`
+- `src/shared/constants.ts` — add `FOLDER_THRESHOLD_DEFAULT = 15`, `KG_INDEX_FILENAME = '_kg_index.md'`
+- `src/commands/chat-tool-executor.ts` — update `index_notes_folder` case to include index content in response
 
 ---
 
@@ -71,8 +73,8 @@ After `indexMarkdownFolder()` completes successfully, it generates/updates an `i
 
 ### Storage Architecture
 
-Semantic memories are individual `.md` files stored via PlatformNotes:
-- **Chrome**: OPFS at `memory/{filename}.md` (same mechanism as notes)
+Semantic memories are individual `.md` files:
+- **Chrome**: OPFS at `memory/{filename}.md`
 - **Electron**: `~/Documents/KnowledgeGraph/memory/{filename}.md`
 
 Each memory file:
@@ -86,7 +88,7 @@ type: {preference|fact|instruction}
 {memory content — can be multi-line}
 ```
 
-Index file at `memory/MEMORY.md`:
+Derived index file at `memory/MEMORY.md`:
 ```markdown
 # Memory
 
@@ -95,32 +97,73 @@ Index file at `memory/MEMORY.md`:
 - [instruction_cite_sources.md](instruction_cite_sources.md) — Always cite sources in responses
 ```
 
+### Source of Truth
+
+**The filesystem is the source of truth, not `MEMORY.md`.** On session start:
+1. List all `.md` files in `memory/` (excluding `MEMORY.md` itself)
+2. Parse frontmatter from each file to get `type`, `description`, `content`
+3. If `MEMORY.md` is out of sync (missing files, extra entries), regenerate it
+
+`MEMORY.md` is a **derived convenience file** for human readability. It is regenerated whenever memory files change (via tool, UI, or external edit). The agent and prompt assembler never rely on it as authoritative — they read the individual files directly.
+
 ### File Naming Convention
 
 `{type}_{kebab-case-slug}.md` — e.g., `fact_works_at_startup.md`, `preference_concise_responses.md`
 
-### PlatformNotes Extension
+### Platform File Access (New `PlatformFiles` Interface)
 
-The existing `PlatformNotes` interface (`read`, `write`, `remove`, `list`) handles `notes/{id}.md`. We need an equivalent for `memory/{filename}.md`.
+The existing `PlatformNotes` interface takes a `nodeId` and hardcodes the `notes/` directory. It cannot access `memory/{filename}.md`. A new `PlatformFiles` interface provides path-safe file operations:
 
-**Approach**: Reuse PlatformNotes with a path prefix convention:
-- Notes: `notes/{nodeId}.md`
-- Memory: `memory/{filename}.md`
-
-The PlatformNotes implementations already support arbitrary paths. We add helper functions:
 ```typescript
-// src/core/memory-files.ts
-export function readMemoryFile(filename: string): Promise<string | null>
-export function writeMemoryFile(filename: string, content: string): Promise<void>
-export function removeMemoryFile(filename: string): Promise<void>
-export function listMemoryFiles(): Promise<string[]>
-export function readMemoryIndex(): Promise<string>
-export function writeMemoryIndex(content: string): Promise<void>
+// src/platform/types.ts — new interface
+export interface PlatformFiles {
+  read(path: string): Promise<string | null>;
+  write(path: string, content: string): Promise<void>;
+  remove(path: string): Promise<void>;
+  list(prefix: string): Promise<string[]>;
+}
 ```
+
+Path semantics:
+- Paths are relative to the platform's data root (`memory/foo.md`, `memory/MEMORY.md`)
+- No `..` traversal allowed (implementations must validate)
+- Chrome implementation: OPFS directory operations
+- Electron implementation: IPC to main process, rooted at `~/Documents/KnowledgeGraph/`
+
+This interface is added to `CommandContext` as `ctx.files`:
+```typescript
+export interface CommandContext {
+  db: DataStore;
+  storage: PlatformStorage;
+  notes: PlatformNotes;
+  files: PlatformFiles;  // NEW
+  llm: PlatformLLM;
+  browser: PlatformBrowser;
+  getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
+}
+```
+
+### Memory Commands (CommandContext-based)
+
+Memory operations are commands that use `ctx.files`, not standalone helpers that import `@platform`. This ensures they work in both UI context and MCP/server context:
+
+```typescript
+// src/commands/memory-commands.ts
+import type { CommandContext } from './types';
+
+export async function listMemories(ctx: CommandContext): Promise<MemoryEntry[]>
+export async function readMemory(ctx: CommandContext, filename: string): Promise<MemoryEntry | null>
+export async function writeMemory(ctx: CommandContext, input: WriteMemoryInput): Promise<string>
+export async function deleteMemory(ctx: CommandContext, filename: string): Promise<boolean>
+export async function regenerateIndex(ctx: CommandContext): Promise<void>
+export async function loadAllForPrompt(ctx: CommandContext): Promise<Array<{category: string; content: string}>>
+```
+
+These parse frontmatter, validate filenames, and regenerate `MEMORY.md` after mutations.
 
 ### manage_memory Chat Tool
 
-Replaces the auto-extraction pipeline. Added to `CHAT_AGENT_TOOLS` + `chat-tool-executor.ts`:
+Replaces the auto-extraction pipeline. Added to `CHAT_AGENT_TOOLS` + `chat-tool-executor.ts`. The executor delegates to `memoryCommands.*`:
 
 ```typescript
 {
@@ -150,10 +193,12 @@ Before (current):
   memoryDb.getRecentSemantic(20) → assembleSystemPrompt({semanticMemories})
 
 After:
-  readMemoryIndex() → parse filenames → readMemoryFile() for each → assembleSystemPrompt({semanticMemories})
+  const ctx = createUICommandContext();
+  const memories = await memoryCommands.loadAllForPrompt(ctx);
+  assembleSystemPrompt({semanticMemories: memories})
 ```
 
-The `assembleSystemPrompt` interface stays the same — it still receives `semanticMemories: Array<{category, content}>`. The source changes from DB to files.
+`loadAllForPrompt` scans `memory/`, parses each file's frontmatter and body, returns `Array<{category, content}>`. The `assembleSystemPrompt` interface is unchanged.
 
 Episodic summaries: `memoryDb.getRecentEpisodic(3)` stays unchanged (SQLite).
 
@@ -173,9 +218,10 @@ Replace current `MemorySection.tsx` with enhanced version:
 
 - `src/core/memory-extractor.ts` → `extractSemanticMemories()` function removed (replaced by agent calling `manage_memory`)
 - `summarizeSession()` stays (episodic still works)
-- `memory.addSemantic`, `memory.getAllSemantic`, `memory.deleteSemantic`, `memory.findDuplicate`, `memory.touchSemantic` in db-client → deprecated (no longer called)
-- `MemoryRepository` in DataStore → semantic methods removed, episodic methods remain
-- `useChatSession.ts` → remove `extractSemanticMemories()` call, update prompt assembly to read files
+- `search_memories` tool removed from `CHAT_AGENT_TOOLS` (superseded by `manage_memory` with `action: 'list'`)
+- `memory.addSemantic`, `memory.getAllSemantic`, `memory.deleteSemantic`, `memory.findDuplicate`, `memory.touchSemantic` in db-client → removed
+- `MemoryRepository` in DataStore → semantic methods removed; interface retains only episodic methods
+- `useChatSession.ts` → remove `extractSemanticMemories()` call, update prompt assembly to use `memoryCommands.loadAllForPrompt(ctx)`
 
 ### Episodic Memory (Unchanged)
 
@@ -188,38 +234,38 @@ Replace current `MemorySection.tsx` with enhanced version:
 
 ## Spec Reconciliation for Deferred Phases
 
-The following deferred work (not yet implemented) references memory or tools that this design changes. This section specifies exactly what each phase should do differently.
-
 ### Agentic-first Phase 1, Tasks 9-11 (extraction-commands, useLLMExtraction migration)
 
 **No change needed.** These extract the extraction pipeline to commands. They don't touch memory.
 
 ### Agentic-first Phase 2 (Tool Registry — `src/tools/`)
 
-**Change:** When the unified `ToolRegistry` absorbs `CHAT_AGENT_TOOLS`, it will now pick up `manage_memory` (new) and `search_memories` (deprecated). At registry migration time:
-- Register `manage_memory` as a `UnifiedToolDefinition` with its executor from `chat-tool-executor.ts`
-- **Remove** `search_memories` — it's superseded by `manage_memory` with `action: 'list'`
-- The tool registry spec doesn't need structural changes — it dynamically iterates `CHAT_AGENT_TOOLS`
+**Change:** `search_memories` is removed from `CHAT_AGENT_TOOLS` during THIS implementation (before Phase 2 ever runs). Phase 2's dynamic absorption will never encounter it. `manage_memory` is registered as a `UnifiedToolDefinition` with its executor.
 
 ### Agentic-first Phase 4 (MCP Server)
 
-**Change:** If MCP exposes memory management, it should use the file-based `memory-files.ts` helpers (not the DB `MemoryRepository`). Add optional MCP tools:
-- `kg_list_memories` → calls `listMemoryFiles()` + `readMemoryIndex()`
-- `kg_read_memory` → calls `readMemoryFile(filename)`
-- `kg_write_memory` → calls `writeMemoryFile(filename, content)` + updates index
+**Change:** MCP memory tools use `memoryCommands.*` (which use `ctx.files`), not the DB `MemoryRepository`. Optional MCP tools:
+- `kg_list_memories` → `memoryCommands.listMemories(ctx)`
+- `kg_read_memory` → `memoryCommands.readMemory(ctx, filename)`
+- `kg_write_memory` → `memoryCommands.writeMemory(ctx, input)`
 
-These are additive — not blocking for Phase 4 v1.
+The server's `createServerCommandContext()` provides a `PlatformFiles` implementation backed by direct filesystem access (no IPC needed in main process).
 
-### Harness Spec Section 3 (Memory System)
+### Agentic-first spec (`2026-05-03-agentic-first-architecture-design.md`)
 
-**Superseded.** The harness spec file should be updated to add a notice at the top of Section 3:
+**Update line ~264:** Change "harness memory must add MemoryRepository to DataStore" to: "Episodic memory remains in DataStore (`MemoryRepository` with episodic methods only). Semantic memory is file-backed, accessed via `memoryCommands.*` through `ctx.files`."
 
-> **Superseded** by `docs/superpowers/specs/2026-05-03-file-based-memory-and-folder-index-design.md`.
-> Semantic memory is now file-based (Claude Code pattern). Episodic memory (session summaries) remains in SQLite as specified below.
+### Harness Spec (`2026-05-03-agent-harness-design.md`)
+
+**Full update needed** (not just a Section 3 notice):
+- Top-level approach: add notice that semantic memory is superseded
+- Section 3: superseded notice, strike-through or blockquote the SQLite semantic content
+- Section 4 (tools): note that `search_memories` is replaced by `manage_memory`
+- Section 6 (phasing): Phase 2 no longer covers semantic memory DB CRUD
+- Verification: update memory verification steps to reference file-based flow
 
 ### DataStore Interface (`src/db/data-store.ts`)
 
-**Change:** Remove semantic methods from `MemoryRepository`. Keep only episodic:
 ```typescript
 export interface MemoryRepository {
   addEpisodic(input: { sessionId: string; summary: string; keyTopics?: string[] }): Promise<any>;
@@ -228,21 +274,22 @@ export interface MemoryRepository {
 }
 ```
 
-### Files to Update (Specs/Plans) After Implementation
+Semantic methods removed entirely (not deprecated-but-present). Less dead code, clearer contract.
 
-- `docs/superpowers/specs/2026-05-03-agent-harness-design.md` — Section 3 superseded notice
-- `docs/superpowers/plans/2026-05-03-agent-harness-phase2.md` — Tasks referencing semantic DB CRUD
-- `docs/superpowers/plans/2026-05-03-agent-harness-phase3.md` — Task 3 (search_memories replaced by manage_memory)
+### Harness Phase 2 & 3 Plans
+
+- `2026-05-03-agent-harness-phase2.md` — Tasks 1-5 referencing semantic memory DB CRUD: mark as superseded
+- `2026-05-03-agent-harness-phase3.md` — Task 3 (search_memories tool): mark as replaced by `manage_memory`
 
 ---
 
 ## Migration Path
 
 Since we just built the SQLite-based semantic memory:
-1. On first load after update, if `memory_semantic` has records AND `memory/MEMORY.md` doesn't exist:
+1. On first load after update, if `memory_semantic` has records AND no files exist in `memory/`:
    - Read all semantic memories from DB
-   - Write each as a .md file to `memory/`
-   - Write `MEMORY.md` index
+   - Write each as a `.md` file to `memory/`
+   - Regenerate `MEMORY.md` index
    - Log migration complete
 2. After migration, the DB table stays (no DROP) but is never read/written for semantic memory
 
@@ -250,16 +297,20 @@ Since we just built the SQLite-based semantic memory:
 
 ## Verification
 
-1. **Index generation**: Connect a folder with 20+ files across 3 subfolders. Run sync. Verify each folder gets an `index.md` with correct file list and summaries. Verify `index.md` itself is NOT indexed as a node.
+1. **Index generation**: Connect a folder with 20+ files across 3 subfolders. Run sync. Verify each folder gets a `_kg_index.md` with correct file list and summaries. Verify `_kg_index.md` itself is NOT indexed as a node. Verify any existing user `index.md` is untouched.
 
 2. **Threshold notification**: Set threshold to 5 (for testing). Sync a folder with 8 files. Verify toast appears. Click toast → chat opens with pre-filled reorganization prompt.
 
-3. **Memory CRUD via agent**: Chat: "Remember that I prefer dark mode." → Verify agent calls `manage_memory` with create action → file appears in memory/ folder → next session loads it into prompt.
+3. **Memory CRUD via agent**: Chat: "Remember that I prefer dark mode." → Verify agent calls `manage_memory` with create action → file appears in memory/ folder → `MEMORY.md` regenerated → next session loads it into prompt.
 
-4. **Memory editing**: Open Settings → Memory section → edit a memory's content → verify file on disk changes → next session reflects edit.
+4. **Memory editing in UI**: Open Settings → Memory section → edit a memory's content → verify file on disk changes → `MEMORY.md` regenerated → next session reflects edit.
 
-5. **Export/import**: Export memories as zip → delete all → import zip → verify memories restored.
+5. **External file edit (Electron)**: Edit a memory file in VS Code → reopen Settings → verify change is reflected (filesystem is source of truth).
 
-6. **Migration**: Pre-populate memory_semantic with test data → trigger migration → verify files created correctly.
+6. **Export/import**: Export memories as zip → delete all → import zip → verify memories restored and index regenerated.
 
-7. **Episodic still works**: Have a multi-turn conversation → close session → verify summary in `memory_episodic` → next session includes it in "Recent Context".
+7. **Migration**: Pre-populate `memory_semantic` with test data → trigger migration → verify files created correctly and DB is no longer queried.
+
+8. **Episodic still works**: Have a multi-turn conversation → close session → verify summary in `memory_episodic` → next session includes it in "Recent Context."
+
+9. **PlatformFiles on both platforms**: Verify `ctx.files.read/write/list` works on Chrome (OPFS) and Electron (filesystem IPC).
