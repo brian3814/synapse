@@ -9,8 +9,9 @@ import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
 import { CustomInstructionsSection } from './CustomInstructionsSection';
 import { MemorySection } from './MemorySection';
+import type { SettingsTab } from './SettingsModal';
 
-export function SettingsPanel() {
+export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   const [provider, setProvider] = useState<LLMProvider>('anthropic');
   const [model, setModel] = useState<string>(LLM_MODELS.anthropic[0].id);
   const [apiKey, setApiKey] = useState('');
@@ -51,80 +52,116 @@ export function SettingsPanel() {
 
   const models = LLM_MODELS[provider] ?? [];
 
-  return (
-    <div className="p-4 space-y-4">
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">LLM Provider</label>
-          <select
-            value={provider}
-            onChange={(e) => {
-              const p = e.target.value as LLMProvider;
-              setProvider(p);
-              setModel(LLM_MODELS[p][0]?.id ?? '');
-            }}
-            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            <option value="anthropic">Anthropic</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">Model</label>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-zinc-400 block mb-1">API Key</label>
-          <div className="flex gap-1">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter API key..."
-              className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="px-2 py-1 bg-zinc-700 text-zinc-400 rounded text-xs hover:bg-zinc-600"
+  if (activeTab === 'model') {
+    return (
+      <div className="p-5 space-y-5">
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">LLM Configuration</h3>
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">Provider</label>
+            <select
+              value={provider}
+              onChange={(e) => {
+                const p = e.target.value as LLMProvider;
+                setProvider(p);
+                setModel(LLM_MODELS[p][0]?.id ?? '');
+              }}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
             >
-              {showKey ? 'Hide' : 'Show'}
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">Model</label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">API Key</label>
+            <div className="flex gap-1">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter API key..."
+                className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="px-2 py-1 bg-zinc-700 text-zinc-400 rounded text-xs hover:bg-zinc-600"
+              >
+                {showKey ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="flex-1 bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
+            >
+              {saved ? 'Saved!' : 'Save Settings'}
+            </button>
+            <button
+              onClick={handleClearKey}
+              className="px-3 bg-red-900/50 text-red-400 text-sm py-1.5 rounded hover:bg-red-900"
+            >
+              Clear Key
             </button>
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={handleSave}
-            className="flex-1 bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
-          >
-            {saved ? 'Saved!' : 'Save Settings'}
-          </button>
-          <button
-            onClick={handleClearKey}
-            className="px-3 bg-red-900/50 text-red-400 text-sm py-1.5 rounded hover:bg-red-900"
-          >
-            Clear Key
-          </button>
+        <CustomInstructionsSection />
+
+        <MemorySection />
+      </div>
+    );
+  }
+
+  if (activeTab === 'billing') {
+    return (
+      <div className="p-5">
+        <UsageSection />
+      </div>
+    );
+  }
+
+  if (activeTab === 'about') {
+    return (
+      <div className="p-5 space-y-4">
+        <div>
+          <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">About</h3>
+          <p className="text-sm text-zinc-200 font-medium">Knowledge Graph Extension</p>
+          <p className="text-xs text-zinc-500 mt-1">Version 0.1.0</p>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs text-zinc-400">
+            Local-first knowledge graph with LLM-powered entity extraction, 2D graph visualization, and markdown notes.
+          </p>
+          <p className="text-xs text-zinc-500">
+            Runs as a Chrome extension and Electron desktop app from the same codebase.
+          </p>
+          <p className="text-xs text-zinc-600 mt-3">
+            API keys are stored locally and never sent to third parties.
+          </p>
         </div>
       </div>
+    );
+  }
 
-      <CustomInstructionsSection />
-
-      <MemorySection />
-
-      <UsageSection />
-
+  return (
+    <div className="p-5 space-y-0">
       <RelevanceSection />
 
       {platformId === 'electron' && <NotesStorageSection />}
@@ -134,16 +171,6 @@ export function SettingsPanel() {
       <StressTest />
 
       <DangerZone />
-
-      <div className="border-t border-zinc-700 pt-4 mt-4">
-        <h4 className="text-xs font-medium text-zinc-400 mb-2">About</h4>
-        <p className="text-xs text-zinc-500">
-          Knowledge Graph Extension v0.1.0
-        </p>
-        <p className="text-xs text-zinc-600 mt-1">
-          API keys are stored locally in Chrome's encrypted storage and never sent to third parties.
-        </p>
-      </div>
     </div>
   );
 }
@@ -199,10 +226,10 @@ function UsageSection() {
   const overBudget = budgetCents > 0 && totalCents >= budgetCents;
 
   return (
-    <div className="border-t border-zinc-700 pt-4 mt-4">
-      <h4 className="text-xs font-medium text-zinc-400 mb-2">
+    <div>
+      <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">
         {backendShowsCost ? 'Usage This Month' : 'Token Usage This Month'}
-      </h4>
+      </h3>
 
       <div className="space-y-2">
         {backendShowsCost && (
@@ -287,7 +314,7 @@ function RelevanceSection() {
   };
 
   return (
-    <div className="border-t border-zinc-700 pt-4 mt-4">
+    <div>
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-xs font-medium text-zinc-400">Contextual Relevance</h4>
@@ -295,18 +322,12 @@ function RelevanceSection() {
             Show related graph nodes while browsing
           </p>
         </div>
-        <button
-          onClick={handleToggle}
-          className={`relative w-9 h-5 rounded-full transition-colors ${
-            enabled ? 'bg-indigo-600' : 'bg-zinc-600'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-              enabled ? 'translate-x-4' : 'translate-x-0.5'
-            }`}
-          />
-        </button>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={handleToggle}
+          className="toggle-switch"
+        />
       </div>
     </div>
   );
