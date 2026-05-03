@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { chat, memory as memoryDb } from '../../db/client/db-client';
+import { chat, memory as memoryDb, noteSearch, sourceContent } from '../../db/client/db-client';
+import { type AttachedNode } from '../../graph/store/chat-context-store';
+import { useGraphStore } from '../../graph/store/graph-store';
+import { serializeAttachedContext } from '../utils/chat-context-serializer';
 import { storage } from '@platform';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
 import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
@@ -16,6 +19,7 @@ export interface ChatMessage {
   content: string;
   agentTurns?: ChatAgentTurn[];
   subgraph?: ChatSubgraphData;
+  attachedContext?: { nodeIds: string[]; serialized: string };
   error?: string;
   status: MessageStatus;
 }
@@ -72,7 +76,7 @@ export function useChatSession() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
   };
 
-  const sendMessage = useCallback(async (input: string) => {
+  const sendMessage = useCallback(async (input: string, attached?: AttachedNode[]) => {
     if (isProcessing) return;
     setIsProcessing(true);
 
@@ -93,6 +97,36 @@ export function useChatSession() {
     };
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
+
+    let serializedContext: string | undefined;
+    let attachedContextData: { nodeIds: string[]; serialized: string } | undefined;
+    if (attached && attached.length > 0) {
+      const { nodes: graphNodes, edges: graphEdges } = useGraphStore.getState();
+      const nodeMap = new Map(graphNodes.map((n) => [n.id, { id: n.id, name: n.name, type: n.type }]));
+      const nodeIds = attached.map((n) => n.id);
+
+      const [allNoteEntries, allSources] = await Promise.all([
+        noteSearch.getAll().catch(() => [] as Array<{ node_id: string }>),
+        sourceContent.getAll().catch(() => [] as Array<{ node_id: string }>),
+      ]);
+      const noteNodeIds = new Set(allNoteEntries.map((e: any) => e.node_id));
+      const sourceNodeIds = new Set(allSources.map((e: any) => e.node_id));
+
+      const metadata = new Map<string, { hasNote: boolean; hasSource: boolean }>();
+      for (const id of nodeIds) {
+        metadata.set(id, {
+          hasNote: noteNodeIds.has(id),
+          hasSource: sourceNodeIds.has(id),
+        });
+      }
+
+      serializedContext = serializeAttachedContext(nodeIds, graphEdges, metadata, nodeMap);
+      attachedContextData = { nodeIds, serialized: serializedContext };
+    }
+
+    if (attachedContextData) {
+      updateMessage(userMsgId, { attachedContext: attachedContextData });
+    }
 
     try {
       const sessionId = await ensureSession(input);
@@ -142,6 +176,7 @@ export function useChatSession() {
       const finalText = await runChatAgent({
         conversationHistory: historyForLLM,
         currentPrompt: input,
+        attachedContext: serializedContext,
         provider: config.provider,
         model: config.model,
         systemPrompt,

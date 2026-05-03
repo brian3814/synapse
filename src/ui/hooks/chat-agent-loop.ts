@@ -31,6 +31,7 @@ const TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
 interface RunChatAgentParams {
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   currentPrompt: string;
+  attachedContext?: string;
   provider: string;
   model: string;
   systemPrompt: string;
@@ -40,18 +41,23 @@ interface RunChatAgentParams {
 export async function runChatAgent({
   conversationHistory,
   currentPrompt,
+  attachedContext,
   provider,
   model,
   systemPrompt,
   onProgress,
 }: RunChatAgentParams): Promise<string> {
   // Build initial messages: prior turns + current user message
+  const userMessage = attachedContext
+    ? `${attachedContext}\n\n${currentPrompt}`
+    : currentPrompt;
+
   const messages: AnthropicMessage[] = [
     ...conversationHistory.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     })),
-    { role: 'user' as const, content: currentPrompt },
+    { role: 'user' as const, content: userMessage },
   ];
 
   let finalText = '';

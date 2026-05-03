@@ -28,7 +28,8 @@ export function ChatBot() {
     e.preventDefault();
     if (!input.trim() || isProcessing) return;
     history.push(input.trim());
-    sendMessage(input.trim());
+    const currentAttached = useChatContextStore.getState().attachedNodes;
+    sendMessage(input.trim(), currentAttached.length > 0 ? currentAttached : undefined);
     setInput('');
     clearAttached();
   };
