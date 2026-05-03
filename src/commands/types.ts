@@ -1,11 +1,12 @@
 import type { DataStore } from '../db/data-store';
-import type { PlatformStorage, PlatformNotes, PlatformLLM, PlatformBrowser } from '../platform/types';
+import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser } from '../platform/types';
 import type { GraphNode, GraphEdge, DbNode, DbEdge, NodeType } from '../shared/types';
 
 export interface CommandContext {
   db: DataStore;
   storage: PlatformStorage;
   notes: PlatformNotes;
+  files: PlatformFiles;
   llm: PlatformLLM;
   browser: PlatformBrowser;
   getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;

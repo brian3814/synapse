@@ -29,6 +29,13 @@ export interface PlatformNotes {
   exists(nodeId: string): Promise<boolean>;
 }
 
+export interface PlatformFiles {
+  read(path: string): Promise<string | null>;
+  write(path: string, content: string): Promise<void>;
+  remove(path: string): Promise<void>;
+  list(prefix: string): Promise<string[]>;
+}
+
 export interface RateLimitInfo {
   retryAfterMs: number;
   retryCount: number;

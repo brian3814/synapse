@@ -255,10 +255,11 @@ Chrome extensions cannot run MCP servers. MCP is Electron-only. Chrome access re
 
 The agent harness spec (`docs/superpowers/specs/2026-05-03-agent-harness-design.md`) adds custom prompts, memory, and new tools. It was designed before this agentic-first architecture.
 
-**Either rollout order works:**
+**Rollout order constraint:**
 
-- **Harness first:** Harness Phase 1 ships using existing `CHAT_AGENT_TOOLS` array + `executeTool()` switch. Agentic-first Phase 2 (unified registry) later migrates all existing chat tools — including any harness additions like `index_notes_folder`.
-- **Agentic-first first:** Phase 1 (commands) + Phase 2 (registry) ship first. Harness then registers new tools directly into `src/tools/registry.ts`.
+- **File-based memory must land before Phase 2 (tool registry).** The file-based memory implementation removes `search_memories` from `CHAT_AGENT_TOOLS` and adds `manage_memory`. Phase 2's dynamic absorption then picks up the correct tool set. If Phase 2 runs first, it would register the deprecated `search_memories` tool.
+- **Phase 1 (commands) is independent** — can land before or after file-based memory.
+- **Harness Phase 1 (prompts/presets)** ships using existing `CHAT_AGENT_TOOLS` array. Agentic-first Phase 2 later migrates all tools — including harness additions (`index_notes_folder`, `manage_memory`).
 
 **Invariants regardless of order:**
 - Harness custom prompts are orthogonal to both — prompt assembly works with or without the command layer
