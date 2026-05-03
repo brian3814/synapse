@@ -200,6 +200,8 @@ export async function executeTool(
           created: indexResult.created,
           updated: indexResult.updated,
           skipped: indexResult.skipped,
+          folderStats: indexResult.folderStats,
+          rootIndex: indexResult.rootIndexContent,
         }),
       };
     }

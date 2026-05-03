@@ -123,7 +123,7 @@ export async function readMarkdownFiles(
       if (name.startsWith('.')) continue;
       const subFiles = await readMarkdownFiles(entry as FileSystemDirectoryHandle, entryPath);
       files.push(...subFiles);
-    } else if (entry.kind === 'file' && name.endsWith('.md')) {
+    } else if (entry.kind === 'file' && name.endsWith('.md') && name !== '_kg_index.md') {
       try {
         const fileHandle = entry as FileSystemFileHandle;
         const file = await fileHandle.getFile();
@@ -178,7 +178,7 @@ export async function getFileMetadata(
       if (name.startsWith('.')) continue;
       const subFiles = await getFileMetadata(entry as FileSystemDirectoryHandle, entryPath);
       files.push(...subFiles);
-    } else if (entry.kind === 'file' && name.endsWith('.md')) {
+    } else if (entry.kind === 'file' && name.endsWith('.md') && name !== '_kg_index.md') {
       try {
         const file = await (entry as FileSystemFileHandle).getFile();
         files.push({ path: entryPath, name, lastModified: file.lastModified });
