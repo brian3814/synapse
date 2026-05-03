@@ -53,14 +53,6 @@ export function Header() {
         </ToolbarButton>
 
         <ToolbarButton
-          active={activePanel === 'create'}
-          onClick={() => setActivePanel('create')}
-          title="Create"
-        >
-          <PlusIcon />
-        </ToolbarButton>
-
-        <ToolbarButton
           active={activePanel === 'llm'}
           onClick={() => setActivePanel('llm')}
           title="LLM Extract"
@@ -160,12 +152,6 @@ const BookmarkListIcon = () => (
 const FilterIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-  </svg>
-);
-
-const PlusIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M12 5v14M5 12h14"/>
   </svg>
 );
 

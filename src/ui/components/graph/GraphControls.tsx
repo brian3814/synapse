@@ -10,8 +10,12 @@ interface GraphControlsProps {
 export function GraphControls({ graphRef }: GraphControlsProps) {
   const visibleLayers = useUIStore((s) => s.visibleLayers);
   const toggleLayer = useUIStore((s) => s.toggleLayer);
+  const activePanel = useUIStore((s) => s.activePanel);
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const edgeCount = useGraphStore((s) => s.edges.length);
+  const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
+  const selectedCount = selectedNodeIds.size;
 
   const handleFitView = () => {
     graphRef.current?.fitToView();
@@ -23,6 +27,16 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
 
   const handleZoomOut = () => {
     graphRef.current?.zoomOut();
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedCount === 0) return;
+    const store = useGraphStore.getState();
+    const ids = [...store.selectedNodeIds];
+    store.clearSelection();
+    for (const id of ids) {
+      await store.deleteNode(id);
+    }
   };
 
   const handleScreenshot = async () => {
@@ -83,11 +97,73 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
       <div className="w-px h-4 bg-zinc-600" />
       {/* Zoom + View controls */}
       <div className="flex items-center gap-0.5">
-        <button onClick={handleZoomIn} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Zoom in">+</button>
-        <button onClick={handleZoomOut} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Zoom out">−</button>
+        <button onClick={handleZoomIn} className="text-zinc-300 px-1 py-0.5 rounded hover:bg-zinc-700" title="Zoom in">
+          <ZoomInIcon />
+        </button>
+        <button onClick={handleZoomOut} className="text-zinc-300 px-1 py-0.5 rounded hover:bg-zinc-700" title="Zoom out">
+          <ZoomOutIcon />
+        </button>
         <button onClick={handleFitView} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Fit to view">⊞</button>
         <button onClick={handleScreenshot} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Screenshot">⎙</button>
+      </div>
+      <div className="w-px h-4 bg-zinc-600" />
+      {/* Create / Delete */}
+      <div className="flex items-center gap-0.5">
+        <button
+          onClick={() => setActivePanel('create')}
+          className={`p-1 rounded transition-colors ${
+            activePanel === 'create'
+              ? 'bg-indigo-600 text-white'
+              : 'text-zinc-300 hover:bg-zinc-700'
+          }`}
+          title="Create node"
+        >
+          <PlusIcon />
+        </button>
+        <button
+          onClick={handleDeleteSelected}
+          disabled={selectedCount === 0}
+          className={`p-1 rounded transition-colors ${
+            selectedCount === 0
+              ? 'text-zinc-600 cursor-default'
+              : 'text-zinc-300 hover:bg-red-900/50 hover:text-red-400'
+          }`}
+          title={selectedCount > 0 ? `Delete ${selectedCount} selected` : 'Select nodes to delete'}
+        >
+          <TrashIcon />
+        </button>
       </div>
     </div>
   );
 }
+
+const ZoomInIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="11" y1="8" x2="11" y2="14" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+const ZoomOutIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" />
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+  </svg>
+);
