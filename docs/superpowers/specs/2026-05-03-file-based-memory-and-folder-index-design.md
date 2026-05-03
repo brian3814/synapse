@@ -58,7 +58,7 @@ The filename `_kg_index.md` is chosen to avoid collision with user-authored `ind
 
 - The prompt assembler does NOT auto-inject `_kg_index.md` content
 - The `index_notes_folder` tool response includes the **root folder's** `_kg_index.md` content inline (appended to the stats JSON), capped at **3000 characters**. Subfolder indexes are summarized as one-line entries (name + file count) but their full `_kg_index.md` content is not included.
-- If the agent needs detail on a specific subfolder, it can request it via a follow-up message (the user or agent re-runs the tool or uses `get_source_content` on a specific file)
+- If the agent needs detail on a specific subfolder, it can re-run `index_notes_folder` (which regenerates and returns updated indexes) or ask the user to provide subfolder details
 - No separate tool needed to read the root index — it's part of the indexing response
 
 ### Files to modify

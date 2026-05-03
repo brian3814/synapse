@@ -39,10 +39,10 @@ function dbClientAsDataStore(): DataStore {
 }
 
 const notImplementedFiles: PlatformFiles = {
-  read: () => Promise.resolve(null),
-  write: () => Promise.resolve(),
-  remove: () => Promise.resolve(),
-  list: () => Promise.resolve([]),
+  read: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
+  write: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
+  remove: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
+  list: () => { throw new Error('PlatformFiles not implemented. Add Chrome/Electron implementation before using memoryCommands.'); },
 };
 
 export function createUICommandContext(): CommandContext {

@@ -119,11 +119,13 @@ git commit -m "feat(harness): trigger session summarization on expiry"
 
 ---
 
-### Task 3: Search Memories Chat Tool
+### ~~Task 3: Search Memories Chat Tool~~ — DO NOT EXECUTE
+
+> **SUPERSEDED:** This task is replaced by the `manage_memory` tool (file-based memory design). Do NOT create `search-memories-tool.ts` or `harness-init.ts`. See [`2026-05-03-file-based-memory-and-folder-index-design.md`](../specs/2026-05-03-file-based-memory-and-folder-index-design.md).
 
 **Files:**
-- Create: `src/core/harness-tools/search-memories-tool.ts`
-- Modify: `src/core/harness-init.ts`
+- ~~Create: `src/core/harness-tools/search-memories-tool.ts`~~
+- ~~Modify: `src/core/harness-init.ts`~~
 
 - [ ] **Step 1: Create search-memories tool**
 

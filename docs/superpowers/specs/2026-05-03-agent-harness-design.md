@@ -72,7 +72,7 @@ ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT;
 
 Memory categories: `preference` | `fact` | `instruction` (inspired by Claude Code's user/feedback/project/reference taxonomy, simplified for end-user context).
 
-DB integration follows the DataStore → action-handler → db-client chain, identical to the `chat.*` namespace. Specifically, a `MemoryRepository` interface is added to `DataStore` (`src/db/data-store.ts`), implemented in `SqliteDataStore` (`src/db/sqlite-data-store.ts`), and wired through the action handler and db-client.
+DB integration follows the DataStore → action-handler → db-client chain, identical to the `chat.*` namespace. ~~Specifically, a `MemoryRepository` interface is added to `DataStore` with full semantic + episodic methods.~~ *Historical: `MemoryRepository` now contains episodic methods only. Semantic memory is file-based — see supersession notice above.*
 
 ---
 
