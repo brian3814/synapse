@@ -206,6 +206,24 @@ export async function executeTool(
       };
     }
 
+    case 'semantic_search': {
+      const { embedding } = await import('@platform');
+      const query = input.query as string;
+      const limit = (input.limit as number) ?? 5;
+      const results = await embedding.searchSimilar(query, limit);
+      if (results.length === 0) {
+        return { result: JSON.stringify({ message: 'No semantic matches found. Embeddings may not be enabled.' }) };
+      }
+      const nodeDetails = [];
+      for (const r of results) {
+        const node = await ctx.db.nodes.getById(r.nodeId);
+        if (node) {
+          nodeDetails.push({ id: (node as any).id, name: (node as any).name, type: (node as any).type, similarity: r.score.toFixed(2) });
+        }
+      }
+      return { result: JSON.stringify(nodeDetails), collectedNodeIds: nodeDetails.map((n) => n.id) };
+    }
+
     default:
       return { result: JSON.stringify({ error: `Unknown tool: ${name}` }) };
   }

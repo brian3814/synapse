@@ -1,5 +1,5 @@
 import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
-import { llm } from '@platform';
+import { llm, platformId } from '@platform';
 import { createUICommandContext } from '../../commands/create-context';
 import { executeTool as executeToolCmd } from '../../commands/chat-tool-executor';
 import type { ChatAgentTurn } from '../../shared/types';
@@ -22,7 +22,25 @@ export interface ChatAgentProgress {
 }
 
 const MAX_ITERATIONS = 10;
-const TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
+const BASE_TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
+
+const SEMANTIC_SEARCH_TOOL = {
+  name: 'semantic_search',
+  description: 'Find nodes semantically similar to a query, even without keyword overlap. Use when keyword search returns few results or you need conceptually related nodes.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: { type: 'string', description: 'Natural language search query' },
+      limit: { type: 'number', description: 'Max results to return (default 5)' },
+    },
+    required: ['query'],
+  },
+};
+
+function getToolDefs(): typeof BASE_TOOL_DEFS {
+  if (platformId !== 'electron') return BASE_TOOL_DEFS;
+  return [...BASE_TOOL_DEFS, SEMANTIC_SEARCH_TOOL];
+}
 
 // ---------------------------------------------------------------------------
 // Main agent loop
@@ -75,7 +93,7 @@ export async function runChatAgent({
         model,
         systemPrompt,
         messages,
-        tools: TOOL_DEFS,
+        tools: getToolDefs(),
       },
       onProgress,
     );
