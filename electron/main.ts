@@ -6,6 +6,10 @@ import * as notesBackend from './notes-backend';
 import * as filesBackend from './files-backend';
 import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat } from './llm-backend';
 import { startCompanionServer } from './companion-server';
+import { getDb } from './better-sqlite3-engine';
+import { EmbeddingService } from './embeddings/embedding-service';
+import { registerEmbeddingHandlers, setupProgressBroadcast } from './embeddings/ipc-handlers';
+import { readNote } from './notes-backend';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -58,6 +62,10 @@ app.whenReady().then(() => {
   setLLMStorage(storage);
   notesBackend.setStorage(storage);
 
+  let embeddingService: EmbeddingService | null = null;
+
+  registerEmbeddingHandlers(() => embeddingService);
+
   ipcMain.handle('storage:get', (_event, keys) => {
     return storage.get(keys);
   });
@@ -87,8 +95,33 @@ app.whenReady().then(() => {
         win.webContents.send('db:sync', outcome.syncEvent);
       }
     }
+    // Notify embedding service of node mutations
+    if (outcome.syncEvent && embeddingService) {
+      const eventType = (outcome.syncEvent as any).type;
+      if (eventType === 'node_created' || eventType === 'node_updated') {
+        const nodeId = (outcome.syncEvent as any).node?.id;
+        if (nodeId) embeddingService.handleNodeMutation(nodeId).catch(() => {});
+      } else if (eventType === 'node_deleted') {
+        const nodeId = (outcome.syncEvent as any).id;
+        if (nodeId) embeddingService.handleNodeDeleted(nodeId);
+      }
+    }
     return { success: true, data: outcome.result };
   });
+
+  // Initialize embedding service after DB is available
+  (async () => {
+    try {
+      const db = getDb();
+      embeddingService = new EmbeddingService(db, readNote);
+      const storedConfig = storage.get('embeddingConfig');
+      await embeddingService.initialize(storedConfig?.embeddingConfig ?? undefined);
+      setupProgressBroadcast(embeddingService);
+      console.log('[main] Embedding service initialized');
+    } catch (e) {
+      console.error('[main] Failed to init embedding service:', e);
+    }
+  })();
 
   ipcMain.handle('notes:init', () => {
     notesBackend.initNotesDir();
