@@ -17,4 +17,6 @@ CREATE TABLE IF NOT EXISTS embedding_dismissals (
   dismissed_at TEXT NOT NULL,
   PRIMARY KEY (node_id_a, node_id_b)
 );
+
+CREATE INDEX IF NOT EXISTS idx_embedding_dismissals_b ON embedding_dismissals(node_id_b);
 `;
