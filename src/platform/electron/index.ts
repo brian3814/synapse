@@ -5,6 +5,7 @@ import { ElectronNotes } from './notes';
 import { ElectronFiles } from './files';
 import { ElectronLLM } from './llm';
 import { ElectronBrowser } from './browser';
+import { ElectronEmbedding } from './embedding';
 
 export const platformId: PlatformId = 'electron';
 export const storage = new ElectronStorage();
@@ -13,6 +14,7 @@ export const notes = new ElectronNotes();
 export const files = new ElectronFiles();
 export const llm = new ElectronLLM();
 export const browser = new ElectronBrowser();
+export const embedding = new ElectronEmbedding();
 export async function initPlatform(): Promise<void> {
   await db.init();
   await notes.init();

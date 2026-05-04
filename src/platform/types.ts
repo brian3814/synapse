@@ -1,5 +1,7 @@
 import type { AgentProgressEvent, ToolCall } from '../shared/types';
 
+export type { PlatformEmbedding } from '../embeddings/types';
+
 export type PlatformId = 'chrome' | 'electron';
 
 export interface StorageChange {
