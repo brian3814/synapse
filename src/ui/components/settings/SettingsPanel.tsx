@@ -9,6 +9,7 @@ import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
 import { CustomInstructionsSection } from './CustomInstructionsSection';
 import { MemorySection } from './MemorySection';
+import { EmbeddingSettings } from './EmbeddingSettings';
 import type { SettingsTab } from './SettingsModal';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
@@ -165,6 +166,8 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       <RelevanceSection />
 
       {platformId === 'electron' && <NotesStorageSection />}
+
+      <EmbeddingSettings />
 
       <FolderSection />
 
