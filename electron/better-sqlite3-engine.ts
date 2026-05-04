@@ -7,6 +7,11 @@ const DB_PATH = join(app.getPath('userData'), 'kg-desktop.db');
 
 let db: Database.Database | null = null;
 
+export function getDb(): Database.Database {
+  if (!db) throw new Error('DB not initialized');
+  return db;
+}
+
 export async function initBetterSQLite(): Promise<void> {
   if (db) return;
 
