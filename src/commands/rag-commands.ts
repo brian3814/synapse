@@ -1,6 +1,7 @@
 import type { CommandContext } from './types';
 import { parseMarkdown } from '../notes/markdown-utils';
 import type { DbNode, DbEdge, DbSourceContent } from '../shared/types';
+import { embedding } from '@platform';
 
 export interface RAGContext {
   relevantNodes: DbNode[];
@@ -13,6 +14,21 @@ export interface RAGContext {
     excerpt: string;
   }>;
   query: string;
+}
+
+function reciprocalRankFusion(
+  ftsIds: string[],
+  vecResults: Array<{ nodeId: string; score: number }>,
+  k = 60,
+): string[] {
+  const scores = new Map<string, number>();
+  ftsIds.forEach((id, rank) => {
+    scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank));
+  });
+  vecResults.forEach(({ nodeId }, rank) => {
+    scores.set(nodeId, (scores.get(nodeId) ?? 0) + 1 / (k + rank));
+  });
+  return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
 function extractSearchTerms(question: string): string[] {
@@ -145,9 +161,20 @@ export async function retrieveRAGContext(ctx: CommandContext, question: string):
   const terms = extractSearchTerms(question);
 
   const matchedNodes = await findRelevantNodes(ctx, terms);
-  const matchedNodeIds = matchedNodes.map((n) => n.id);
+  const ftsNodeIds = matchedNodes.map((n) => n.id);
 
-  const { expandedNodeIds, subgraphEdges } = await expandSubgraph(ctx, matchedNodeIds, 1);
+  let fusedNodeIds = ftsNodeIds;
+  try {
+    const vecResults = await embedding.searchSimilar(question, 10);
+    if (vecResults.length > 0) {
+      fusedNodeIds = reciprocalRankFusion(ftsNodeIds, vecResults);
+    }
+  } catch {
+    // Embeddings not available — use FTS results only
+  }
+
+  const matchedNodeIds = fusedNodeIds;
+  const { expandedNodeIds, subgraphEdges } = await expandSubgraph(ctx, fusedNodeIds.slice(0, 20), 1);
 
   const allNodes = await ctx.db.nodes.getAll() as DbNode[];
   const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
