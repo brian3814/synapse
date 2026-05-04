@@ -3,6 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { nodes as dbNodes, edges as dbEdges, noteSearch } from '../../../db/client/db-client';
+import { embedding } from '@platform';
 import type { DbNode } from '../../../shared/types';
 
 const MIN_QUERY_LENGTH = 2;
@@ -29,6 +30,7 @@ const EMPTY: SearchResults = { entities: [], notes: [], resources: [], edges: []
 export function HeaderSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults>(EMPTY);
+  const [semanticResults, setSemanticResults] = useState<DbNode[]>([]);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -117,6 +119,37 @@ export function HeaderSearch() {
     }
 
     setResults({ entities, notes, resources, edges: edgeResults });
+
+    // Semantic fallback: only when FTS gives sparse results and query has 3+ words
+    const ftsTotal = entities.length + notes.length + resources.length + edgeResults.length;
+    const wordCount = q.trim().split(/\s+/).length;
+    if (ftsTotal < 5 && wordCount >= 3) {
+      const ftsIds = new Set<string>([
+        ...entities.map((n) => n.id),
+        ...notes.map((n) => n.id),
+        ...resources.map((n) => n.id),
+      ]);
+      try {
+        const semanticHits = await embedding.searchSimilar(q, 5);
+        if (searchIdRef.current !== id) return;
+        const graphNodes = useGraphStore.getState().nodes;
+        const resolved = semanticHits
+          .filter((hit) => !ftsIds.has(hit.nodeId))
+          .map((hit) => {
+            const gn = graphNodes.find((n) => n.id === hit.nodeId);
+            if (!gn) return null;
+            return { id: gn.id, name: gn.name, type: gn.type } as DbNode;
+          })
+          .filter((n): n is DbNode => n !== null);
+        setSemanticResults(resolved);
+      } catch (err) {
+        console.warn('[HeaderSearch] semantic search failed:', err);
+        setSemanticResults([]);
+      }
+    } else {
+      setSemanticResults([]);
+    }
+
     setOpen(true);
     setSearching(false);
   }, []);
@@ -130,6 +163,7 @@ export function HeaderSearch() {
 
       if (q.length < MIN_QUERY_LENGTH) {
         setResults(EMPTY);
+        setSemanticResults([]);
         setSearching(false);
         return;
       }
@@ -174,6 +208,7 @@ export function HeaderSearch() {
     setOpen(false);
     setQuery('');
     setResults(EMPTY);
+    setSemanticResults([]);
   };
 
   const handleSelectEdge = (id: string, sourceId?: string, targetId?: string) => {
@@ -187,10 +222,11 @@ export function HeaderSearch() {
     setOpen(false);
     setQuery('');
     setResults(EMPTY);
+    setSemanticResults([]);
   };
 
   const totalCount =
-    results.entities.length + results.notes.length + results.resources.length + results.edges.length;
+    results.entities.length + results.notes.length + results.resources.length + results.edges.length + semanticResults.length;
   const hasResults = totalCount > 0;
   const showDropdown = open && query.length >= MIN_QUERY_LENGTH;
 
@@ -286,6 +322,20 @@ export function HeaderSearch() {
                   <span className="text-zinc-600">&rarr;</span>
                   <span className="text-zinc-300 truncate">{edge.target_name}</span>
                 </button>
+              ))}
+            </ResultSection>
+          )}
+
+          {/* Semantic matches section */}
+          {semanticResults.length > 0 && (
+            <ResultSection title="Semantic matches" count={semanticResults.length}>
+              {semanticResults.map((node) => (
+                <NodeResultItem
+                  key={node.id}
+                  node={node}
+                  color={getColorForNode(node.type, (node as any).label ?? null)}
+                  onClick={() => handleSelectNode(node.id)}
+                />
               ))}
             </ResultSection>
           )}
