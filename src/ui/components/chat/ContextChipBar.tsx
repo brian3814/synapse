@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useChatContextStore, type AttachedNode } from '../../../graph/store/chat-context-store';
+import { ContextSuggestions } from './ContextSuggestions';
 
 const MAX_VISIBLE = 4;
 
@@ -17,27 +18,30 @@ export function ContextChipBar() {
   const hiddenCount = attachedNodes.length - MAX_VISIBLE;
 
   return (
-    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-t border-zinc-700">
-      {visible.map((node) => (
-        <Chip key={node.id} node={node} onRemove={() => removeNode(node.id)} />
-      ))}
-      {overflow && !expanded && (
-        <button
-          onClick={() => setExpanded(true)}
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
-        >
-          +{hiddenCount} more
-        </button>
-      )}
-      {overflow && expanded && (
-        <button
-          onClick={() => setExpanded(false)}
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
-        >
-          show less
-        </button>
-      )}
-    </div>
+    <>
+      <div className="flex flex-wrap gap-1.5 px-3 py-2 border-t border-zinc-700">
+        {visible.map((node) => (
+          <Chip key={node.id} node={node} onRemove={() => removeNode(node.id)} />
+        ))}
+        {overflow && !expanded && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+          >
+            +{hiddenCount} more
+          </button>
+        )}
+        {overflow && expanded && (
+          <button
+            onClick={() => setExpanded(false)}
+            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+          >
+            show less
+          </button>
+        )}
+      </div>
+      <ContextSuggestions />
+    </>
   );
 }
 
