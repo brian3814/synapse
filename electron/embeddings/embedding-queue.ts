@@ -94,11 +94,23 @@ export class EmbeddingQueue {
 
   private updateSimilarPairs(nodeId: string, vec: Float32Array): void {
     removeSimilarPairsFor(this.db, nodeId);
+
+    // Embedding-based similarity (KNN)
     const neighbors = knnSearch(this.db, vec, 3, nodeId);
     for (const n of neighbors) {
       const similarity = 1 - n.distance;
       if (similarity >= 0.5) {
         upsertSimilarPair(this.db, nodeId, n.nodeId, similarity);
+      }
+    }
+
+    // Acronym + normalized string matching (catches LLM ↔ Large Language Model, ChatGPT ↔ Chat GPT)
+    const thisNode = this.db.prepare('SELECT name FROM nodes WHERE id = ?').get(nodeId) as { name: string } | undefined;
+    if (!thisNode) return;
+    const otherNodes = this.db.prepare('SELECT id, name FROM nodes WHERE id != ?').all(nodeId) as Array<{ id: string; name: string }>;
+    for (const other of otherNodes) {
+      if (isNameMatch(thisNode.name, other.name)) {
+        upsertSimilarPair(this.db, nodeId, other.id, 0.95);
       }
     }
   }
@@ -116,4 +128,32 @@ export class EmbeddingQueue {
   get isProcessing(): boolean {
     return this.processing;
   }
+}
+
+function isNameMatch(a: string, b: string): boolean {
+  return isAcronymOf(a, b) || isAcronymOf(b, a) || isNormalizedMatch(a, b);
+}
+
+function isAcronymOf(short: string, long: string): boolean {
+  const s = short.trim();
+  const words = long.trim().split(/\s+/);
+  if (s.length < 2 || s.length > 10 || words.length < 2) return false;
+  if (words.length !== s.length) return false;
+  const acronym = words.map((w) => w[0]).join('');
+  return acronym.toLowerCase() === s.toLowerCase();
+}
+
+function isNormalizedMatch(a: string, b: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().replace(/[\s\-_.]+/g, '');
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na === nb && a !== b) return true;
+  // "ChatGPT" vs "Chat GPT" — one is the collapsed form of the other
+  if (na.length >= 3 && nb.length >= 3) {
+    if (na.includes(nb) || nb.includes(na)) {
+      const ratio = Math.min(na.length, nb.length) / Math.max(na.length, nb.length);
+      return ratio >= 0.8;
+    }
+  }
+  return false;
 }
