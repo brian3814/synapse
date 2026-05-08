@@ -70,6 +70,7 @@ export class EmbeddingService {
   async configure(update: Partial<EmbeddingConfig>): Promise<void> {
     const oldConfig = { ...this.config };
     this.config = { ...this.config, ...update };
+    console.log('[EmbeddingService] configure:', JSON.stringify(update), 'oldEnabled:', oldConfig.enabled, 'newEnabled:', this.config.enabled);
 
     const providerChanged = oldConfig.providerId !== this.config.providerId
       || oldConfig.onnxModelQuality !== this.config.onnxModelQuality
@@ -114,11 +115,15 @@ export class EmbeddingService {
       text: buildEmbeddingText(n, this.db, this.readNote),
     }));
 
+    console.log(`[EmbeddingService] Starting batch embed of ${items.length} nodes`);
     await this.queue.batchProcess(items, (done, total) => {
       for (const listener of this.progressListeners) {
         listener({ done, total });
       }
     });
+
+    const pairCount = (this.db.prepare('SELECT COUNT(*) as c FROM similar_pairs').get() as any).c;
+    console.log(`[EmbeddingService] Batch complete. ${pairCount} similar pairs stored`);
   }
 
   async handleNodeMutation(nodeId: string): Promise<void> {
