@@ -29,6 +29,10 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
     graphRef.current?.zoomOut();
   };
 
+  const handleRefresh = () => {
+    useGraphStore.getState().loadAll();
+  };
+
   const handleDeleteSelected = async () => {
     if (selectedCount === 0) return;
     const store = useGraphStore.getState();
@@ -104,6 +108,9 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
           <ZoomOutIcon />
         </button>
         <button onClick={handleFitView} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Fit to view">⊞</button>
+        <button onClick={handleRefresh} className="text-zinc-300 px-1 py-0.5 rounded hover:bg-zinc-700" title="Reload graph">
+          <RefreshIcon />
+        </button>
         <button onClick={handleScreenshot} className="text-zinc-300 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700" title="Screenshot">⎙</button>
       </div>
       <div className="w-px h-4 bg-zinc-600" />
@@ -157,6 +164,15 @@ const ZoomOutIcon = () => (
 const PlusIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const RefreshIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 2v6h-6" />
+    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+    <path d="M3 22v-6h6" />
+    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
   </svg>
 );
 

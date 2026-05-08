@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { loadGraph } from '../../db/client/db-client';
+import { db } from '@platform';
 import { createUICommandContext } from '../../commands/create-context';
 import * as graphCommands from '../../commands/graph-commands';
 import type { GraphNode, GraphEdge, CreateNodeInput, UpdateNodeInput, CreateEdgeInput, UpdateEdgeInput, DbNode, DbEdge, DbNodeSlim, DbEdgeSlim } from '../../shared/types';
@@ -277,9 +278,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   startSyncListener: () => {
     const channel = new BroadcastChannel(SYNC_CHANNEL);
 
-    channel.onmessage = (event: MessageEvent<SyncEvent>) => {
-      const syncEvent = event.data;
-
+    const handleSyncEvent = (syncEvent: SyncEvent) => {
       switch (syncEvent.type) {
         case 'node_created': {
           const node = dbNodeToGraphNode(syncEvent.node);
@@ -360,8 +359,13 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
       }
     };
 
+    channel.onmessage = (event: MessageEvent<SyncEvent>) => handleSyncEvent(event.data);
+
+    const cleanupIpc = db.onSync((event: unknown) => handleSyncEvent(event as SyncEvent));
+
     return () => {
       channel.close();
+      cleanupIpc();
     };
   },
 }));
