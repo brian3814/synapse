@@ -1,31 +1,12 @@
 import Database from 'better-sqlite3';
-import { app } from 'electron';
-import { join, dirname } from 'path';
-import { existsSync } from 'fs';
+import * as sqliteVec from 'sqlite-vec';
 
 let vecLoaded = false;
-
-function resolveExtensionPath(): string {
-  const exeDir = dirname(app.getPath('exe'));
-  const candidates = [
-    join(exeDir, '..', 'Resources', 'sqlite-vec', 'vec0'),
-    join(exeDir, 'resources', 'sqlite-vec', 'vec0'),
-    join(app.getAppPath(), 'resources', 'sqlite-vec', 'vec0'),
-  ];
-  if (app.isPackaged) {
-    for (const p of candidates) {
-      if (existsSync(p) || existsSync(p + '.dylib') || existsSync(p + '.so') || existsSync(p + '.dll')) {
-        return p;
-      }
-    }
-  }
-  return join(app.getAppPath(), 'resources', 'sqlite-vec', 'vec0');
-}
 
 export function loadVecExtension(db: Database.Database): boolean {
   if (vecLoaded) return true;
   try {
-    db.loadExtension(resolveExtensionPath());
+    db.loadExtension(sqliteVec.getLoadablePath());
     vecLoaded = true;
     return true;
   } catch (e) {
