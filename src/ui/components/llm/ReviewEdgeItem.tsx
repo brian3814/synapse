@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useExtractionReviewStore, type ReviewEdge } from '../../../graph/store/extraction-review-store';
+import { SourceLocationBadge } from '../ingestion/SourceLocationBadge';
 
 interface ReviewEdgeItemProps {
   edge: ReviewEdge;
@@ -48,6 +49,7 @@ export function ReviewEdgeItem({ edge, sourceName, targetName }: ReviewEdgeItemP
           <span className="text-zinc-500 mx-1">&rarr;</span>
           <span className="text-zinc-300">{targetName}</span>
         </span>
+        {edge.sourceLocation && <SourceLocationBadge location={edge.sourceLocation} />}
       </div>
 
       {isSelected && (

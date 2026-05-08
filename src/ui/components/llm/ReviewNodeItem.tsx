@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useExtractionReviewStore, type ReviewNode, type PendingConversion } from '../../../graph/store/extraction-review-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
+import { SourceLocationBadge } from '../ingestion/SourceLocationBadge';
 
 interface ReviewNodeItemProps {
   node: ReviewNode;
@@ -111,6 +112,7 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
             merging
           </span>
         )}
+        {node.sourceLocation && <SourceLocationBadge location={node.sourceLocation} />}
       </div>
 
       {/* Merge detail expansion */}

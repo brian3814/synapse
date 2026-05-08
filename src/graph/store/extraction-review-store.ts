@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { storage, llm } from '@platform';
+import type { SourceLocation } from '../../ingestion/types';
 
 // --- Types ---
 
@@ -12,6 +13,7 @@ export interface ReviewNode {
   label?: string; // semantic entity label (concept, person, technology, ...)
   properties: Record<string, unknown>;
   tags?: string[];
+  sourceLocation?: SourceLocation;
   mergeRecommendation?: {
     existingNodeId: string;
     existingName: string;
@@ -28,6 +30,7 @@ export interface ReviewEdge {
   targetTempId: TempId;
   label: string;
   type: string;
+  sourceLocation?: SourceLocation;
   removed: boolean;
 }
 
