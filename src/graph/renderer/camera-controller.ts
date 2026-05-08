@@ -261,7 +261,8 @@ export class CameraController {
 
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
     const viewW = Math.max(width, height * aspect);
-    this.zoom = Math.max(MIN_ZOOM, 2 / viewW);
+    const maxFocusZoom = targets.length <= 3 ? 0.15 : MAX_ZOOM;
+    this.zoom = Math.max(MIN_ZOOM, Math.min(maxFocusZoom, 2 / viewW));
 
     this.camera.position.x = cx;
     this.camera.position.y = cy;
