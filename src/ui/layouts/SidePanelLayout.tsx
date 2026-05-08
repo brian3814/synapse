@@ -5,8 +5,13 @@ import { ActivePanel } from '../components/ActivePanel';
 import { ChatBot } from '../components/chat/ChatBot';
 import { RelatedWidget } from '../components/RelatedWidget';
 import { useUIStore } from '../../graph/store/ui-store';
+import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
-export function SidePanelLayout() {
+interface SidePanelLayoutProps {
+  onIngest?: (source: IngestionSource, mode: ProcessingMode) => void;
+}
+
+export function SidePanelLayout({ onIngest }: SidePanelLayoutProps) {
   const activePanel = useUIStore((s) => s.activePanel);
   const chatOpen = useUIStore((s) => s.chatOpen);
   const chatDisplayMode = useUIStore((s) => s.chatDisplayMode);
@@ -14,7 +19,7 @@ export function SidePanelLayout() {
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 relative">
-      <Header />
+      <Header onIngest={onIngest} />
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {showChatSidebar ? (
           <div className="flex-1 min-h-0">

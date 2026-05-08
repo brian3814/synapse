@@ -3,9 +3,15 @@ import { useDisplayMode } from '../hooks/useDisplayMode';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { HeaderSearch } from './search/HeaderSearch';
+import { ImportButton } from './ingestion/ImportButton';
 import { browser } from '@platform';
+import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
-export function Header() {
+interface HeaderProps {
+  onIngest?: (source: IngestionSource, mode: ProcessingMode) => void;
+}
+
+export function Header({ onIngest }: HeaderProps) {
   const { displayMode, toggleMode } = useDisplayMode();
   const { activePanel, setActivePanel, clusteringEnabled, toggleClustering, chatOpen, toggleChat, settingsOpen, setSettingsOpen } = useUIStore();
   const readingListItems = useReadingListStore((s) => s.items);
@@ -83,6 +89,8 @@ export function Header() {
         >
           <ChatIcon />
         </ToolbarButton>
+
+        {onIngest && <ImportButton onIngest={onIngest} />}
 
         <div className="w-px h-4 bg-zinc-600 mx-1" />
 

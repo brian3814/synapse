@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useDbInit } from '../db/client/db-hooks';
 import { useGraphStore } from '../graph/store/graph-store';
 import { useNodeTypeStore } from '../graph/store/node-type-store';
@@ -7,10 +7,15 @@ import { useReadingListStore } from '../graph/store/reading-list-store';
 import { useAuthStore } from '../graph/store/auth-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { useCompanionCapture } from './hooks/useCompanionCapture';
+import { useLLMExtraction } from './hooks/useLLMExtraction';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
 import { TabLayout } from './layouts/TabLayout';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { DropZone } from './components/ingestion/DropZone';
+import { ProcessingModePrompt } from './components/ingestion/ProcessingModePrompt';
+import { getProcessor } from '../ingestion/processor-factory';
+import type { IngestionSource, ProcessingMode, ModePromptResult } from '../ingestion/types';
 
 export default function App() {
   const { ready, error: dbError } = useDbInit();
@@ -21,6 +26,36 @@ export default function App() {
   const loadTypes = useNodeTypeStore((s) => s.loadTypes);
   const setDisplayMode = useUIStore((s) => s.setDisplayMode);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+
+  // Ingestion state
+  const { startIngestion } = useLLMExtraction();
+  const [pendingSource, setPendingSource] = useState<IngestionSource | null>(null);
+  const [modePromptInfo, setModePromptInfo] = useState<ModePromptResult | null>(null);
+
+  const handleIngest = useCallback((source: IngestionSource, _mode: ProcessingMode) => {
+    const processor = getProcessor(source);
+    if (!processor) return;
+    const modeCheck = processor.shouldPromptMode(source);
+    if (modeCheck.prompt) {
+      setPendingSource(source);
+      setModePromptInfo(modeCheck);
+    } else {
+      startIngestion(source, 'full');
+    }
+  }, [startIngestion]);
+
+  const handleModeSelect = useCallback((mode: ProcessingMode) => {
+    if (pendingSource) {
+      startIngestion(pendingSource, mode);
+      setPendingSource(null);
+      setModePromptInfo(null);
+    }
+  }, [pendingSource, startIngestion]);
+
+  const handleModeCancel = useCallback(() => {
+    setPendingSource(null);
+    setModePromptInfo(null);
+  }, []);
 
   useEffect(() => {
     setDisplayMode(displayMode);
@@ -87,8 +122,17 @@ export default function App() {
 
   return (
     <>
-      {displayMode === 'sidePanel' ? <SidePanelLayout /> : <TabLayout />}
+      {displayMode === 'sidePanel' ? <SidePanelLayout onIngest={handleIngest} /> : <TabLayout onIngest={handleIngest} />}
       <SettingsModal />
+      <DropZone onIngest={handleIngest} />
+      {pendingSource && modePromptInfo && (
+        <ProcessingModePrompt
+          filename={pendingSource.name}
+          modeInfo={modePromptInfo}
+          onSelect={handleModeSelect}
+          onCancel={handleModeCancel}
+        />
+      )}
     </>
   );
 }
