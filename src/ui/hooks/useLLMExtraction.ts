@@ -672,6 +672,7 @@ export function useLLMExtraction() {
         label: extracted.label,
         properties: extracted.properties ?? {},
         tags: extracted.tags ?? [],
+        sourceLocation: (item.extracted as any).sourceLocation,
         mergeRecommendation,
         removed: false,
       } as ReviewNode;
@@ -696,6 +697,7 @@ export function useLLMExtraction() {
         targetTempId,
         label: extracted.label,
         type: extracted.type ?? 'related_to',
+        sourceLocation: (item.extracted as any).sourceLocation,
         removed: false,
       });
     }

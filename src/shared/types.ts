@@ -1,3 +1,5 @@
+import type { SourceLocation } from '../ingestion/types';
+
 // Page complexity metrics (from content script)
 export interface PageComplexity {
   wordCount: number;
@@ -89,6 +91,7 @@ export interface DbEdgeSource {
   source_type: 'note' | 'extraction' | 'user';
   source_id: string | null; // note node ID (when source_type='note')
   resource_id: string | null; // resource node ID (when source_type='extraction')
+  location: string | null; // JSON-serialized SourceLocation (page/region/time/selector)
   created_at: string;
 }
 
@@ -97,6 +100,7 @@ export interface DbEntitySource {
   entity_id: string;
   resource_id: string;
   relation_type: 'about' | 'mention';
+  location: string | null; // JSON-serialized SourceLocation (page/region/time/selector)
   created_at: string;
 }
 
@@ -278,12 +282,14 @@ export interface ExtractionResult {
     label?: string; // entity semantic label (concept, person, technology, ...)
     properties?: Record<string, unknown>;
     tags?: string[];
+    sourceLocation?: SourceLocation;
   }>;
   edges: Array<{
     sourceName: string;
     targetName: string;
     label: string;
     type?: string;
+    sourceLocation?: SourceLocation;
   }>;
 }
 
