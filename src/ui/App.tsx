@@ -15,6 +15,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { DropZone } from './components/ingestion/DropZone';
 import { ProcessingModePrompt } from './components/ingestion/ProcessingModePrompt';
 import { getProcessor } from '../ingestion/processor-factory';
+import { createIngestionSourceFromFile } from '../ingestion/ingestion-pipeline';
 import type { IngestionSource, ProcessingMode, ModePromptResult } from '../ingestion/types';
 
 export default function App() {
@@ -56,6 +57,26 @@ export default function App() {
     setPendingSource(null);
     setModePromptInfo(null);
   }, []);
+
+  // Clipboard paste handler — intercept pasted images for ingestion
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+          const source = await createIngestionSourceFromFile(file);
+          handleIngest(source, 'full');
+          return;
+        }
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [handleIngest]);
 
   useEffect(() => {
     setDisplayMode(displayMode);
