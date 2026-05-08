@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+export const sourceLocationSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('page'), page: z.number(), section: z.string().optional() }),
+  z.object({ type: z.literal('region'), description: z.string() }),
+  z.object({ type: z.literal('time'), timestamp: z.string(), speaker: z.string().optional() }),
+  z.object({ type: z.literal('selector'), selector: z.string() }),
+]);
+
+export type SourceLocationZod = z.infer<typeof sourceLocationSchema>;
+
 // LLM extraction output schema.
 //
 // In the three-layer model, the LLM outputs entities and edges. Resources are
@@ -12,6 +21,7 @@ export const extractedNodeSchema = z.object({
   label: z.string().optional(), // semantic entity label: concept, person, technology, ...
   properties: z.record(z.string(), z.unknown()).optional(),
   tags: z.array(z.string()).optional(),
+  sourceLocation: sourceLocationSchema.optional(),
 });
 
 export const extractedEdgeSchema = z.object({
@@ -19,6 +29,7 @@ export const extractedEdgeSchema = z.object({
   targetName: z.string().min(1),
   label: z.string().min(1),
   type: z.string().optional(),
+  sourceLocation: sourceLocationSchema.optional(),
 });
 
 /**
