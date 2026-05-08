@@ -266,6 +266,42 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     },
     executionContext: 'ui',
   },
+  {
+    name: 'delete_node',
+    description:
+      'Delete a node from the knowledge graph by ID. Also removes all edges connected to it. Use with caution — this is irreversible.',
+    parameters: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'string',
+          description: 'The ID of the node to delete',
+        },
+      },
+      required: ['node_id'],
+    },
+    executionContext: 'ui',
+  },
+  {
+    name: 'merge_nodes',
+    description:
+      'Merge two duplicate nodes into one. Keeps the primary node, transfers all edges from the secondary node to the primary, adds the secondary name as an alias for future recognition, then deletes the secondary node. Use this when you identify two nodes that refer to the same entity (e.g. "LLM" and "Large Language Model").',
+    parameters: {
+      type: 'object',
+      properties: {
+        primary_node_id: {
+          type: 'string',
+          description: 'ID of the node to KEEP (usually the one with more connections or the canonical name)',
+        },
+        secondary_node_id: {
+          type: 'string',
+          description: 'ID of the node to MERGE INTO the primary and then DELETE',
+        },
+      },
+      required: ['primary_node_id', 'secondary_node_id'],
+    },
+    executionContext: 'ui',
+  },
 ];
 
 /** Convert chat tool definitions to Anthropic API tool format */

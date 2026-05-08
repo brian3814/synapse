@@ -207,6 +207,53 @@ export async function executeTool(
       };
     }
 
+    case 'delete_node': {
+      const nodeId = input.node_id as string;
+      const node = await ctx.db.nodes.getById(nodeId);
+      if (!node) return { result: JSON.stringify({ error: 'Node not found' }) };
+      const result = await graphCommands.deleteNode(ctx, nodeId);
+      return {
+        result: JSON.stringify({ deleted: result.data, id: nodeId, name: (node as any).name }),
+      };
+    }
+
+    case 'merge_nodes': {
+      const primaryId = input.primary_node_id as string;
+      const secondaryId = input.secondary_node_id as string;
+      const primary = await ctx.db.nodes.getById(primaryId);
+      const secondary = await ctx.db.nodes.getById(secondaryId);
+      if (!primary) return { result: JSON.stringify({ error: `Primary node ${primaryId} not found` }) };
+      if (!secondary) return { result: JSON.stringify({ error: `Secondary node ${secondaryId} not found` }) };
+
+      const secondaryEdges = await ctx.db.edges.getForNode(secondaryId) as any[];
+      let transferred = 0;
+      for (const edge of secondaryEdges) {
+        const newSource = edge.source_id === secondaryId ? primaryId : edge.source_id;
+        const newTarget = edge.target_id === secondaryId ? primaryId : edge.target_id;
+        if (newSource === newTarget) continue;
+        try {
+          await ctx.db.edges.create({ sourceId: newSource, targetId: newTarget, label: edge.label, type: edge.type });
+          transferred++;
+        } catch {
+          // duplicate edge — skip
+        }
+      }
+
+      await ctx.db.entityResolution.addAlias(primaryId, (secondary as any).name);
+      await graphCommands.deleteNode(ctx, secondaryId);
+
+      return {
+        result: JSON.stringify({
+          merged: true,
+          kept: { id: primaryId, name: (primary as any).name },
+          deleted: { id: secondaryId, name: (secondary as any).name },
+          edgesTransferred: transferred,
+          aliasAdded: (secondary as any).name,
+        }),
+        collectedNodeIds: [primaryId],
+      };
+    }
+
     case 'semantic_search': {
       const query = input.query as string;
       const limit = (input.limit as number) ?? 5;
