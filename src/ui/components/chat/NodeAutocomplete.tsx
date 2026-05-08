@@ -5,7 +5,7 @@ import { useChatContextStore } from '../../../graph/store/chat-context-store';
 
 interface NodeAutocompleteProps {
   query: string;
-  onSelect: () => void;
+  onSelect: (nodeName?: string) => void;
   onDismiss: () => void;
 }
 
@@ -44,7 +44,7 @@ export function NodeAutocomplete({ query, onSelect, onDismiss }: NodeAutocomplet
           type: node.type,
           color: node.color ?? getColorForType(node.type),
         }]);
-        onSelect();
+        onSelect(node.name);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -76,7 +76,7 @@ export function NodeAutocomplete({ query, onSelect, onDismiss }: NodeAutocomplet
       type: node.type,
       color: node.color ?? getColorForType(node.type),
     }]);
-    onSelect();
+    onSelect(node.name);
   };
 
   const highlight = (name: string) => {

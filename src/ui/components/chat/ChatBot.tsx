@@ -275,10 +275,12 @@ function ChatInput({
     setShowAutocomplete(false);
   };
 
-  const handleAutocompleteSelect = () => {
+  const handleAutocompleteSelect = (nodeName?: string) => {
     const atIdx = input.lastIndexOf('@');
     if (atIdx !== -1) {
-      setInput(input.slice(0, atIdx));
+      const before = input.slice(0, atIdx);
+      const ref = nodeName ? `[[${nodeName}]]` : '';
+      setInput(before + ref + ' ');
     }
     setShowAutocomplete(false);
     inputRef.current?.focus();

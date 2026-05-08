@@ -22,7 +22,7 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
               onNodeClick={onNodeClick}
             />
           )}
-          {message.content}
+          <MarkdownRenderer content={message.content} onNodeClick={onNodeClick} />
           <CopyButton text={message.content} position="bottom-1 right-1" />
         </div>
       </div>
