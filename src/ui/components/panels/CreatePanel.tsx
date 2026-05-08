@@ -3,6 +3,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { DEFAULT_NODE_TYPE, STRUCTURAL_NODE_TYPES } from '../../../shared/constants';
 import { AddTypeModal } from './AddTypeModal';
+import { PanelHeader } from '../shared/PanelHeader';
 import { tags } from '../../../db/client/db-client';
 
 const STRUCTURAL_SET = new Set<string>(STRUCTURAL_NODE_TYPES);
@@ -14,7 +15,8 @@ export function CreatePanel() {
 
   return (
     <div className="p-4">
-      <div className="flex gap-1 mb-4">
+      <PanelHeader title="Create" />
+      <div className="flex gap-1 mb-4 mt-3">
         <button
           onClick={() => setTab('node')}
           className={`text-xs px-3 py-1.5 rounded ${

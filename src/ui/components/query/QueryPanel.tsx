@@ -5,6 +5,7 @@ import { RawQueryEditor } from './RawQueryEditor';
 import { QueryResults } from './QueryResults';
 import type { BuilderState } from './QueryBuilder';
 import type { QueryResult } from '../../../db/worker/query-engine/types';
+import { PanelHeader } from '../shared/PanelHeader';
 
 type Mode = 'builder' | 'raw';
 
@@ -63,6 +64,7 @@ export function QueryPanel() {
 
   return (
     <div className="p-4 space-y-3">
+      <PanelHeader title="Query" />
       {/* Mode toggle */}
       <div className="flex gap-1">
         <button

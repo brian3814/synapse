@@ -11,6 +11,7 @@ import { DiffView } from './DiffView';
 import { ExtractionReview } from './ExtractionReview';
 import { ExtractionSummary } from './ExtractionSummary';
 import { StreamingOutput } from './StreamingOutput';
+import { PanelHeader } from '../shared/PanelHeader';
 import type { AgentStep } from '../../../shared/types';
 import type { ExtractionTab } from '../../../graph/store/llm-store';
 
@@ -149,8 +150,7 @@ export function LLMPanel() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">LLM Extraction</h3>
+      <PanelHeader title="LLM Extraction">
         {status !== 'idle' && (
           <button
             onClick={reset}
@@ -159,7 +159,7 @@ export function LLMPanel() {
             Reset
           </button>
         )}
-      </div>
+      </PanelHeader>
 
       {/* Tab toggle — only show when idle/error */}
       {isIdle && (

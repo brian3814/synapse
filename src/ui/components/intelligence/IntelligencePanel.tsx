@@ -10,6 +10,7 @@ import {
   type ConnectionSuggestion,
   type PatternInsight,
 } from '../../../graph/algorithms/graph-algorithms';
+import { PanelHeader } from '../shared/PanelHeader';
 
 export function IntelligencePanel() {
   const nodes = useGraphStore((s) => s.nodes);
@@ -43,7 +44,7 @@ export function IntelligencePanel() {
   if (nodes.length < 3) {
     return (
       <div className="p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-zinc-100">Intelligence</h3>
+        <PanelHeader title="Intelligence" />
         <div className="text-center py-8">
           <p className="text-sm text-zinc-500">Need more data</p>
           <p className="text-xs text-zinc-600 mt-1">

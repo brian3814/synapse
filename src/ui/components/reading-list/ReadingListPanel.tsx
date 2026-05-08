@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useReadingListStore } from '../../../graph/store/reading-list-store';
 import { useReadingListMerge } from '../../hooks/useReadingListMerge';
 import { ReadingListItemCard } from './ReadingListItemCard';
+import { PanelHeader } from '../shared/PanelHeader';
 import type { ReadingListItem } from '../../../shared/types';
 
 type Tab = 'pending' | 'ready' | 'failed';
@@ -83,7 +84,7 @@ export function ReadingListPanel() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
-        <h2 className="text-sm font-medium text-zinc-200">Reading List</h2>
+        <PanelHeader title="Reading List" />
       </div>
 
       {/* Tabs */}

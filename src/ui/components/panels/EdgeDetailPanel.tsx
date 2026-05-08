@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
+import { PanelHeader } from '../shared/PanelHeader';
 import { edgeSources, type EdgeProvenanceType } from '../../../db/client/db-client';
 
 interface EdgeProvenanceRow {
@@ -70,32 +71,29 @@ export function EdgeDetailPanel() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">Edge Detail</h3>
-        <div className="flex gap-1">
-          {!editing ? (
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
-            >
-              Edit
-            </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500"
-            >
-              Save
-            </button>
-          )}
+      <PanelHeader title="Edge Detail">
+        {!editing ? (
           <button
-            onClick={handleDelete}
-            className="text-xs px-2 py-1 bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+            onClick={() => setEditing(true)}
+            className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
           >
-            Delete
+            Edit
           </button>
-        </div>
-      </div>
+        ) : (
+          <button
+            onClick={handleSave}
+            className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500"
+          >
+            Save
+          </button>
+        )}
+        <button
+          onClick={handleDelete}
+          className="text-xs px-2 py-1 bg-red-900/50 text-red-400 rounded hover:bg-red-900"
+        >
+          Delete
+        </button>
+      </PanelHeader>
 
       <div className="space-y-3">
         <div className="flex items-center gap-2 bg-zinc-800 rounded p-2">

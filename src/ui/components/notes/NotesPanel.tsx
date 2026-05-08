@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { NoteEditor } from './NoteEditor';
+import { PanelHeader } from '../shared/PanelHeader';
 import { noteFolders, noteSearch } from '../../../db/client/db-client';
 import type { GraphNode } from '../../../shared/types';
 
@@ -125,24 +126,21 @@ export function NotesPanel() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">Notes</h3>
-        <div className="flex gap-1">
-          <button
-            onClick={() => setPendingFolder('')}
-            className="text-xs px-2.5 py-1 bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition-colors"
-            title="Create a folder at the root"
-          >
-            + Folder
-          </button>
-          <button
-            onClick={handleNew}
-            className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
-          >
-            + New Note
-          </button>
-        </div>
-      </div>
+      <PanelHeader title="Notes">
+        <button
+          onClick={() => setPendingFolder('')}
+          className="text-xs px-2.5 py-1 bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition-colors"
+          title="Create a folder at the root"
+        >
+          + Folder
+        </button>
+        <button
+          onClick={handleNew}
+          className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
+        >
+          + New Note
+        </button>
+      </PanelHeader>
 
       {noteNodes.length === 0 && emptyFolders.length === 0 ? (
         <div className="text-center py-8">
