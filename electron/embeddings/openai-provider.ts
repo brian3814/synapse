@@ -23,8 +23,11 @@ export class OpenAIProvider implements EmbeddingProvider {
   }
 
   async initialize(): Promise<void> {
-    const available = await this.isAvailable();
-    if (!available) throw new Error('OpenAI API key is invalid or API is unreachable');
+    try {
+      await this.callAPI(['test']);
+    } catch (e: any) {
+      throw new Error(`OpenAI embedding API failed: ${e.message}`);
+    }
   }
 
   async embed(text: string): Promise<Float32Array> {

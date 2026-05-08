@@ -41,17 +41,23 @@ export class EmbeddingService {
 
   private async activateProvider(): Promise<void> {
     const provider = this.createProvider();
-    if (!provider) return;
+    if (!provider) {
+      console.warn('[EmbeddingService] No provider could be created for', this.config.providerId);
+      this.config.enabled = false;
+      return;
+    }
 
+    console.log(`[EmbeddingService] Activating provider: ${provider.id}`);
     try {
       await provider.initialize();
       this.provider = provider;
       ensureVecTable(this.db, provider.dimensions);
       this.queue = new EmbeddingQueue(this.db, provider);
-      console.log(`[EmbeddingService] Provider ${provider.id} initialized (${provider.dimensions}d)`);
+      console.log(`[EmbeddingService] Provider ${provider.id} ready (${provider.dimensions}d)`);
     } catch (e) {
       console.error('[EmbeddingService] Failed to initialize provider:', e);
       this.config.enabled = false;
+      try { await provider.dispose(); } catch {}
     }
   }
 
