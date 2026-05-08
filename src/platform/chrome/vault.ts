@@ -58,7 +58,7 @@ export class ChromeVault implements PlatformVault {
   async getStorageUsage(): Promise<{ bytes: number; fileCount: number }> {
     let bytes = 0;
     let fileCount = 0;
-    for await (const [name, handle] of (this.dir() as any).entries()) {
+    for await (const [, handle] of (this.dir() as any).entries()) {
       if (handle.kind !== 'directory') continue;
       const nodeDir = handle as FileSystemDirectoryHandle;
       for await (const [, fileHandle] of (nodeDir as any).entries()) {
