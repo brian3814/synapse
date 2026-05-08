@@ -50,7 +50,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 └─────────────────────────────────────────────────┘
 ```
 
-**Five platform interfaces** in `src/platform/types.ts`:
+**Six platform interfaces** in `src/platform/types.ts`:
 
 | Interface | Chrome Implementation | Electron Implementation |
 |---|---|---|
@@ -59,6 +59,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 | `PlatformNotes` | OPFS async API | IPC → local filesystem |
 | `PlatformLLM` | Message-based streaming via SW/offscreen | Dedicated IPC channels (`llm:stream-extraction`, `llm:run-agent`, `llm:stream-chat`) |
 | `PlatformBrowser` | `chrome.tabs`, content scripts | Companion extension dispatch or no-op |
+| `PlatformEmbedding` | No-op stub (returns empty arrays) | IPC → EmbeddingService in main process (sqlite-vec + ONNX/OpenAI) |
 
 **Build-time resolution**: `vite.config.chrome.ts` maps `@platform` → `src/platform/chrome/`. `vite.config.electron.ts` maps `@platform` → `src/platform/electron/`. TypeScript `tsconfig.json` paths point at Chrome as IDE default.
 
@@ -222,9 +223,110 @@ React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.s
 
 **Pitfall #21: Tailwind utility classes may not apply in extension contexts.** Some Tailwind classes (especially spacing like `py-3`, `pt-3`) were observed not applying in the Chrome extension side panel, with computed styles showing `0px` despite correct class names and the classes existing in the CSS bundle. Use inline `style={{}}` props as a reliable fallback for critical spacing.
 
+## Vector Embeddings (Electron-only)
+
+Opt-in vector embedding system for semantic search. Off by default — configured through Settings panel. Desktop (Electron) only; Chrome extension is completely unaffected.
+
+### Architecture
+
+```
+Renderer → IPC (embedding:*) → EmbeddingService → sqlite-vec (KNN) + Provider (ONNX/OpenAI)
+```
+
+- **`src/embeddings/types.ts`** — Type-only module (no runtime imports). Defines `EmbeddingProvider`, `EmbeddingConfig`, `PlatformEmbedding`. Safe to import from both Chrome and Electron builds.
+- **`electron/embeddings/`** — All runtime code. `EmbeddingService` (orchestrator), `OnnxProvider` (worker_threads), `OpenAIProvider` (API), `EmbeddingQueue` (background processing), `vec-store.ts` (sqlite-vec wrapper).
+- **`sqlite-vec`** — npm package, loaded via `sqliteVec.getLoadablePath()`. `vec_nodes` virtual table created by EmbeddingService at runtime (not in migrations).
+- **Migration 009** — Creates `embedding_metadata` and `embedding_dismissals` tables. Marked `optional: true`. Regular SQL tables that work on both platforms.
+
+### Chrome Isolation Constraints
+
+- `src/embeddings/types.ts` must contain ONLY TypeScript types. No runtime imports from `@huggingface/transformers`, `sqlite-vec`, or Node.js modules.
+- Both platform `index.ts` files export `embedding`. Chrome export is a frozen no-op.
+- The `semantic_search` chat tool is dynamically appended in `chat-agent-loop.ts` when `platformId === 'electron'`. Never added to the shared `CHAT_AGENT_TOOLS` constant.
+
+### What Embeddings Are Good For (and Not)
+
+Embeddings work well for **rich text content** — notes, resources, multi-word queries:
+- RAG retrieval: RRF blending of FTS5 + vector search in `rag-commands.ts`
+- Search bar: semantic fallback for 3+ word queries with few FTS hits
+- `semantic_search` chat tool: agent self-serves semantic retrieval
+- Context chip auto-suggest: related nodes when attaching context to chat
+
+Embeddings are **not effective for entity deduplication** — short names ("LLM", "ChatGPT") produce weak/noisy similarity scores. Acronym resolution ("LLM" = "Large Language Model") requires world knowledge that embedding models don't have. Entity merge detection uses the **chat agent's LLM** instead (via `merge_nodes` tool), which has the world knowledge to identify duplicates.
+
+### Embedding Text Construction
+
+Per-node type strategy in `electron/embeddings/build-embedding-text.ts`:
+- **entity** → `"{name}. {label}. {summary}"` — includes label and edge labels as context for short names
+- **note** → frontmatter `description`/`labels` preferred, fallback to first 500 chars of body
+- **resource** → `"{name}. {source title}. {first 500 chars of content}"`
+
+### EmbeddingService Initialization
+
+The service initializes lazily inside the `db:request` IPC handler after the first successful DB init (not during `app.whenReady()`). This avoids the race condition where `getDb()` throws before better-sqlite3 is ready.
+
+## Chat Agent Tools
+
+14 tools available to the chat agent in `src/shared/chat-agent-tools.ts` + dynamic additions:
+
+| Tool | Purpose |
+|---|---|
+| `search_knowledge` | RAG search with 1-hop expansion and source retrieval |
+| `search_nodes` | FTS5 node search |
+| `get_node_details` | Fetch single node by ID |
+| `get_neighbors` | N-hop graph traversal |
+| `get_edges_for_node` | Fetch edges for a node |
+| `search_sources` | Search stored source content |
+| `get_source_content` | Full source text retrieval |
+| `create_node` | Add new node |
+| `update_node` | Modify existing node |
+| `create_edge` | Add relationship |
+| `delete_node` | Remove node and all edges |
+| `merge_nodes` | Merge duplicates: transfer edges, add alias, delete secondary |
+| `index_notes_folder` | Re-index markdown folder |
+| `manage_memory` | CRUD for agent episodic/semantic memory |
+| `semantic_search` | (Electron-only, dynamic) Vector similarity search |
+
+The `merge_nodes` tool is the preferred way to handle entity deduplication — the LLM identifies duplicates using world knowledge, then executes the merge via the tool. This replaced the earlier embedding-based approach which couldn't handle acronyms or alternate names.
+
+Tool execution is in `src/commands/chat-tool-executor.ts`. The `semantic_search` tool is dynamically added in `chat-agent-loop.ts` only when `platformId === 'electron'`.
+
+## Graph-to-Chat Context Selection
+
+Users can attach graph nodes as context to chat messages — like Cursor's `@file` references but for knowledge graph entities.
+
+**Entry points:**
+- **Right-click graph canvas** → "Send to Chat" context menu (sends selection or right-clicked node)
+- **@-autocomplete in chat input** → type `@` then node name, select from dropdown → inserts `[[NodeName]]` inline
+
+**Inline references:** `[[NodeName]]` in user messages renders as a clickable green link (resolved via `preprocessWikilinks` in `MarkdownRenderer`). The MarkdownRenderer also handles `[Name](node:id)` links from assistant responses.
+
+**Context serialization:** `src/ui/utils/chat-context-serializer.ts` produces ~1 line per node with name/type/id/connections + availability hints ("has note", "has source"). Progressive disclosure — agent uses existing tools to drill deeper.
+
+**State:** `src/graph/store/chat-context-store.ts` (Zustand) bridges graph selection and chat input. `ContextChipBar` shows removable chips above input. `ContextSuggestions` shows semantically related nodes for one-click addition (Electron-only, embedding-powered).
+
+## Graph Canvas Toolbar
+
+`src/ui/components/graph/GraphControls.tsx` — toolbar overlay on the graph canvas:
+- Layer toggles (entities/notes/resources)
+- Node/edge count stats
+- Zoom in/out (magnifier SVG icons), fit-to-view, refresh (reloads graph from DB), screenshot
+- Create node button, delete selected button
+
+**Refresh button** calls `useGraphStore.getState().loadAll()` which reloads all nodes/edges from the DB. Useful after chat agent mutations.
+
+## Graph Store Sync
+
+The graph store's `startSyncListener` subscribes to BOTH `BroadcastChannel` (Chrome cross-tab sync) AND `db.onSync` (Electron IPC). This ensures node/edge mutations from any source (chat tools, other windows, direct DB operations) immediately update the canvas.
+
 ## Key References
 
-- **Platform interfaces**: `src/platform/types.ts` — `PlatformStorage`, `PlatformDB`, `PlatformNotes`, `PlatformLLM`, `PlatformBrowser`, and LLM request/result types
+- **Platform interfaces**: `src/platform/types.ts` — `PlatformStorage`, `PlatformDB`, `PlatformNotes`, `PlatformLLM`, `PlatformBrowser`, `PlatformEmbedding`, and LLM request/result types
+- **Embedding types**: `src/embeddings/types.ts` — Type-only module for embedding interfaces (safe for both platforms)
+- **Embedding implementation**: `electron/embeddings/` — EmbeddingService, providers, queue, vec-store (Electron-only)
+- **Chat tools**: `src/shared/chat-agent-tools.ts` — 14 tool definitions; `src/commands/chat-tool-executor.ts` — execution handlers
+- **Chat context**: `src/graph/store/chat-context-store.ts` — Zustand store bridging graph selection and chat; `src/ui/utils/chat-context-serializer.ts` — minimal node serialization
+- **Embedding spec**: [`docs/superpowers/specs/2026-05-04-vector-embeddings-design.md`](docs/superpowers/specs/2026-05-04-vector-embeddings-design.md)
 - **DataStore interface**: `src/db/data-store.ts` — 16 repository sub-interfaces for engine-swappable persistence. `src/db/sqlite-data-store.ts` is the current implementation.
 - **Shared core**: `src/core/` — `agent-loop.ts` (injectable ToolExecutor), `retry.ts` (withRetry), `usage.ts`, `system-prompts.ts`
 - **Types**: `src/shared/types.ts` — `DbNode`, `DbEdge`, `GraphNode`, `GraphEdge`, `LLMConfig`, `ToolCall`, `AgentTurn`, `AgentProgressEvent`
