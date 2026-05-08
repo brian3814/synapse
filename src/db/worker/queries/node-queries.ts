@@ -30,6 +30,8 @@ export async function createNode(input: {
   color?: string;
   size?: number;
   sourceUrl?: string;
+  vaultPath?: string;
+  contentType?: string;
 }): Promise<DbNode> {
   const id = generateId();
   const type = input.type ?? 'entity';
@@ -46,8 +48,8 @@ export async function createNode(input: {
   if (existing.length > 0) return existing[0];
 
   const { rows } = await executeQuery<DbNode>(
-    `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, color, size, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, color, size, source_url, vault_path, content_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *;`,
     [
       id,
@@ -60,6 +62,8 @@ export async function createNode(input: {
       input.color ?? null,
       input.size ?? 1.0,
       input.sourceUrl ?? null,
+      input.vaultPath ?? null,
+      input.contentType ?? null,
     ]
   );
   return rows[0];
