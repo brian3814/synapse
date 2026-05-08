@@ -42,8 +42,9 @@ export function CreatePanel() {
 
 function CreateNodeForm() {
   const createNode = useGraphStore((s) => s.createNode);
-  const structuralTypes = useNodeTypeStore((s) => s.getStructuralTypes());
-  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
+  const allTypes = useNodeTypeStore((s) => s.types);
+  const structuralTypes = allTypes.filter((t) => t.category === 'structural');
+  const entityLabels = allTypes.filter((t) => t.category === 'entity_label');
   const [name, setName] = useState('');
   const [type, setType] = useState(DEFAULT_NODE_TYPE);
   const [showAddType, setShowAddType] = useState(false);
