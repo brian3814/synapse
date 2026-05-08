@@ -22,6 +22,10 @@ export class OnnxProvider implements EmbeddingProvider {
     const workerPath = join(__dirname, 'embeddings', 'onnx-worker.cjs');
     this.worker = new Worker(workerPath);
 
+    this.worker.on('error', (e) => {
+      console.error('[onnx-worker] Thread error:', e);
+    });
+
     this.worker.on('message', (msg: { type: string; requestId?: string; vectors?: Float32Array[]; error?: string }) => {
       if (msg.type === 'result' && msg.requestId && msg.vectors) {
         this.pendingRequests.get(msg.requestId)?.resolve(msg.vectors);

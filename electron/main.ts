@@ -41,6 +41,11 @@ function createWindow(): BrowserWindow {
   });
 
   win.loadURL('app://kg/index.html');
+
+  if (!app.isPackaged) {
+    win.webContents.openDevTools();
+  }
+
   return win;
 }
 

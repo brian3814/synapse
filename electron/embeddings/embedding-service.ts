@@ -27,6 +27,7 @@ export class EmbeddingService {
     }
 
     this.vecAvailable = loadVecExtension(this.db);
+    console.log('[EmbeddingService] vecAvailable:', this.vecAvailable, 'config:', JSON.stringify({ enabled: this.config.enabled, providerId: this.config.providerId }));
     if (!this.vecAvailable) {
       console.warn('[EmbeddingService] sqlite-vec not available, embeddings disabled');
       this.config.enabled = false;
