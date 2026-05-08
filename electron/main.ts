@@ -88,6 +88,8 @@ app.whenReady().then(() => {
     }
   });
 
+  let embeddingInitStarted = false;
+
   ipcMain.handle('db:request', async (_event, action: string, params: unknown) => {
     const outcome = await dbHandleAction(action, params);
     if (outcome.syncEvent) {
@@ -95,6 +97,22 @@ app.whenReady().then(() => {
         win.webContents.send('db:sync', outcome.syncEvent);
       }
     }
+
+    // Initialize embedding service after first successful DB init
+    if (action === 'init' && !embeddingInitStarted) {
+      embeddingInitStarted = true;
+      try {
+        const db = getDb();
+        embeddingService = new EmbeddingService(db, readNote);
+        const storedConfig = storage.get('embeddingConfig');
+        await embeddingService.initialize(storedConfig?.embeddingConfig ?? undefined);
+        setupProgressBroadcast(embeddingService);
+        console.log('[main] Embedding service initialized');
+      } catch (e) {
+        console.error('[main] Failed to init embedding service:', e);
+      }
+    }
+
     // Notify embedding service of node mutations
     if (outcome.syncEvent && embeddingService) {
       const eventType = (outcome.syncEvent as any).type;
@@ -108,20 +126,6 @@ app.whenReady().then(() => {
     }
     return { success: true, data: outcome.result };
   });
-
-  // Initialize embedding service after DB is available
-  (async () => {
-    try {
-      const db = getDb();
-      embeddingService = new EmbeddingService(db, readNote);
-      const storedConfig = storage.get('embeddingConfig');
-      await embeddingService.initialize(storedConfig?.embeddingConfig ?? undefined);
-      setupProgressBroadcast(embeddingService);
-      console.log('[main] Embedding service initialized');
-    } catch (e) {
-      console.error('[main] Failed to init embedding service:', e);
-    }
-  })();
 
   ipcMain.handle('notes:init', () => {
     notesBackend.initNotesDir();
