@@ -1,5 +1,6 @@
 import { app, BrowserWindow, protocol, net, ipcMain } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
@@ -166,6 +167,52 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:move', (_event, newPath: string) => {
     return notesBackend.moveNotes(newPath);
+  });
+
+  // Vault handlers — binary file storage at ~/Documents/KnowledgeGraph/vault/
+  function getVaultDir(): string {
+    return path.join(app.getPath('documents'), 'KnowledgeGraph', 'vault');
+  }
+
+  ipcMain.handle('vault:init', () => {
+    fs.mkdirSync(getVaultDir(), { recursive: true });
+  });
+
+  ipcMain.handle('vault:store', (_event, dataArr: number[], filename: string, nodeId: string) => {
+    const nodeDir = path.join(getVaultDir(), nodeId);
+    fs.mkdirSync(nodeDir, { recursive: true });
+    fs.writeFileSync(path.join(nodeDir, filename), Buffer.from(dataArr));
+    return { vaultPath: `vault/${nodeId}/${filename}` };
+  });
+
+  ipcMain.handle('vault:read', (_event, vaultPath: string) => {
+    const fullPath = path.join(getVaultDir(), vaultPath.replace(/^vault\//, ''));
+    return Array.from(fs.readFileSync(fullPath));
+  });
+
+  ipcMain.handle('vault:remove', (_event, vaultPath: string) => {
+    const fullPath = path.join(getVaultDir(), vaultPath.replace(/^vault\//, ''));
+    try { fs.unlinkSync(fullPath); } catch { /* not found */ }
+    try {
+      const dir = path.dirname(fullPath);
+      if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    } catch { /* non-empty or not found */ }
+  });
+
+  ipcMain.handle('vault:usage', () => {
+    const vaultDir = getVaultDir();
+    let bytes = 0, fileCount = 0;
+    try {
+      for (const nodeId of fs.readdirSync(vaultDir)) {
+        const nodeDir = path.join(vaultDir, nodeId);
+        if (!fs.statSync(nodeDir).isDirectory()) continue;
+        for (const file of fs.readdirSync(nodeDir)) {
+          const stat = fs.statSync(path.join(nodeDir, file));
+          if (stat.isFile()) { bytes += stat.size; fileCount++; }
+        }
+      }
+    } catch { /* vault dir may not exist */ }
+    return { bytes, fileCount };
   });
 
   ipcMain.handle('files:read', (_event, filePath: string) => {
