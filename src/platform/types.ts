@@ -31,6 +31,14 @@ export interface PlatformNotes {
   exists(nodeId: string): Promise<boolean>;
 }
 
+export interface PlatformVault {
+  init(): Promise<void>;
+  store(data: ArrayBuffer, filename: string, nodeId: string): Promise<{ vaultPath: string }>;
+  read(vaultPath: string): Promise<ArrayBuffer>;
+  remove(vaultPath: string): Promise<void>;
+  getStorageUsage(): Promise<{ bytes: number; fileCount: number }>;
+}
+
 export interface PlatformFiles {
   read(path: string): Promise<string | null>;
   write(path: string, content: string): Promise<void>;
