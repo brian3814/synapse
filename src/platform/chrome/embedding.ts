@@ -1,4 +1,4 @@
-import type { PlatformEmbedding, EmbeddingStatus, SemanticSearchResult, SimilarPair, EmbeddingConfig } from '../../embeddings/types';
+import type { PlatformEmbedding, EmbeddingStatus, SemanticSearchResult, EmbeddingConfig } from '../../embeddings/types';
 
 const NOOP_STATUS: EmbeddingStatus = {
   enabled: false,
@@ -14,7 +14,5 @@ export class ChromeEmbedding implements PlatformEmbedding {
   async configure(_config: Partial<EmbeddingConfig>): Promise<void> {}
   async searchSimilar(_query: string, _topK?: number): Promise<SemanticSearchResult[]> { return []; }
   async searchSimilarByNodeId(_nodeId: string, _topK?: number): Promise<SemanticSearchResult[]> { return []; }
-  async findDuplicatePairs(_threshold?: number, _limit?: number): Promise<SimilarPair[]> { return []; }
-  async dismissPair(_nodeIdA: string, _nodeIdB: string): Promise<void> {}
   onProgress(_cb: (progress: { done: number; total: number }) => void): () => void { return () => {}; }
 }

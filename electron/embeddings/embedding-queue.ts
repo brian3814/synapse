@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { EmbeddingProvider } from '../../src/embeddings/types';
-import { insertEmbedding, deleteEmbedding, knnSearch, upsertSimilarPair, removeSimilarPairsFor } from './vec-store';
+import { insertEmbedding, deleteEmbedding } from './vec-store';
 import { computeTextHash } from './build-embedding-text';
 
 interface QueueItem {
@@ -88,36 +88,10 @@ export class EmbeddingQueue {
     this.db.prepare(
       'INSERT OR REPLACE INTO embedding_metadata(node_id, provider_id, dimensions, embedded_at, text_hash) VALUES (?, ?, ?, ?, ?)'
     ).run(nodeId, this.provider.id, this.provider.dimensions, new Date().toISOString(), hash);
-
-    this.updateSimilarPairs(nodeId, vec);
-  }
-
-  private updateSimilarPairs(nodeId: string, vec: Float32Array): void {
-    removeSimilarPairsFor(this.db, nodeId);
-
-    // Embedding-based similarity (KNN)
-    const neighbors = knnSearch(this.db, vec, 3, nodeId);
-    for (const n of neighbors) {
-      const similarity = 1 - n.distance;
-      if (similarity >= 0.5) {
-        upsertSimilarPair(this.db, nodeId, n.nodeId, similarity);
-      }
-    }
-
-    // Acronym + normalized string matching (catches LLM ↔ Large Language Model, ChatGPT ↔ Chat GPT)
-    const thisNode = this.db.prepare('SELECT name FROM nodes WHERE id = ?').get(nodeId) as { name: string } | undefined;
-    if (!thisNode) return;
-    const otherNodes = this.db.prepare('SELECT id, name FROM nodes WHERE id != ?').all(nodeId) as Array<{ id: string; name: string }>;
-    for (const other of otherNodes) {
-      if (isNameMatch(thisNode.name, other.name)) {
-        upsertSimilarPair(this.db, nodeId, other.id, 0.95);
-      }
-    }
   }
 
   handleNodeDeleted(nodeId: string): void {
     deleteEmbedding(this.db, nodeId);
-    removeSimilarPairsFor(this.db, nodeId);
     this.db.prepare('DELETE FROM embedding_metadata WHERE node_id = ?').run(nodeId);
   }
 
@@ -128,32 +102,4 @@ export class EmbeddingQueue {
   get isProcessing(): boolean {
     return this.processing;
   }
-}
-
-function isNameMatch(a: string, b: string): boolean {
-  return isAcronymOf(a, b) || isAcronymOf(b, a) || isNormalizedMatch(a, b);
-}
-
-function isAcronymOf(short: string, long: string): boolean {
-  const s = short.trim();
-  const words = long.trim().split(/\s+/);
-  if (s.length < 2 || s.length > 10 || words.length < 2) return false;
-  if (words.length !== s.length) return false;
-  const acronym = words.map((w) => w[0]).join('');
-  return acronym.toLowerCase() === s.toLowerCase();
-}
-
-function isNormalizedMatch(a: string, b: string): boolean {
-  const normalize = (s: string) => s.toLowerCase().replace(/[\s\-_.]+/g, '');
-  const na = normalize(a);
-  const nb = normalize(b);
-  if (na === nb && a !== b) return true;
-  // "ChatGPT" vs "Chat GPT" — one is the collapsed form of the other
-  if (na.length >= 3 && nb.length >= 3) {
-    if (na.includes(nb) || nb.includes(na)) {
-      const ratio = Math.min(na.length, nb.length) / Math.max(na.length, nb.length);
-      return ratio >= 0.8;
-    }
-  }
-  return false;
 }

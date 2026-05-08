@@ -1,10 +1,10 @@
 import type Database from 'better-sqlite3';
-import type { EmbeddingConfig, EmbeddingProvider, EmbeddingStatus, SemanticSearchResult, SimilarPair } from '../../src/embeddings/types';
+import type { EmbeddingConfig, EmbeddingProvider, EmbeddingStatus, SemanticSearchResult } from '../../src/embeddings/types';
 import { DEFAULT_EMBEDDING_CONFIG } from '../../src/embeddings/types';
 import { OnnxProvider } from './onnx-provider';
 import { OpenAIProvider } from './openai-provider';
 import { EmbeddingQueue } from './embedding-queue';
-import { loadVecExtension, ensureVecTable, dropVecTable, knnSearch, getSimilarPairs, addDismissal } from './vec-store';
+import { loadVecExtension, ensureVecTable, dropVecTable, knnSearch } from './vec-store';
 import { buildEmbeddingText, computeTextHash } from './build-embedding-text';
 
 export class EmbeddingService {
@@ -127,18 +127,7 @@ export class EmbeddingService {
         listener({ done, total });
       }
     });
-
-    const allPairs = this.db.prepare(
-      `SELECT sp.node_id_a, sp.node_id_b, sp.similarity, na.name as name_a, nb.name as name_b
-       FROM similar_pairs sp
-       JOIN nodes na ON na.id = sp.node_id_a
-       JOIN nodes nb ON nb.id = sp.node_id_b
-       ORDER BY sp.similarity DESC`
-    ).all() as Array<{ node_id_a: string; node_id_b: string; similarity: number; name_a: string; name_b: string }>;
-    console.log(`[EmbeddingService] Batch complete. ${allPairs.length} similar pairs stored:`);
-    for (const p of allPairs.slice(0, 20)) {
-      console.log(`  ${p.similarity.toFixed(3)} | "${p.name_a}" ↔ "${p.name_b}"`);
-    }
+    console.log('[EmbeddingService] Batch embed complete');
   }
 
   async handleNodeMutation(nodeId: string): Promise<void> {
@@ -180,30 +169,6 @@ export class EmbeddingService {
     const vec = await this.provider.embed(text);
     const results = knnSearch(this.db, vec, topK + 1, nodeId);
     return results.slice(0, topK).map((r) => ({ nodeId: r.nodeId, score: 1 - r.distance }));
-  }
-
-  findDuplicatePairs(threshold?: number, limit?: number): SimilarPair[] {
-    const t = threshold ?? this.config.similarityThreshold;
-    const l = limit ?? 20;
-    const rawPairs = getSimilarPairs(this.db, t, l);
-
-    return rawPairs.map((p) => {
-      const nodeA = this.db.prepare('SELECT id, name, type, label, summary FROM nodes WHERE id = ?').get(p.nodeIdA) as any;
-      const nodeB = this.db.prepare('SELECT id, name, type, label, summary FROM nodes WHERE id = ?').get(p.nodeIdB) as any;
-      if (!nodeA || !nodeB) return null;
-
-      const countA = (this.db.prepare('SELECT COUNT(*) as c FROM edges WHERE source_id = ? OR target_id = ?').get(nodeA.id, nodeA.id) as any).c;
-      const countB = (this.db.prepare('SELECT COUNT(*) as c FROM edges WHERE source_id = ? OR target_id = ?').get(nodeB.id, nodeB.id) as any).c;
-
-      const primary = countA >= countB ? { ...nodeA, connectionCount: countA } : { ...nodeB, connectionCount: countB };
-      const secondary = countA >= countB ? { ...nodeB, connectionCount: countB } : { ...nodeA, connectionCount: countA };
-
-      return { nodeA: primary, nodeB: secondary, similarity: p.similarity };
-    }).filter((p): p is SimilarPair => p !== null);
-  }
-
-  dismissPair(nodeIdA: string, nodeIdB: string): void {
-    addDismissal(this.db, nodeIdA, nodeIdB);
   }
 
   getStatus(): EmbeddingStatus {

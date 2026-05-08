@@ -47,28 +47,6 @@ export function registerEmbeddingHandlers(getService: () => EmbeddingService | n
       return [];
     }
   });
-
-  ipcMain.handle('embedding:find-duplicate-pairs', (_event, threshold?: number, limit?: number) => {
-    const service = getService();
-    if (!service) {
-      debugLog('find-duplicate-pairs → no service');
-      return [];
-    }
-    try {
-      const pairs = service.findDuplicatePairs(threshold, limit);
-      debugLog('find-duplicate-pairs →', pairs.length, 'pairs');
-      return pairs;
-    } catch (e) {
-      console.error('[embedding:find-duplicate-pairs] Error:', e);
-      return [];
-    }
-  });
-
-  ipcMain.handle('embedding:dismiss-pair', (_event, nodeIdA: string, nodeIdB: string) => {
-    const service = getService();
-    if (!service) return;
-    service.dismissPair(nodeIdA, nodeIdB);
-  });
 }
 
 export function setupProgressBroadcast(service: EmbeddingService): () => void {

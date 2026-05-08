@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
-import { SimilarNodes } from './SimilarNodes';
 import {
   labelPropagation,
   findConnectionSuggestions,
@@ -119,9 +118,6 @@ export function IntelligencePanel() {
           ))}
         </Section>
       )}
-
-      {/* Similar nodes (embedding-based, Electron only) */}
-      <SimilarNodes />
 
       {analysis.clusters.length === 0 && analysis.suggestions.length === 0 && analysis.patterns.length === 0 && (
         <p className="text-xs text-zinc-500 text-center py-4">

@@ -140,22 +140,6 @@ export function EmbeddingSettings() {
             </span>
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-400">Merge recommendation threshold</span>
-              <span className="text-xs text-zinc-500">{config.similarityThreshold.toFixed(2)}</span>
-            </div>
-            <input
-              type="range" min="0.50" max="0.95" step="0.05"
-              value={config.similarityThreshold}
-              onChange={(e) => handleSave({ similarityThreshold: parseFloat(e.target.value) })}
-              className="w-full accent-indigo-500"
-            />
-            <div className="flex justify-between text-[10px] text-zinc-600">
-              <span>More suggestions</span>
-              <span>Fewer, more confident</span>
-            </div>
-          </div>
 
           <button
             onClick={() => handleSave({ enabled: true })}

@@ -1,4 +1,4 @@
-import type { PlatformEmbedding, EmbeddingStatus, EmbeddingConfig, SemanticSearchResult, SimilarPair } from '../../embeddings/types';
+import type { PlatformEmbedding, EmbeddingStatus, EmbeddingConfig, SemanticSearchResult } from '../../embeddings/types';
 
 declare const window: Window & {
   electronIPC: {
@@ -26,14 +26,6 @@ export class ElectronEmbedding implements PlatformEmbedding {
 
   async searchSimilarByNodeId(nodeId: string, topK = 5): Promise<SemanticSearchResult[]> {
     return window.electronIPC.invoke('embedding:search-similar-by-node', nodeId, topK) as Promise<SemanticSearchResult[]>;
-  }
-
-  async findDuplicatePairs(threshold?: number, limit?: number): Promise<SimilarPair[]> {
-    return window.electronIPC.invoke('embedding:find-duplicate-pairs', threshold, limit) as Promise<SimilarPair[]>;
-  }
-
-  async dismissPair(nodeIdA: string, nodeIdB: string): Promise<void> {
-    await window.electronIPC.invoke('embedding:dismiss-pair', nodeIdA, nodeIdB);
   }
 
   onProgress(cb: (progress: { done: number; total: number }) => void): () => void {
