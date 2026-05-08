@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
+import { DuplicateDetector } from './DuplicateDetector';
 import {
   labelPropagation,
   findConnectionSuggestions,
@@ -118,6 +119,8 @@ export function IntelligencePanel() {
           ))}
         </Section>
       )}
+
+      <DuplicateDetector />
 
       {analysis.clusters.length === 0 && analysis.suggestions.length === 0 && analysis.patterns.length === 0 && (
         <p className="text-xs text-zinc-500 text-center py-4">
