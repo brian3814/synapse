@@ -3,6 +3,9 @@ import { retrieveRAGContext, formatRAGPrompt } from './rag-commands';
 import { parseMarkdown } from '../notes/markdown-utils';
 import * as graphCommands from './graph-commands';
 import * as memoryCommands from './memory-commands';
+import { getStoredFolder, requestPermission } from '../filesystem/folder-access';
+import { indexMarkdownFolder } from '../filesystem/indexing-pipeline';
+import { embedding } from '@platform';
 
 export interface ToolExecResult {
   result: string;
@@ -180,8 +183,6 @@ export async function executeTool(
     }
 
     case 'index_notes_folder': {
-      const { getStoredFolder, requestPermission } = await import('../filesystem/folder-access');
-      const { indexMarkdownFolder } = await import('../filesystem/indexing-pipeline');
       const handle = await getStoredFolder();
       if (!handle) {
         return { result: JSON.stringify({ error: 'No folder connected. Connect one in Settings > Markdown Folder.' }) };
@@ -207,7 +208,6 @@ export async function executeTool(
     }
 
     case 'semantic_search': {
-      const { embedding } = await import('@platform');
       const query = input.query as string;
       const limit = (input.limit as number) ?? 5;
       const results = await embedding.searchSimilar(query, limit);
