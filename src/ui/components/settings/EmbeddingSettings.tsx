@@ -28,7 +28,7 @@ export function EmbeddingSettings() {
     setConfig(newConfig);
     try {
       await storage.set({ [STORAGE_KEY]: newConfig });
-      await embedding.configure(updates);
+      await embedding.configure(newConfig);
       const newStatus = await embedding.getStatus();
       setStatus(newStatus);
     } catch (e) {
