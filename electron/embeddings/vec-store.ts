@@ -53,16 +53,18 @@ export function knnSearch(
   topK: number,
   excludeNodeId?: string,
 ): Array<{ nodeId: string; distance: number }> {
-  const sql = excludeNodeId
-    ? `SELECT node_id, distance FROM vec_nodes WHERE embedding MATCH ? AND node_id != ? ORDER BY distance LIMIT ?`
-    : `SELECT node_id, distance FROM vec_nodes WHERE embedding MATCH ? ORDER BY distance LIMIT ?`;
+  // sqlite-vec requires k=? in the WHERE clause for KNN queries.
+  // LIMIT ? is not reliably passed to the vec0 virtual table planner.
+  // When excluding a node, fetch one extra and filter in JS.
+  const fetchK = excludeNodeId ? topK + 1 : topK;
+  const sql = `SELECT node_id, distance FROM vec_nodes WHERE embedding MATCH ? AND k = ? ORDER BY distance`;
+  const rows = db.prepare(sql).all(Buffer.from(queryVec.buffer), fetchK) as Array<{ node_id: string; distance: number }>;
 
-  const params = excludeNodeId
-    ? [Buffer.from(queryVec.buffer), excludeNodeId, topK]
-    : [Buffer.from(queryVec.buffer), topK];
-
-  const rows = db.prepare(sql).all(...params) as Array<{ node_id: string; distance: number }>;
-  return rows.map((r) => ({ nodeId: r.node_id, distance: r.distance }));
+  let results = rows.map((r) => ({ nodeId: r.node_id, distance: r.distance }));
+  if (excludeNodeId) {
+    results = results.filter((r) => r.nodeId !== excludeNodeId).slice(0, topK);
+  }
+  return results;
 }
 
 export function upsertSimilarPair(
