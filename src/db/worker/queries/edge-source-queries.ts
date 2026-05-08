@@ -14,15 +14,17 @@ export async function addEdgeSource(input: {
   sourceType: EdgeProvenanceType;
   sourceId?: string | null;
   resourceId?: string | null;
+  location?: string | null;
 }): Promise<void> {
   await executeExec(
-    `INSERT OR IGNORE INTO edge_sources (edge_id, source_type, source_id, resource_id)
-     VALUES (?, ?, ?, ?);`,
+    `INSERT OR IGNORE INTO edge_sources (edge_id, source_type, source_id, resource_id, location)
+     VALUES (?, ?, ?, ?, ?);`,
     [
       input.edgeId,
       input.sourceType,
       input.sourceId ?? null,
       input.resourceId ?? null,
+      input.location ?? null,
     ]
   );
 }
