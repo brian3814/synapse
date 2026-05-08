@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
-import { DEFAULT_NODE_TYPE } from '../../../shared/constants';
+import { DEFAULT_NODE_TYPE, STRUCTURAL_NODE_TYPES } from '../../../shared/constants';
 import { AddTypeModal } from './AddTypeModal';
 import { tags } from '../../../db/client/db-client';
+
+const STRUCTURAL_SET = new Set<string>(STRUCTURAL_NODE_TYPES);
 
 type CreateTab = 'node' | 'edge';
 
@@ -60,7 +62,11 @@ function CreateNodeForm() {
       return;
     }
 
-    const result = await createNode({ name: name.trim(), type });
+    const isStructural = STRUCTURAL_SET.has(type);
+    const input = isStructural
+      ? { name: name.trim(), type }
+      : { name: name.trim(), type: 'entity', label: type };
+    const result = await createNode(input);
     if (result) {
       const tagList = tagsInput
         .split(',')
