@@ -24,6 +24,9 @@ import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';
 import type { DiffItem, ExtractedNoteCandidate, EntityMatch } from '../../shared/types';
+import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
+import { getProcessor } from '../../ingestion/processor-factory';
+import { runIngestionPipeline } from '../../ingestion/ingestion-pipeline';
 
 /**
  * Normalizes an LLM-extracted node to the three-layer model:
@@ -1041,5 +1044,88 @@ export function useLLMExtraction() {
     }
   }, []);
 
-  return { startExtraction, startQuickExtraction, startAgentExtraction, applyDiff, applyReview, proceedToReview };
+  const startIngestion = useCallback(async (source: IngestionSource, mode: ProcessingMode = 'full') => {
+    // Privacy disclosure gate
+    const disc = await storage.get('privacyDisclosureAccepted') as Record<string, any>;
+    if (!disc.privacyDisclosureAccepted) {
+      useLLMStore.getState().setShowPrivacyModal(true, () => startIngestion(source, mode));
+      return;
+    }
+
+    const llmStore = useLLMStore.getState();
+    llmStore.setError(null);
+
+    const result = await storage.get('llmConfig') as Record<string, any>;
+    const config = result.llmConfig;
+    if (!config?.apiKey) {
+      llmStore.setError('No API key configured. Go to Settings to add one.');
+      return;
+    }
+
+    const processor = getProcessor(source);
+    if (!processor) {
+      llmStore.setError(`Unsupported file type: ${source.mimeType || source.name}`);
+      return;
+    }
+
+    llmStore.startAgentRun([
+      { id: 'preprocess', label: `Processing ${source.name}` },
+      { id: 'extract', label: 'Extracting entities via LLM' },
+      { id: 'parse', label: 'Parsing results' },
+    ]);
+    llmStore.setStatus('extracting');
+    llmStore.setSourceUrl(source.name);
+
+    const notesOn = await isNotesEnabled();
+
+    try {
+      const { result: extractionResult } = await runIngestionPipeline(
+        source,
+        mode,
+        {
+          onProgress: (pct, msg) => {
+            const store = useLLMStore.getState();
+            if (pct < 40) {
+              store.appendToCurrentStep(msg + '\n');
+            } else if (pct >= 40 && pct < 95) {
+              const run = store.agentRun;
+              if (run && run.currentStepIndex === 0) {
+                store.completeCurrentStep();
+                store.advanceStep();
+              }
+              store.appendToCurrentStep(msg + '\n');
+            }
+          },
+          streamExtraction: (request, onChunk) =>
+            llm.streamExtraction(request, onChunk, (info) => {
+              useLLMStore.getState().setRateLimitWait({ ...info, startedAt: Date.now() });
+            }),
+          getSystemPrompt: getQuickExtractSystemPrompt,
+          notesEnabled: notesOn,
+          model: config.model,
+        },
+      );
+
+      useLLMStore.getState().setRateLimitWait(null);
+
+      // Advance to parse step
+      const store = useLLMStore.getState();
+      if (store.agentRun && store.agentRun.currentStepIndex < 2) {
+        store.completeCurrentStep();
+        store.advanceStep();
+      }
+
+      const { items, notes: extractedNotes } = await buildDiffItems(extractionResult);
+
+      store.completeCurrentStep();
+      store.setDiff({ items, notes: extractedNotes });
+      store.setStatus('extracted');
+    } catch (e: any) {
+      const llmState = useLLMStore.getState();
+      llmState.failCurrentStep(e.message);
+      llmState.setError(e.message);
+    }
+  }, []);
+
+  return { startExtraction, startQuickExtraction, startAgentExtraction, startIngestion, applyDiff, applyReview, proceedToReview };
 }
