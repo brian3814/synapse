@@ -42,8 +42,11 @@ export function CreatePanel() {
 
 function CreateNodeForm() {
   const createNode = useGraphStore((s) => s.createNode);
+  const structuralTypes = useNodeTypeStore((s) => s.getStructuralTypes());
+  const entityLabels = useNodeTypeStore((s) => s.getEntityLabels());
   const [name, setName] = useState('');
   const [type, setType] = useState(DEFAULT_NODE_TYPE);
+  const [showAddType, setShowAddType] = useState(false);
   const [tagsInput, setTagsInput] = useState('');
   const [error, setError] = useState('');
 
@@ -58,7 +61,6 @@ function CreateNodeForm() {
 
     const result = await createNode({ name: name.trim(), type });
     if (result) {
-      // Save tags if any
       const tagList = tagsInput
         .split(',')
         .map((t) => t.trim().toLowerCase())
@@ -76,51 +78,79 @@ function CreateNodeForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div>
-        <label className="text-xs font-medium text-zinc-400 block mb-1">Name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter node name..."
-          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
-          autoFocus
-        />
-      </div>
+    <>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">Name</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter node name..."
+            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+            autoFocus
+          />
+        </div>
 
-      <div>
-        <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-zinc-400">Type</label>
+            <button
+              type="button"
+              onClick={() => setShowAddType(true)}
+              className="text-[10px] text-indigo-400 hover:text-indigo-300"
+            >
+              + New type
+            </button>
+          </div>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+          >
+            {structuralTypes.map((t) => (
+              <option key={t.type} value={t.type}>{t.type}</option>
+            ))}
+            {entityLabels.length > 0 && (
+              <optgroup label="Entity Labels">
+                {entityLabels.map((t) => (
+                  <option key={t.type} value={t.type}>{t.type}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-zinc-400 block mb-1">Tags</label>
+          <input
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="Comma-separated tags..."
+            className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+          />
+          <p className="text-[10px] text-zinc-600 mt-0.5">e.g. important, research, topic-x</p>
+        </div>
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
+
+        <button
+          type="submit"
+          className="w-full bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
         >
-          <option value="resource">resource</option>
-          <option value="note">note</option>
-          <option value="concept">concept</option>
-        </select>
-      </div>
+          Create Node
+        </button>
+      </form>
 
-      <div>
-        <label className="text-xs font-medium text-zinc-400 block mb-1">Tags</label>
-        <input
-          value={tagsInput}
-          onChange={(e) => setTagsInput(e.target.value)}
-          placeholder="Comma-separated tags..."
-          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+      {showAddType && (
+        <AddTypeModal
+          onClose={() => setShowAddType(false)}
+          onCreated={(newType) => {
+            setType(newType);
+            setShowAddType(false);
+          }}
         />
-        <p className="text-[10px] text-zinc-600 mt-0.5">e.g. important, research, topic-x</p>
-      </div>
-
-      {error && <p className="text-xs text-red-400">{error}</p>}
-
-      <button
-        type="submit"
-        className="w-full bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors"
-      >
-        Create Node
-      </button>
-    </form>
+      )}
+    </>
   );
 }
 
