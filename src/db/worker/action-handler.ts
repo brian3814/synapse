@@ -270,8 +270,9 @@ export function createActionHandler(dataStore: DataStore) {
           entityId: string;
           resourceId: string;
           relationType?: 'about' | 'mention';
+          location?: string;
         };
-        await dataStore.entitySources.add(p.entityId, p.resourceId, p.relationType);
+        await dataStore.entitySources.add(p.entityId, p.resourceId, p.relationType, p.location);
         return { result: { success: true } };
       }
       case 'entitySources.remove': {

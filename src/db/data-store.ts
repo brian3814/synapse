@@ -53,6 +53,8 @@ export interface NodeRepository {
     color?: string;
     size?: number;
     sourceUrl?: string;
+    vaultPath?: string;
+    contentType?: string;
   }): Promise<DbNode>;
   update(input: {
     id: string;
@@ -157,6 +159,7 @@ export interface EdgeSourceRepository {
     sourceType: EdgeProvenanceType;
     sourceId?: string | null;
     resourceId?: string | null;
+    location?: string | null;
   }): Promise<void>;
   getForEdge(edgeId: string): Promise<DbEdgeSource[]>;
   removeForNote(noteId: string): Promise<number>;
@@ -164,8 +167,8 @@ export interface EdgeSourceRepository {
 }
 
 export interface EntitySourceRepository {
-  getForEntity(entityId: string): Promise<Array<{ resourceId: string; relationType: string; createdAt: string }>>;
-  add(entityId: string, resourceId: string, relationType?: string): Promise<void>;
+  getForEntity(entityId: string): Promise<Array<{ resourceId: string; relationType: string; createdAt: string; location?: string }>>;
+  add(entityId: string, resourceId: string, relationType?: string, location?: string): Promise<void>;
   remove(entityId: string, resourceId: string, relationType?: string): Promise<boolean>;
   removeAllForResource(resourceId: string): Promise<number>;
   getEntitiesForResource(resourceId: string): Promise<Array<{ entityId: string; relationType: string }>>;

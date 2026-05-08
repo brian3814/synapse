@@ -135,8 +135,8 @@ export function createSqliteDataStore(
 
     entitySources: {
       getForEntity: (entityId) => entitySourceQueries.getSourcesForEntity(entityId),
-      add: (entityId, resourceId, relationType) =>
-        entitySourceQueries.addEntitySource(entityId, resourceId, relationType as any),
+      add: (entityId, resourceId, relationType, location) =>
+        entitySourceQueries.addEntitySource(entityId, resourceId, relationType as any, location),
       remove: (entityId, resourceId, relationType) =>
         entitySourceQueries.removeEntitySource(entityId, resourceId, relationType as any),
       removeAllForResource: (resourceId) => entitySourceQueries.removeAllForResource(resourceId),

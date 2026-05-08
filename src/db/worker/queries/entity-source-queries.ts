@@ -5,8 +5,8 @@ export type EntityRelationType = 'about' | 'mention';
 
 export async function getSourcesForEntity(
   entityId: string
-): Promise<{ resourceId: string; relationType: EntityRelationType; createdAt: string }[]> {
-  const { rows } = await executeQuery<DbEntitySource>(
+): Promise<{ resourceId: string; relationType: EntityRelationType; createdAt: string; location?: string }[]> {
+  const { rows } = await executeQuery<DbEntitySource & { location?: string | null }>(
     'SELECT * FROM entity_sources WHERE entity_id = ? ORDER BY created_at;',
     [entityId]
   );
@@ -14,18 +14,20 @@ export async function getSourcesForEntity(
     resourceId: r.resource_id,
     relationType: r.relation_type,
     createdAt: r.created_at,
+    location: r.location ?? undefined,
   }));
 }
 
 export async function addEntitySource(
   entityId: string,
   resourceId: string,
-  relationType: EntityRelationType = 'about'
+  relationType: EntityRelationType = 'about',
+  location?: string
 ): Promise<void> {
   await executeExec(
-    `INSERT OR IGNORE INTO entity_sources (entity_id, resource_id, relation_type)
-     VALUES (?, ?, ?);`,
-    [entityId, resourceId, relationType]
+    `INSERT OR IGNORE INTO entity_sources (entity_id, resource_id, relation_type, location)
+     VALUES (?, ?, ?, ?);`,
+    [entityId, resourceId, relationType, location ?? null]
   );
 }
 
