@@ -52,6 +52,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@mozilla/readability": "^0.6.0",
     "better-sqlite3": "^12.9.0",
+    "pdfjs-dist": "^5.7.284",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
