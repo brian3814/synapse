@@ -8,6 +8,7 @@ import * as migration006 from './006-spatial-index';
 import * as migration007 from './007-reading-list-history';
 import * as migration008 from './008-agent-harness';
 import * as migration009 from './009-embeddings';
+import * as migration010 from './010-ingestion';
 
 interface Migration {
   version: number;
@@ -16,7 +17,7 @@ interface Migration {
   optional?: boolean;
 }
 
-const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009];
+const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010];
 
 // Track whether FTS5 is available for search queries
 let fts5Available = false;
