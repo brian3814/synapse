@@ -19,7 +19,7 @@ export class OnnxProvider implements EmbeddingProvider {
   }
 
   async initialize(): Promise<void> {
-    const workerPath = join(__dirname, 'onnx-worker.js');
+    const workerPath = join(__dirname, 'embeddings', 'onnx-worker.cjs');
     this.worker = new Worker(workerPath);
 
     this.worker.on('message', (msg: { type: string; requestId?: string; vectors?: Float32Array[]; error?: string }) => {
