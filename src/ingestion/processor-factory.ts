@@ -1,6 +1,8 @@
 import type { ContentProcessor, IngestionSource } from './types';
+import { pdfProcessor } from './processors/pdf-processor';
+import { imageProcessor } from './processors/image-processor';
 
-const processors: ContentProcessor[] = [];
+const processors: ContentProcessor[] = [pdfProcessor, imageProcessor];
 
 export function registerProcessor(processor: ContentProcessor): void {
   processors.push(processor);
