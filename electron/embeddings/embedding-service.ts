@@ -112,8 +112,8 @@ export class EmbeddingService {
   private async runBatchEmbed(): Promise<void> {
     if (!this.queue || !this.provider) return;
 
-    const nodes = this.db.prepare('SELECT id, name, type, summary FROM nodes').all() as Array<{
-      id: string; name: string; type: string; summary: string | null;
+    const nodes = this.db.prepare('SELECT id, name, type, label, summary FROM nodes').all() as Array<{
+      id: string; name: string; type: string; label: string | null; summary: string | null;
     }>;
 
     const items = nodes.map((n) => ({
@@ -128,15 +128,24 @@ export class EmbeddingService {
       }
     });
 
-    const pairCount = (this.db.prepare('SELECT COUNT(*) as c FROM similar_pairs').get() as any).c;
-    console.log(`[EmbeddingService] Batch complete. ${pairCount} similar pairs stored`);
+    const allPairs = this.db.prepare(
+      `SELECT sp.node_id_a, sp.node_id_b, sp.similarity, na.name as name_a, nb.name as name_b
+       FROM similar_pairs sp
+       JOIN nodes na ON na.id = sp.node_id_a
+       JOIN nodes nb ON nb.id = sp.node_id_b
+       ORDER BY sp.similarity DESC`
+    ).all() as Array<{ node_id_a: string; node_id_b: string; similarity: number; name_a: string; name_b: string }>;
+    console.log(`[EmbeddingService] Batch complete. ${allPairs.length} similar pairs stored:`);
+    for (const p of allPairs.slice(0, 20)) {
+      console.log(`  ${p.similarity.toFixed(3)} | "${p.name_a}" ↔ "${p.name_b}"`);
+    }
   }
 
   async handleNodeMutation(nodeId: string): Promise<void> {
     if (!this.config.enabled || !this.config.autoEmbed || !this.queue) return;
 
-    const node = this.db.prepare('SELECT id, name, type, summary FROM nodes WHERE id = ?').get(nodeId) as {
-      id: string; name: string; type: string; summary: string | null;
+    const node = this.db.prepare('SELECT id, name, type, label, summary FROM nodes WHERE id = ?').get(nodeId) as {
+      id: string; name: string; type: string; label: string | null; summary: string | null;
     } | undefined;
 
     if (!node) return;
@@ -165,7 +174,7 @@ export class EmbeddingService {
     if (!this.provider || !this.config.enabled) return [];
     const meta = this.db.prepare('SELECT node_id FROM embedding_metadata WHERE node_id = ?').get(nodeId);
     if (!meta) return [];
-    const node = this.db.prepare('SELECT id, name, type, summary FROM nodes WHERE id = ?').get(nodeId) as any;
+    const node = this.db.prepare('SELECT id, name, type, label, summary FROM nodes WHERE id = ?').get(nodeId) as any;
     if (!node) return [];
     const text = buildEmbeddingText(node, this.db, this.readNote);
     const vec = await this.provider.embed(text);

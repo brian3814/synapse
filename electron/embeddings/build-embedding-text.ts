@@ -1,12 +1,22 @@
 import type Database from 'better-sqlite3';
 
 export function buildEmbeddingText(
-  node: { id: string; name: string; type: string; summary?: string | null },
+  node: { id: string; name: string; type: string; label?: string | null; summary?: string | null },
   db: Database.Database,
   readNote?: (nodeId: string) => string | null,
 ): string {
   if (node.type === 'entity') {
-    return node.summary ? `${node.name}. ${node.summary}` : node.name;
+    const parts = [node.name];
+    if (node.label) parts.push(node.label);
+    if (node.summary) parts.push(node.summary);
+    if (parts.length === 1) {
+      const neighbors = db.prepare(
+        `SELECT DISTINCT e.label FROM edges e WHERE e.source_id = ? OR e.target_id = ? LIMIT 5`
+      ).all(node.id, node.id) as Array<{ label: string }>;
+      const edgeLabels = neighbors.map((n) => n.label).filter(Boolean);
+      if (edgeLabels.length > 0) parts.push(edgeLabels.join(', '));
+    }
+    return parts.join('. ');
   }
 
   if (node.type === 'note') {
