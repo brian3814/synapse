@@ -9,3 +9,12 @@ export type {
 } from './types';
 
 export { getProcessor, registerProcessor, getSupportedExtensions, getSupportedMimeTypes } from './processor-factory';
+
+export {
+  createIngestionSourceFromFile,
+  createIngestionSourceFromClipboard,
+  createIngestionSourceFromUrl,
+  runIngestionPipeline,
+} from './ingestion-pipeline';
+
+export type { IngestionCallbacks } from './ingestion-pipeline';
