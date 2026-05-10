@@ -7,6 +7,7 @@ import { ChromeFiles } from './files';
 import { ChromeLLM } from './llm';
 import { ChromeBrowser } from './browser';
 import { ChromeEmbedding } from './embedding';
+export { vaultWorkspace } from './vault-workspace';
 
 export const platformId: PlatformId = 'chrome';
 export const storage = new ChromeStorage();

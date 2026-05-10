@@ -3,32 +3,34 @@ import { app } from 'electron';
 import { join } from 'path';
 import { setEngine } from '../src/db/worker/query-executor';
 
-const DB_PATH = join(app.getPath('userData'), 'kg-desktop.db');
+const DEFAULT_DB_PATH = join(app.getPath('userData'), 'kg-desktop.db');
 
 let db: Database.Database | null = null;
+let currentDbPath: string = DEFAULT_DB_PATH;
 
 export function getDb(): Database.Database {
   if (!db) throw new Error('DB not initialized');
   return db;
 }
 
-export async function initBetterSQLite(): Promise<void> {
+export async function initBetterSQLite(dbPath?: string): Promise<void> {
   if (db) return;
 
-  db = new Database(DB_PATH);
+  currentDbPath = dbPath ?? DEFAULT_DB_PATH;
+  db = new Database(currentDbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
   setEngine({ exec, query, checkModuleAvailable });
-  console.log('[DB] better-sqlite3 initialized at', DB_PATH);
+  console.log('[DB] better-sqlite3 initialized at', currentDbPath);
 }
 
-export async function resetBetterSQLite(): Promise<void> {
+export async function resetBetterSQLite(dbPath?: string): Promise<void> {
   if (db) {
     db.close();
     db = null;
   }
-  await initBetterSQLite();
+  await initBetterSQLite(dbPath ?? currentDbPath);
 }
 
 export async function exec(sql: string, params?: unknown[]): Promise<number> {

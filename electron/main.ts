@@ -11,6 +11,12 @@ import { getDb } from './better-sqlite3-engine';
 import { EmbeddingService } from './embeddings/embedding-service';
 import { registerEmbeddingHandlers, setupProgressBroadcast } from './embeddings/ipc-handlers';
 import { readNote } from './notes-backend';
+import { VaultManager } from './vault/vault-manager';
+import { NoteFileHandler } from './vault/handlers/note-file-handler';
+import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
+import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
+import { VaultFileWatcher } from './vault/file-watcher';
+import { reconcileVault } from './vault/reconciliation';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -97,6 +103,17 @@ app.whenReady().then(() => {
   let embeddingInitStarted = false;
 
   ipcMain.handle('db:request', async (_event, action: string, params: unknown) => {
+    // Pre-lookup vault_path before deletion (node is gone after action)
+    let deletedFilePath: string | undefined;
+    if (action === 'nodes.delete' && vaultManager.getContext()) {
+      try {
+        const row = getDb().prepare(
+          'SELECT vault_path FROM nodes WHERE id = ?'
+        ).get(params as string) as { vault_path: string | null } | undefined;
+        deletedFilePath = row?.vault_path ?? undefined;
+      } catch { /* DB may not be ready */ }
+    }
+
     const outcome = await dbHandleAction(action, params);
     if (outcome.syncEvent) {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -130,6 +147,32 @@ app.whenReady().then(() => {
         if (nodeId) embeddingService.handleNodeDeleted(nodeId);
       }
     }
+
+    // Emit vault events for handlers (NoteFileHandler, etc.)
+    const ctx = vaultManager.getContext();
+    if (outcome.syncEvent && ctx) {
+      const syncType = (outcome.syncEvent as any).type;
+      if (syncType === 'node_created') {
+        ctx.eventBus.emit({ type: 'node:created', node: (outcome.syncEvent as any).node });
+      } else if (syncType === 'node_updated') {
+        ctx.eventBus.emit({
+          type: 'node:updated',
+          node: (outcome.syncEvent as any).node,
+          changes: ['name', 'properties', 'label', 'summary'],
+        });
+      } else if (syncType === 'node_deleted') {
+        ctx.eventBus.emit({
+          type: 'node:deleted',
+          nodeId: (outcome.syncEvent as any).id,
+          filePath: deletedFilePath,
+        });
+      } else if (syncType === 'edge_created') {
+        ctx.eventBus.emit({ type: 'edge:created', edge: (outcome.syncEvent as any).edge });
+      } else if (syncType === 'edge_deleted') {
+        ctx.eventBus.emit({ type: 'edge:deleted', edgeId: (outcome.syncEvent as any).id });
+      }
+    }
+
     return { success: true, data: outcome.result };
   });
 
@@ -251,6 +294,91 @@ app.whenReady().then(() => {
   });
 
   startCompanionServer();
+
+  // ── Vault Workspace Management ──────────────────────────────────────
+  const vaultManager = new VaultManager(storage);
+  let noteFileHandler: NoteFileHandler | null = null;
+  let syncBroadcastHandler: SyncBroadcastHandler | null = null;
+  let resourceDetectionHandler: ResourceDetectionHandler | null = null;
+  let fileWatcher: VaultFileWatcher | null = null;
+
+  function registerVaultHandlers() {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return;
+
+    // Run reconciliation to catch offline changes
+    reconcileVault(ctx);
+
+    // Register event handlers
+    noteFileHandler = new NoteFileHandler(ctx);
+    noteFileHandler.register(ctx.eventBus);
+
+    syncBroadcastHandler = new SyncBroadcastHandler();
+    syncBroadcastHandler.register(ctx.eventBus);
+
+    resourceDetectionHandler = new ResourceDetectionHandler(ctx);
+    resourceDetectionHandler.register(ctx.eventBus);
+
+    // Start file watcher for live changes
+    fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus);
+    fileWatcher.start();
+  }
+
+  function unregisterVaultHandlers() {
+    fileWatcher?.stop();
+    fileWatcher = null;
+    noteFileHandler?.unregister();
+    noteFileHandler = null;
+    syncBroadcastHandler?.unregister();
+    syncBroadcastHandler = null;
+    resourceDetectionHandler?.unregister();
+    resourceDetectionHandler = null;
+  }
+
+  ipcMain.handle('vault-workspace:get-status', () => {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return { open: false };
+    return { open: true, path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:get-recent', () => {
+    return vaultManager.getRecentVaults();
+  });
+
+  ipcMain.handle('vault-workspace:create', async (_event, vaultPath: string, name: string) => {
+    unregisterVaultHandlers();
+    const ctx = await vaultManager.create(vaultPath, name);
+    registerVaultHandlers();
+    return { path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:open', async (_event, vaultPath: string) => {
+    unregisterVaultHandlers();
+    const ctx = await vaultManager.open(vaultPath);
+    registerVaultHandlers();
+    return { path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:pick-create', async () => {
+    unregisterVaultHandlers();
+    const ctx = await vaultManager.pickAndCreate();
+    if (!ctx) return null;
+    registerVaultHandlers();
+    return { path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:pick-open', async () => {
+    unregisterVaultHandlers();
+    const ctx = await vaultManager.pickAndOpen();
+    if (!ctx) return null;
+    registerVaultHandlers();
+    return { path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:close', async () => {
+    unregisterVaultHandlers();
+    await vaultManager.close();
+  });
 
   createWindow();
 

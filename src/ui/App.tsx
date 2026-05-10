@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDbInit } from '../db/client/db-hooks';
 import { useGraphStore } from '../graph/store/graph-store';
 import { useNodeTypeStore } from '../graph/store/node-type-store';
@@ -16,9 +16,31 @@ import { DropZone } from './components/ingestion/DropZone';
 import { ProcessingModePrompt } from './components/ingestion/ProcessingModePrompt';
 import { getProcessor } from '../ingestion/processor-factory';
 import { createIngestionSourceFromFile } from '../ingestion/ingestion-pipeline';
+import { platformId } from '@platform';
+import { VaultSetupScreen } from './components/VaultSetupScreen';
+import { useVaultStatus } from './hooks/useVaultStatus';
 import type { IngestionSource, ProcessingMode, ModePromptResult } from '../ingestion/types';
 
 export default function App() {
+  const { vaultOpen, checking: vaultChecking, refresh: refreshVault } = useVaultStatus();
+
+  // Gate: Electron requires vault setup before anything else
+  if (platformId === 'electron' && vaultChecking) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-zinc-900">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (platformId === 'electron' && !vaultOpen) {
+    return <VaultSetupScreen onVaultReady={refreshVault} />;
+  }
+
+  return <AppMain />;
+}
+
+function AppMain() {
   const { ready, error: dbError } = useDbInit();
   const { displayMode } = useDisplayMode();
   useCompanionCapture();

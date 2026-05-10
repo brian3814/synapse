@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
-import { storage, platformId, notes } from '@platform';
+import { storage, platformId, notes, vaultWorkspace } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
 import { useGraphStore } from '../../../graph/store/graph-store';
@@ -165,11 +165,11 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
     <div className="p-5 space-y-0">
       <RelevanceSection />
 
-      {platformId === 'electron' && <NotesStorageSection />}
+      {platformId === 'electron' ? <VaultSection /> : <NotesStorageSection />}
 
       <EmbeddingSettings />
 
-      <FolderSection />
+      {platformId !== 'electron' && <FolderSection />}
 
       <StressTest />
 
@@ -331,6 +331,28 @@ function RelevanceSection() {
           onChange={handleToggle}
           className="toggle-switch"
         />
+      </div>
+    </div>
+  );
+}
+
+function VaultSection() {
+  const [status, setStatus] = useState<{ open: boolean; path?: string; name?: string } | null>(null);
+
+  useEffect(() => {
+    vaultWorkspace.getStatus().then(setStatus);
+  }, []);
+
+  if (!status?.open) return null;
+
+  return (
+    <div className="border-t border-zinc-700 pt-4 mt-4">
+      <h4 className="text-xs font-medium text-zinc-400 mb-2">Vault</h4>
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm text-zinc-200 font-medium">{status.name}</p>
+          <p className="text-xs text-zinc-500 font-mono break-all mt-1">{status.path}</p>
+        </div>
       </div>
     </div>
   );

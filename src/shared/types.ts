@@ -34,8 +34,10 @@ export interface DbNode {
   color: string | null;
   size: number;
   source_url: string | null;
-  vault_path: string | null; // filesystem path for vault-ingested nodes (Electron only)
+  vault_path: string | null; // vault-relative file path (e.g. 'notes/Machine Learning.md')
   content_type: string | null; // MIME type or format hint (e.g. 'text/markdown', 'application/pdf')
+  file_mtime: number | null; // last known file modification time (ms since epoch)
+  file_size: number | null; // last known file size in bytes
   created_at: string;
   updated_at: string;
 }

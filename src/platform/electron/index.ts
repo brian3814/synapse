@@ -7,6 +7,7 @@ import { ElectronFiles } from './files';
 import { ElectronLLM } from './llm';
 import { ElectronBrowser } from './browser';
 import { ElectronEmbedding } from './embedding';
+export { vaultWorkspace } from './vault-workspace';
 
 export const platformId: PlatformId = 'electron';
 export const storage = new ElectronStorage();
