@@ -1,12 +1,79 @@
-# Knowledge Graph Chrome Extension — Architecture Document
+# Knowledge Graph — Architecture Document
 
 ## Overview
 
-A Chrome Manifest V3 extension that provides a local-first knowledge graph with persistent SQLite storage, 2D graph visualization (custom Three.js InstancedMesh renderer), full CRUD operations, and LLM-powered entity extraction. The UI renders in the Chrome Side Panel (default) or a full tab, with a toggle to switch between modes.
+A local-first knowledge graph with persistent SQLite storage, 2D graph visualization (custom Three.js InstancedMesh renderer), full CRUD operations, and LLM-powered entity extraction. The primary platform is **Electron desktop** with a vault-based workspace. The Chrome extension is **deprecated** (maintenance mode).
 
 ---
 
-## System Architecture
+## Vault Architecture (Electron Desktop)
+
+The Electron app uses a **Vault** — a single user-chosen directory containing all data. Users must create or open a vault before the app is usable.
+
+```
+<vault-root>/
+├── .kg/                        ← app internals (hidden)
+│   ├── config.json             ← vault identity (name, id, schemaVersion)
+│   ├── graph.db                ← SQLite database (source of truth)
+│   ├── embeddings/vec.db       ← sqlite-vec vector store
+│   └── agent/                  ← agent memory & artifacts
+├── notes/                      ← app-managed markdown (human-readable names)
+│   ├── Machine Learning.md
+│   └── Neural Networks.md
+└── (user files anywhere)       ← auto-detected as resources by file watcher
+    ├── papers/transformer.pdf
+    └── screenshots/diagram.png
+```
+
+### Design Decisions
+
+- **Graph-as-registry**: Graph DB is the source of truth. Filesystem is a projection. Nodes with files have `vault_path` set (vault-relative path).
+- **Event-driven**: `VaultEventBus` connects graph mutations and filesystem changes. Handlers subscribe independently — new features add handlers without touching existing code.
+- **Reconciliation on startup**: Walks filesystem, compares mtime/size against DB. Creates nodes for new files, updates metadata for modified, marks orphaned for missing.
+- **Chrome deprecated**: No new features target Chrome. The `@platform` abstraction stays, Chrome code is untouched, but vault is Electron-only.
+
+### Event Bus
+
+All graph mutations in the `db:request` IPC handler emit vault events. Filesystem changes from the file watcher also emit events. Handlers run synchronously in try/catch — one failure doesn't block others. Reconciliation acts as the safety net for eventual consistency.
+
+| Handler | Listens to | Action |
+|---|---|---|
+| `NoteFileHandler` | `node:created/updated/deleted` (type=note) | Write/rename/delete `.md` files in `notes/` |
+| `ResourceDetectionHandler` | `file:added/removed` (outside `.kg/`, `notes/`) | Create/orphan resource nodes |
+| `SyncBroadcastHandler` | All `node:*` and `edge:*` events | IPC to renderer for Zustand store updates |
+| `EmbeddingHandler` (future) | `node:created/updated` | Queue for embedding via EmbeddingQueue |
+
+### Vault Lifecycle
+
+```
+App launch → VaultManager.init()
+  → check recentVaults in app settings
+  → none → show VaultSetupScreen (create new / open existing)
+  → found → VaultManager.open(lastUsedPath)
+    → validate .kg/config.json
+    → open graph.db (better-sqlite3)
+    → run migrations
+    → reconciliation scan
+    → start file watcher
+    → register event handlers
+    → emit 'vault:opened'
+```
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `electron/vault/vault-manager.ts` | Singleton lifecycle: create, open, close, recent vaults |
+| `electron/vault/vault-context.ts` | VaultContext interface + scaffoldVault helper |
+| `electron/vault/event-bus.ts` | Typed `VaultEventBus` with per-handler error isolation |
+| `electron/vault/file-watcher.ts` | Recursive `fs.watch` with ignore rules and 500ms debounce |
+| `electron/vault/reconciliation.ts` | Startup mtime-based filesystem↔DB diff |
+| `electron/vault/handlers/` | NoteFileHandler, ResourceDetectionHandler, SyncBroadcastHandler |
+| `src/ui/components/VaultSetupScreen.tsx` | Full-screen gating UI |
+
+---
+
+## Chrome Extension Architecture (Deprecated)
 
 ```
 +======================================================================+

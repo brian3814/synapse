@@ -4,7 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local-first knowledge graph with SQLite persistence, 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. Runs as both a **Chrome Manifest V3 extension** (side panel or full tab) and an **Electron desktop app** from the same codebase via a platform abstraction layer.
+Local-first knowledge graph with SQLite persistence, 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. Primarily an **Electron desktop app** with a vault-based workspace. The **Chrome extension** is deprecated (maintenance mode only, no new features).
+
+### Vault Architecture (Electron-only)
+
+The app uses a **Vault** — a single user-chosen directory containing everything: graph DB, notes, user files, embeddings, and agent artifacts. The vault is required before the app can be used.
+
+```
+<vault-root>/
+├── .kg/                    ← app internals (hidden)
+│   ├── config.json         ← vault identity & schema version
+│   ├── graph.db            ← SQLite database (source of truth)
+│   ├── embeddings/vec.db   ← sqlite-vec vector store
+│   └── agent/              ← agent memory & artifacts
+├── notes/                  ← app-managed markdown (human-readable names)
+└── (user files anywhere)   ← auto-detected as resources
+```
+
+**Key design decisions:**
+- **Graph-as-registry**: Graph DB is the source of truth. Filesystem is a projection. Every file with a graph node has `vault_path` set on the node.
+- **Event bus**: Graph mutations and file events flow through `VaultEventBus`. Handlers subscribe independently (NoteFileHandler, ResourceDetectionHandler, EmbeddingHandler, SyncBroadcastHandler).
+- **File watcher**: Recursive `fs.watch` detects user files dropped anywhere in the vault (excluding `.kg/` and `notes/`). Creates resource nodes automatically.
+- **Reconciliation on startup**: mtime-based diff catches offline changes (new/modified/missing files).
+- **Human-readable note names**: Notes stored as `notes/Machine Learning.md`, not `{nodeId}.md`. `vault_path` column provides the mapping.
+- **API keys stay in app settings** (`~/Library/Application Support/`), never in the vault.
+
+**Key files:**
+- `electron/vault/vault-manager.ts` — Lifecycle (create, open, close). Singleton in main process.
+- `electron/vault/vault-context.ts` — VaultContext interface + scaffoldVault helper.
+- `electron/vault/event-bus.ts` — Typed event bus with try/catch per handler.
+- `electron/vault/file-watcher.ts` — Recursive watch with ignore/debounce.
+- `electron/vault/reconciliation.ts` — Startup filesystem↔DB diff.
+- `electron/vault/handlers/` — NoteFileHandler, ResourceDetectionHandler, SyncBroadcastHandler.
+- `src/ui/components/VaultSetupScreen.tsx` — Gating screen (create/open/recent).
+- `src/platform/electron/vault-workspace.ts` — Renderer-side IPC bridge for vault management.
 
 ## Build Commands
 
@@ -52,15 +85,17 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 
 **Seven platform interfaces** in `src/platform/types.ts`:
 
-| Interface | Chrome Implementation | Electron Implementation |
+| Interface | Chrome Implementation (deprecated) | Electron Implementation |
 |---|---|---|
 | `PlatformStorage` | `chrome.storage.local` | IPC → JSON config file |
-| `PlatformDB` | SharedWorker/DedicatedWorker + wa-sqlite | IPC → better-sqlite3 in main process |
-| `PlatformNotes` | OPFS async API | IPC → local filesystem |
+| `PlatformDB` | SharedWorker/DedicatedWorker + wa-sqlite | IPC → better-sqlite3 in vault `.kg/graph.db` |
+| `PlatformNotes` | OPFS async API | IPC → vault `notes/` directory (human-readable filenames) |
 | `PlatformLLM` | Message-based streaming via SW/offscreen | Dedicated IPC channels (`llm:stream-extraction`, `llm:run-agent`, `llm:stream-chat`) |
 | `PlatformBrowser` | `chrome.tabs`, content scripts | Companion extension dispatch or no-op |
 | `PlatformEmbedding` | No-op stub (returns empty arrays) | IPC → EmbeddingService in main process (sqlite-vec + ONNX/OpenAI) |
-| `PlatformVault` | OPFS `vault/{nodeId}/{filename}` | IPC → `~/Documents/KnowledgeGraph/vault/{nodeId}/{filename}` |
+| `PlatformVault` | OPFS `vault/{nodeId}/{filename}` (legacy) | IPC → legacy binary storage (being migrated into vault) |
+
+Additionally, `vaultWorkspace` is exported from both platforms (`src/platform/electron/vault-workspace.ts` / `src/platform/chrome/vault-workspace.ts`) for vault lifecycle management (create, open, close, status). Chrome stub returns no-op responses.
 
 **Build-time resolution**: `vite.config.chrome.ts` maps `@platform` → `src/platform/chrome/`. `vite.config.electron.ts` maps `@platform` → `src/platform/electron/`. TypeScript `tsconfig.json` paths point at Chrome as IDE default.
 
@@ -146,9 +181,9 @@ Third extraction mode alongside text and agent extraction. Imports PDFs, images,
 - `src/ingestion/processors/pdf-processor.ts` — pdfjs-dist, page-level chunking
 - `src/ingestion/processors/image-processor.ts` — Canvas resize, base64 for vision API
 
-## Vault Storage
+## Vault Storage (Legacy Binary Attachments)
 
-Binary files (PDFs, images) imported via the ingestion pipeline are stored in a vault — separate from notes (markdown) and SQLite. UI code accesses vault via `import { vault } from '@platform'` (`PlatformVault` interface).
+The old `PlatformVault` interface (`import { vault } from '@platform'`) handles binary file storage for the ingestion pipeline. This is separate from the new vault workspace architecture — it will be migrated into the vault directory in a future phase.
 
 - **Chrome**: `src/platform/chrome/vault.ts` — OPFS at `vault/{nodeId}/{filename}`
 - **Electron**: `src/platform/electron/vault.ts` — IPC to main process → `~/Documents/KnowledgeGraph/vault/{nodeId}/{filename}`
@@ -209,15 +244,16 @@ db-client.ts (typed API, platform-agnostic)
 
 Note content is stored as `.md` files, NOT in SQLite. UI code accesses notes via `import { notes } from '@platform'` (`PlatformNotes` interface). See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md) for full ADR.
 
-- **Chrome**: `src/platform/chrome/notes.ts` — OPFS async API (`notes/{node_id}.md`)
-- **Electron**: `src/platform/electron/notes.ts` — IPC to main process → local filesystem at `~/Documents/KnowledgeGraph/notes/{node_id}.md`. Path resolved via `app.getPath('documents')` (macOS: `~/Documents/`, Windows: `C:\Users\<user>\Documents\`, Linux: `~/Documents/`). Chosen over `app.getPath('userData')` so notes are user-visible and editable in any text editor.
+- **Chrome** (deprecated): `src/platform/chrome/notes.ts` — OPFS async API (`notes/{node_id}.md`)
+- **Electron (vault)**: Notes live in the vault at `<vault>/notes/{Human Readable Name}.md`. The `NoteFileHandler` event handler manages file creation, renames (when node name changes), and deletion. The `vault_path` column on `nodes` stores the vault-relative path (e.g., `notes/Machine Learning.md`). File naming uses minimal sanitization (replace `/\:`, trim dots/spaces) with collision handling via `(2)` suffix.
+- **Legacy Electron** (pre-vault): `electron/notes-backend.ts` — `~/Documents/KnowledgeGraph/notes/{node_id}.md`
 - **`src/notes/markdown-utils.ts`** — `stripMarkdownToPlainText()` for FTS tokenization, re-exports `parseMarkdown`/`generateNoteMarkdown`
 - **`note_search` table** (in 001-initial-schema) — Backing table for FTS5 external content. Stores `node_id`, `title`, stripped plain-text `body`.
 - **`notes_fts` virtual table** (in 002-fts-index) — External content FTS5 on `note_search`. Auto-synced via INSERT/DELETE/UPDATE triggers.
-- **Write ordering**: OPFS first, then `note_search` upsert, then `nodes` metadata update. Orphaned OPFS files are harmless; dangling DB references are not.
+- **Write ordering**: File first, then `note_search` upsert, then `nodes` metadata update. Orphaned files are harmless; dangling DB references are not.
 - **`nodes.properties`** for notes contains only `{ wikiLinks }` — no content. Content is never stored in `source_content` for notes.
 - **Cross-tab sync**: `BroadcastChannel(SYNC_CHANNEL)` with `note_content_updated` event type.
-- **Accepted duplication**: Note body exists in OPFS (markdown) and `note_search.body` (plain text for FTS). Will be eliminated when wa-sqlite upgrades to SQLite 3.43+ (`contentless_delete=1`).
+- **Accepted duplication**: Note body exists on disk (markdown) and `note_search.body` (plain text for FTS). Will be eliminated when wa-sqlite upgrades to SQLite 3.43+ (`contentless_delete=1`).
 
 ## Graph Renderer (Three.js)
 
