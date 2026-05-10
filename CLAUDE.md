@@ -34,8 +34,8 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 ```
 ┌─────────────────────────────────────────────────┐
 │  UI / React Layer (platform-agnostic)            │
-│  All I/O via: import { storage, db, notes,       │
-│               llm, browser } from '@platform'    │
+│  All I/O via: import { storage, db, notes, llm,  │
+│               browser, vault } from '@platform'  │
 ├─────────────────────────────────────────────────┤
 │  @platform (build-time alias)                    │
 │  Chrome: src/platform/chrome/  (chrome.* APIs)   │
@@ -50,7 +50,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 └─────────────────────────────────────────────────┘
 ```
 
-**Six platform interfaces** in `src/platform/types.ts`:
+**Seven platform interfaces** in `src/platform/types.ts`:
 
 | Interface | Chrome Implementation | Electron Implementation |
 |---|---|---|
@@ -60,6 +60,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 | `PlatformLLM` | Message-based streaming via SW/offscreen | Dedicated IPC channels (`llm:stream-extraction`, `llm:run-agent`, `llm:stream-chat`) |
 | `PlatformBrowser` | `chrome.tabs`, content scripts | Companion extension dispatch or no-op |
 | `PlatformEmbedding` | No-op stub (returns empty arrays) | IPC → EmbeddingService in main process (sqlite-vec + ONNX/OpenAI) |
+| `PlatformVault` | OPFS `vault/{nodeId}/{filename}` | IPC → `~/Documents/KnowledgeGraph/vault/{nodeId}/{filename}` |
 
 **Build-time resolution**: `vite.config.chrome.ts` maps `@platform` → `src/platform/chrome/`. `vite.config.electron.ts` maps `@platform` → `src/platform/electron/`. TypeScript `tsconfig.json` paths point at Chrome as IDE default.
 
@@ -112,12 +113,45 @@ Two extraction modes, both ending in the same review→apply flow:
 
 **Agent page extraction** (`useLLMExtraction.startAgentExtraction`): `llm.runAgent()` → shared agent loop (`src/core/agent-loop.ts`, max 15 iterations) → platform-specific tool executor (Chrome: content script tools via SW relay; Electron: `fetch_url` directly, content-script tools unavailable) → terminal `save_entities` tool → review.
 
+**File ingestion** (`useLLMExtraction.startIngestion`): File (drag-drop, paste, import button) → `ContentProcessor.preprocess()` → text/chunks → `llm.streamExtraction()` with optional entity carry-forward across chunks → Zod parse → diff → review. See Multi-Modal Ingestion Pipeline section below.
+
 **Review flow** (`ExtractionReview` replaces old `DiffView`):
 - Converts diff items → `ReviewNode[]`/`ReviewEdge[]` with merge recommendations (fuzzy matching via entity resolution)
 - Mini graph preview (Three.js ReviewGraphCanvas) or overlay on main graph
 - Inline editing, add/remove nodes/edges, undo/redo
 - Convert-to-property: async LLM call suggests inverse property keys, user confirms
 - `applyReview()` commits to DB, resolving temp IDs → real IDs
+
+## Multi-Modal Ingestion Pipeline
+
+Third extraction mode alongside text and agent extraction. Imports PDFs, images, and future file types into the knowledge graph.
+
+**Architecture:** `ContentProcessor` interface + factory pattern. Each modality implements `canProcess()`, `shouldPromptMode()`, `preprocess()`. Factory resolves processor by MIME type. Evolves to dynamic registry via `registerProcessor()`.
+
+**Pipeline flow:** Entry points (drag-drop, paste, import button) → normalize to `IngestionSource` → factory resolves processor → harness prompt if large doc → `preprocess()` → `ProcessedContent` convergence point → LLM extraction (chunked with entity carry-forward for long docs) → ExtractionReview → graph merge with SourceLocation provenance.
+
+**Chunked extraction with entity carry-forward:** For long documents, each chunk receives entity names from prior chunks as LLM context, preventing cross-chunk duplicates.
+
+**Source location provenance:** `SourceLocation` discriminated union tracks where entities were found:
+- PDF: `{ type: 'page', page: 3, section: 'Methods' }`
+- Image: `{ type: 'region', description: 'top-left org chart' }`
+- Future video/audio: `{ type: 'time', timestamp: '14:32' }`
+
+**Processing modes (harness):** PDFs >50 pages prompt user: Quick (overview only) / Full (all pages with carry-forward).
+
+**Key files:**
+- `src/ingestion/types.ts` — IngestionSource, SourceLocation, ContentProcessor interface
+- `src/ingestion/processor-factory.ts` — Factory + registerProcessor()
+- `src/ingestion/ingestion-pipeline.ts` — Pipeline orchestrator with chunked carry-forward
+- `src/ingestion/processors/pdf-processor.ts` — pdfjs-dist, page-level chunking
+- `src/ingestion/processors/image-processor.ts` — Canvas resize, base64 for vision API
+
+## Vault Storage
+
+Binary files (PDFs, images) imported via the ingestion pipeline are stored in a vault — separate from notes (markdown) and SQLite. UI code accesses vault via `import { vault } from '@platform'` (`PlatformVault` interface).
+
+- **Chrome**: `src/platform/chrome/vault.ts` — OPFS at `vault/{nodeId}/{filename}`
+- **Electron**: `src/platform/electron/vault.ts` — IPC to main process → `~/Documents/KnowledgeGraph/vault/{nodeId}/{filename}`
 
 ## Build System
 
@@ -166,7 +200,7 @@ db-client.ts (typed API, platform-agnostic)
 - **`src/db/sqlite-data-store.ts`** — `createSqliteDataStore(initEngine, resetEngine)` factory. Pure 1:1 delegation to the 16 query modules in `src/db/worker/queries/`. No logic — just wiring.
 - **`src/db/worker/action-handler.ts`** — Accepts `DataStore`, maps action strings (`nodes.create`, `edges.getAll`, etc.) to repository methods + sync events for broadcasting. The switch stays (96 cases) but delegates through the interface, not concrete SQL modules.
 - **`src/db/worker/sqlite-engine.ts`** — All SQLite ops serialized through a promise queue (prevents wa-sqlite Asyncify corruption). VFS fallback: OPFS → IDB → in-memory. **Critical:** `open_v2` must be inside each VFS try/catch (Pitfall #11).
-- **`src/db/worker/migrations/`** — Versioned, FTS5 detected at runtime. Migration 002 (FTS) is optional; search falls back to LIKE.
+- **`src/db/worker/migrations/`** — Versioned, FTS5 detected at runtime. Migration 002 (FTS) is optional; search falls back to LIKE. Migration 010 adds `location TEXT` to `entity_sources`/`edge_sources` (JSON-serialized SourceLocation for provenance), plus `vault_path TEXT` and `content_type TEXT` on `nodes`.
 - **`src/db/client/db-client.ts`** — Platform-agnostic typed API. Imports `db` from `@platform` and delegates via `db.request(action, params)`. All 30+ typed namespace methods (`nodes`, `edges`, `spatial`, `chat`, etc.) are shared code. Platform transport is in `ChromeDB` (SharedWorker/MessagePort) or `ElectronDB` (IPC to better-sqlite3).
 
 **Swapping the storage engine** (e.g., Postgres, Neo4j): implement `DataStore`, wire into `createActionHandler`. No changes to db-client, PlatformDB, action-handler dispatch logic, or UI code.
@@ -222,6 +256,8 @@ React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.s
 **Pitfall #20: Sequential DB round-trips in loops.** The DB client uses MessageChannel round-trips (UI → SharedWorker → DedicatedWorker → SQLite → back). Calling `await db.someQuery()` in a `for` loop serializes these, causing multi-second latency with 20+ items. Use `Promise.all()` to parallelize independent DB calls (e.g., `entityResolution.findMatches` in `buildDiffItems` and `proceedToReview`).
 
 **Pitfall #21: Tailwind utility classes may not apply in extension contexts.** Some Tailwind classes (especially spacing like `py-3`, `pt-3`) were observed not applying in the Chrome extension side panel, with computed styles showing `0px` despite correct class names and the classes existing in the CSS bundle. Use inline `style={{}}` props as a reliable fallback for critical spacing.
+
+**Pitfall #22: sqlite-vec requires `k=?` in WHERE clause, not `LIMIT ?`.** The `vec0` virtual table planner doesn't reliably receive `LIMIT` constraints passed through SQLite's query optimizer. Always use `WHERE embedding MATCH ? AND k = ?` syntax for KNN queries. When excluding a node from results, request `k+1` and filter in JS rather than adding `AND node_id != ?` to the query.
 
 ## Vector Embeddings (Electron-only)
 
@@ -321,7 +357,10 @@ The graph store's `startSyncListener` subscribes to BOTH `BroadcastChannel` (Chr
 
 ## Key References
 
-- **Platform interfaces**: `src/platform/types.ts` — `PlatformStorage`, `PlatformDB`, `PlatformNotes`, `PlatformLLM`, `PlatformBrowser`, `PlatformEmbedding`, and LLM request/result types
+- **Platform interfaces**: `src/platform/types.ts` — `PlatformStorage`, `PlatformDB`, `PlatformNotes`, `PlatformLLM`, `PlatformBrowser`, `PlatformEmbedding`, `PlatformVault`, and LLM request/result types
+- **Ingestion pipeline**: `src/ingestion/` — ContentProcessor interface, factory, pipeline orchestrator, PDF/Image processors
+- **Ingestion spec**: [`docs/superpowers/specs/2026-05-03-multi-modal-ingestion-design.md`](docs/superpowers/specs/2026-05-03-multi-modal-ingestion-design.md)
+- **Shared UI**: `src/ui/components/shared/PanelHeader.tsx` — Reusable panel header with close button (used by all sidebar panels)
 - **Embedding types**: `src/embeddings/types.ts` — Type-only module for embedding interfaces (safe for both platforms)
 - **Embedding implementation**: `electron/embeddings/` — EmbeddingService, providers, queue, vec-store (Electron-only)
 - **Chat tools**: `src/shared/chat-agent-tools.ts` — 14 tool definitions; `src/commands/chat-tool-executor.ts` — execution handlers
