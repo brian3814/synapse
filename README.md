@@ -86,6 +86,12 @@ React 19, TypeScript, Vite 7, Zustand 5, Reagraph 4, Tailwind CSS 4, wa-sqlite, 
 | `offscreen` | Hidden document for LLM streaming that outlives service worker |
 | `<all_urls>` | Content script needs access to any page the user wants to extract from |
 
+## References
+
+- [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Andrej Karpathy's design pattern for LLM-maintained personal knowledge bases that incrementally build interlinked markdown wikis from raw sources, eliminating re-derivation on every query.
+- [The append-and-review note](https://karpathy.bearblog.dev/the-append-and-review-note/) — Andrej Karpathy's simple note-taking system: append ideas at the top of a single file, periodically review by scrolling through older entries.
+- [Personal AI with Vector Embeddings](https://medium.com/@kp9810113/how-i-built-a-personal-ai-that-remembers-everything-using-vector-embeddings-and-zero-external-apis-fb5f7dc7eb7b) — Building a locally-hosted AI with persistent memory using vector embeddings and zero external APIs.
+
 ## License
 
 MIT
