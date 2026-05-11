@@ -288,7 +288,13 @@ export function useLLMExtraction() {
     if (sourceUrl) {
       try {
         const fetchResult = await (browser as any).fetchUrl(sourceUrl);
-        if (fetchResult?.error) throw new Error(fetchResult.error);
+        if (fetchResult?.error) {
+          if (fetchResult.blocked) {
+            llmStore.setError(`__BLOCKED__${sourceUrl}__${fetchResult.error}`);
+            return;
+          }
+          throw new Error(fetchResult.error);
+        }
         const content = fetchResult?.content ?? '';
         const titleMatch = content.match(/^#\s+(.+)/m);
         pageContent = {

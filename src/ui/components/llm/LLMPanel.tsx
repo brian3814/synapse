@@ -117,6 +117,40 @@ function RateLimitCountdown({ wait }: { wait: RateLimitWait }) {
   );
 }
 
+function FetchError({ error }: { error: string }) {
+  const blockedMatch = error.match(/^__BLOCKED__(.+?)__(.+)$/);
+  if (!blockedMatch) {
+    return (
+      <div className="bg-red-900/30 border border-red-800 rounded p-3">
+        <p className="text-xs text-red-400">{error}</p>
+      </div>
+    );
+  }
+
+  const url = blockedMatch[1];
+  const reason = blockedMatch[2];
+
+  const handleOpenInBrowser = () => {
+    (window as any).electronIPC?.invoke('shell:open-external', url);
+  };
+
+  return (
+    <div className="bg-amber-900/30 border border-amber-800/50 rounded p-3 space-y-2">
+      <p className="text-xs text-amber-300 font-medium">Website blocked the request</p>
+      <p className="text-[11px] text-zinc-400">{reason}</p>
+      <p className="text-[11px] text-zinc-400">
+        Open this page in Chrome with the Synapse companion extension, then click the capture button to extract its content.
+      </p>
+      <button
+        onClick={handleOpenInBrowser}
+        className="text-xs px-3 py-1.5 bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition-colors"
+      >
+        Open in Browser
+      </button>
+    </div>
+  );
+}
+
 const TABS: { key: ExtractionTab; label: string }[] = [
   { key: 'page', label: 'From Page' },
   { key: 'text', label: 'From Text' },
@@ -181,11 +215,7 @@ export function LLMPanel() {
       )}
 
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded p-3">
-          <p className="text-xs text-red-400">{error}</p>
-        </div>
-      )}
+      {error && <FetchError error={error} />}
 
       {isRunning && (
         rateLimitWait ? (

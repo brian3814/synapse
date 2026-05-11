@@ -8,7 +8,7 @@ export { isBlockedUrl };
 export async function fetchAndCleanContent(
   url: string,
   maxBytes: number = DEFAULT_FETCH_MAX_BYTES
-): Promise<{ content: string; error?: string }> {
+): Promise<{ content: string; error?: string; blocked?: boolean }> {
   if (isBlockedUrl(url)) {
     return { content: '', error: 'Blocked: requests to private/internal network addresses are not allowed' };
   }
@@ -21,7 +21,8 @@ export async function fetchAndCleanContent(
       },
     });
     if (!response.ok) {
-      return { content: '', error: `Fetch failed: ${response.status} ${response.statusText}` };
+      const blocked = response.status === 403 || response.status === 401 || response.status === 429;
+      return { content: '', error: `Fetch failed: ${response.status} ${response.statusText}`, blocked };
     }
     const html = await response.text();
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol, net, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, protocol, net, ipcMain, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { StorageBackend } from './storage-backend';
@@ -292,6 +292,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('llm:stream-chat', async (event, payload) => {
     handleStreamChat(payload, (channel, ...args) => event.sender.send(channel, ...args));
+  });
+
+  ipcMain.handle('shell:open-external', (_event, url: string) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
   });
 
   startCompanionServer();
