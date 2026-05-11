@@ -4,6 +4,7 @@ import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { HeaderSearch } from './search/HeaderSearch';
 import { ImportButton } from './ingestion/ImportButton';
+import { VaultSwitcher } from './VaultSwitcher';
 import { browser } from '@platform';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
@@ -28,9 +29,7 @@ export function Header({ onIngest }: HeaderProps) {
 
   return (
     <header className="flex items-center gap-2 px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
-      <div className="flex items-center gap-2 shrink-0">
-        <h1 className="font-semibold text-zinc-100" style={{ fontSize: '16px' }}>Knowledge Graph</h1>
-      </div>
+      <VaultSwitcher />
 
       <HeaderSearch />
 

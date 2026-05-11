@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, net, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, protocol, net, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { StorageBackend } from './storage-backend';
@@ -12,6 +12,7 @@ import { EmbeddingService } from './embeddings/embedding-service';
 import { registerEmbeddingHandlers, setupProgressBroadcast } from './embeddings/ipc-handlers';
 import { readNote } from './notes-backend';
 import { VaultManager } from './vault/vault-manager';
+import { scaffoldVault } from './vault/vault-context';
 import { NoteFileHandler } from './vault/handlers/note-file-handler';
 import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
@@ -297,6 +298,15 @@ app.whenReady().then(() => {
 
   // ── Vault Workspace Management ──────────────────────────────────────
   const vaultManager = new VaultManager(storage);
+
+  // Auto-open vault from --vault CLI arg (used by relaunch for multi-vault)
+  const vaultArgIdx = process.argv.indexOf('--vault');
+  if (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1]) {
+    const vaultPath = process.argv[vaultArgIdx + 1];
+    vaultManager.open(vaultPath)
+      .then(() => registerVaultHandlers())
+      .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e));
+  }
   let noteFileHandler: NoteFileHandler | null = null;
   let syncBroadcastHandler: SyncBroadcastHandler | null = null;
   let resourceDetectionHandler: ResourceDetectionHandler | null = null;
@@ -378,6 +388,32 @@ app.whenReady().then(() => {
   ipcMain.handle('vault-workspace:close', async () => {
     unregisterVaultHandlers();
     await vaultManager.close();
+  });
+
+  // Open a vault in a new OS process (like Obsidian)
+  ipcMain.handle('vault-workspace:open-new-window', async (_event, vaultPath: string) => {
+    app.relaunch({ args: ['--vault', vaultPath] });
+  });
+
+  ipcMain.handle('vault-workspace:pick-create-new-window', async () => {
+    const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
+      title: 'Choose location for new vault',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return;
+    const vaultPath = result.filePaths[0];
+    const name = vaultPath.split('/').pop() ?? 'My Vault';
+    scaffoldVault(vaultPath, name);
+    app.relaunch({ args: ['--vault', vaultPath] });
+  });
+
+  ipcMain.handle('vault-workspace:pick-open-new-window', async () => {
+    const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
+      title: 'Open vault',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return;
+    app.relaunch({ args: ['--vault', result.filePaths[0]] });
   });
 
   createWindow();
