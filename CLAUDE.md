@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local-first knowledge graph with SQLite persistence, 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. Primarily an **Electron desktop app** with a vault-based workspace. The **Chrome extension** is deprecated (maintenance mode only, no new features).
+**Synapse** — local-first knowledge graph with SQLite persistence, 2D graph visualization (custom Three.js renderer with InstancedMesh), and LLM-powered entity extraction. Primarily an **Electron desktop app** with a vault-based workspace. The **Chrome extension** is deprecated (maintenance mode only, no new features).
 
 ### Vault Architecture (Electron-only)
 
@@ -28,6 +28,8 @@ The app uses a **Vault** — a single user-chosen directory containing everythin
 - **Reconciliation on startup**: mtime-based diff catches offline changes (new/modified/missing files).
 - **Human-readable note names**: Notes stored as `notes/Machine Learning.md`, not `{nodeId}.md`. `vault_path` column provides the mapping.
 - **API keys stay in app settings** (`~/Library/Application Support/`), never in the vault.
+- **Shared DB handle**: `VaultManager.open()` calls `resetBetterSQLite(dbPath)` then `runMigrations()` directly. The vault context receives the DB handle from `getDb()` — never opens its own connection. This ensures migrations run before reconciliation and all code shares one DB handle.
+- **Multi-vault**: Single vault per process. Switching vaults launches a new Electron process via `app.relaunch({ args: ['--vault', path] })`, matching Obsidian's window model. The `VaultSwitcher` dropdown in the header shows recent vaults and create/open options.
 
 **Key files:**
 - `electron/vault/vault-manager.ts` — Lifecycle (create, open, close). Singleton in main process.
@@ -295,6 +297,8 @@ React integration: `GraphCanvas.tsx` is a thin `forwardRef` wrapper. Zustand `.s
 
 **Pitfall #22: sqlite-vec requires `k=?` in WHERE clause, not `LIMIT ?`.** The `vec0` virtual table planner doesn't reliably receive `LIMIT` constraints passed through SQLite's query optimizer. Always use `WHERE embedding MATCH ? AND k = ?` syntax for KNN queries. When excluding a node from results, request `k+1` and filter in JS rather than adding `AND node_id != ?` to the query.
 
+**Pitfall #23: Barnes-Hut quadtree stack overflow from null positions.** Nodes from the DB may have `x = null, y = null`. The check `nodes[i].x !== 0` evaluates to `true` for `null` (since `null !== 0` is `true` in JS), treating them as having valid positions. `Float32Array` then coerces `null` to `0`, placing all null-positioned nodes at exactly (0,0). The quadtree subdivides infinitely trying to separate coincident nodes. Fix: check `!= null` explicitly before using positions. Safety net: depth limit of 50 on `insertIntoTree` recursion.
+
 ## Vector Embeddings (Electron-only)
 
 Opt-in vector embedding system for semantic search. Off by default — configured through Settings panel. Desktop (Electron) only; Chrome extension is completely unaffected.
@@ -376,6 +380,12 @@ Users can attach graph nodes as context to chat messages — like Cursor's `@fil
 **Context serialization:** `src/ui/utils/chat-context-serializer.ts` produces ~1 line per node with name/type/id/connections + availability hints ("has note", "has source"). Progressive disclosure — agent uses existing tools to drill deeper.
 
 **State:** `src/graph/store/chat-context-store.ts` (Zustand) bridges graph selection and chat input. `ContextChipBar` shows removable chips above input. `ContextSuggestions` shows semantically related nodes for one-click addition (Electron-only, embedding-powered).
+
+## URL Fetching & Companion Extension Fallback
+
+When the Electron app fetches a URL (for extraction or agent `fetch_url` tool), it sends a browser-like `User-Agent` header to avoid bot blocking. If the site still returns 403/401/429, the UI shows an actionable amber panel directing the user to open the URL in Chrome with the **Synapse companion extension** installed, then capture via the toolbar button. An "Open in Browser" button launches the URL via `shell.openExternal`.
+
+The companion extension (`packages/companion/`) captures the **rendered DOM** (not raw HTML) and POSTs it to the desktop app at `http://127.0.0.1:19876/api/capture`. Communication is unidirectional (browser → desktop). The `useCompanionCapture` hook receives captures via IPC and feeds them into the extraction pipeline.
 
 ## Graph Canvas Toolbar
 

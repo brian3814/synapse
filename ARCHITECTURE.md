@@ -1,8 +1,8 @@
-# Knowledge Graph — Architecture Document
+# Synapse — Architecture Document
 
 ## Overview
 
-A local-first knowledge graph with persistent SQLite storage, 2D graph visualization (custom Three.js InstancedMesh renderer), full CRUD operations, and LLM-powered entity extraction. The primary platform is **Electron desktop** with a vault-based workspace. The Chrome extension is **deprecated** (maintenance mode).
+**Synapse** — a local-first knowledge graph with persistent SQLite storage, 2D graph visualization (custom Three.js InstancedMesh renderer), full CRUD operations, and LLM-powered entity extraction. The primary platform is **Electron desktop** with a vault-based workspace. The Chrome extension is **deprecated** (maintenance mode).
 
 ---
 
@@ -59,6 +59,14 @@ App launch → VaultManager.init()
     → emit 'vault:opened'
 ```
 
+### Multi-Vault
+
+Single vault per process. The `VaultSwitcher` dropdown (left of search bar in header) shows the current vault name, recent vaults, and create/open options. Switching vaults launches a new Electron process via `app.relaunch({ args: ['--vault', path] })` — same model as Obsidian. On launch, `--vault <path>` auto-opens that vault before the window loads.
+
+### Shared DB Handle
+
+`VaultManager.open()` calls `resetBetterSQLite(dbPath)` to point the shared DB engine at the vault's `graph.db`, then calls `runMigrations()` directly (not via `dbHandleAction`). The vault context receives the handle from `getDb()` — it never opens its own connection. This ensures migrations complete before reconciliation runs.
+
 ### Key Files
 
 | File | Purpose |
@@ -70,6 +78,7 @@ App launch → VaultManager.init()
 | `electron/vault/reconciliation.ts` | Startup mtime-based filesystem↔DB diff |
 | `electron/vault/handlers/` | NoteFileHandler, ResourceDetectionHandler, SyncBroadcastHandler |
 | `src/ui/components/VaultSetupScreen.tsx` | Full-screen gating UI |
+| `src/ui/components/VaultSwitcher.tsx` | Header dropdown for vault switching |
 
 ---
 
