@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { VaultEventBus } from './event-bus';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export interface VaultContext {
 
 // ── Factory ─────────────────────────────────────────────────────────────
 
-export function createVaultContext(vaultPath: string): VaultContext {
+export function createVaultContext(vaultPath: string, db: Database.Database): VaultContext {
   const kgPath = join(vaultPath, '.kg');
   const configPath = join(kgPath, 'config.json');
 
@@ -36,11 +36,6 @@ export function createVaultContext(vaultPath: string): VaultContext {
   }
 
   const config: VaultConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-  const dbPath = join(kgPath, 'graph.db');
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
   const eventBus = new VaultEventBus();
 
   return {

@@ -2,6 +2,8 @@ import { dialog, BrowserWindow } from 'electron';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { StorageBackend } from '../storage-backend';
+import { resetBetterSQLite, getDb } from '../better-sqlite3-engine';
+import { handleAction as dbHandleAction } from '../db-backend';
 import {
   createVaultContext,
   scaffoldVault,
@@ -63,7 +65,12 @@ export class VaultManager {
       throw new Error(`No vault found at ${vaultPath}`);
     }
 
-    this.context = createVaultContext(vaultPath);
+    // Point the shared DB engine at the vault's graph.db and run migrations
+    const dbPath = join(vaultPath, '.kg', 'graph.db');
+    await resetBetterSQLite(dbPath);
+    await dbHandleAction('init', null);
+
+    this.context = createVaultContext(vaultPath, getDb());
     this.updateRecentVaults(vaultPath, this.context.name);
     this.context.eventBus.emit({ type: 'vault:opened' });
 
@@ -75,7 +82,6 @@ export class VaultManager {
     if (!this.context) return;
 
     this.context.eventBus.emit({ type: 'vault:closing' });
-    this.context.db.close();
     this.context.eventBus.removeAll();
     this.context = null;
 
