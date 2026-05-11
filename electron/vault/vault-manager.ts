@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { StorageBackend } from '../storage-backend';
 import { resetBetterSQLite, getDb } from '../better-sqlite3-engine';
-import { handleAction as dbHandleAction } from '../db-backend';
+import { runMigrations } from '../../src/db/worker/migrations';
 import {
   createVaultContext,
   scaffoldVault,
@@ -68,7 +68,7 @@ export class VaultManager {
     // Point the shared DB engine at the vault's graph.db and run migrations
     const dbPath = join(vaultPath, '.kg', 'graph.db');
     await resetBetterSQLite(dbPath);
-    await dbHandleAction('init', null);
+    await runMigrations();
 
     this.context = createVaultContext(vaultPath, getDb());
     this.updateRecentVaults(vaultPath, this.context.name);
