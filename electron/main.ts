@@ -222,6 +222,17 @@ app.whenReady().then(() => {
     fs.mkdirSync(getVaultDir(), { recursive: true });
   });
 
+  ipcMain.handle('fetch-url-content', async (_event, url: string) => {
+    try {
+      const response = await net.fetch(url);
+      if (!response.ok) return { error: `HTTP ${response.status}` };
+      const html = await response.text();
+      return { html };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  });
+
   ipcMain.handle('vault:store', (_event, dataArr: number[], filename: string, nodeId: string) => {
     const nodeDir = path.join(getVaultDir(), nodeId);
     fs.mkdirSync(nodeDir, { recursive: true });

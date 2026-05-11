@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ReadingListItem } from '../../shared/types';
-import { storage, browser } from '@platform';
+import { storage, browser, platformId, llm } from '@platform';
+import { readingListExtractionSchema } from '../../shared/schema';
 
 interface ReadingListStore {
   items: Record<string, ReadingListItem>; // keyed by URL
@@ -90,8 +91,84 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
   selectItem: (url) => set({ selectedUrl: url }),
 
-  retryExtraction: (url) => {
-    (browser as any).sendReadingListRetry(url).catch(console.error);
+  retryExtraction: async (url) => {
+    if (platformId === 'electron') {
+      const item = get().items[url];
+      if (!item) return;
+
+      set((state) => ({
+        items: { ...state.items, [url]: { ...state.items[url], status: 'extracting', error: undefined } },
+      }));
+
+      try {
+        const ipc = (window as any).electronIPC;
+        const { html, error: fetchError } = await ipc.invoke('fetch-url-content', url);
+        if (fetchError || !html) throw new Error(fetchError ?? 'Empty response');
+
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const textContent = doc.body?.textContent?.slice(0, 100_000) ?? '';
+        if (!textContent.trim()) throw new Error('Page content is empty');
+
+        const configResult = await storage.get('llmConfig') as Record<string, any>;
+        const config = configResult.llmConfig;
+        if (!config?.apiKey) throw new Error('No API key configured');
+
+        const systemPrompt = `You are a reading assistant. Given a web page's content, produce:
+1. A concise 2-3 sentence summary
+2. 3-7 key topics as short labels
+3. Important entities (nodes) and relationships (edges) for a knowledge graph
+
+Return ONLY valid JSON:
+{
+  "summary": "...",
+  "keyTopics": ["topic1", "topic2"],
+  "nodes": [{ "name": "...", "label": "concept", "properties": {}, "tags": [] }],
+  "edges": [{ "sourceName": "...", "targetName": "...", "label": "..." }]
+}
+
+Rules:
+- Every node is an entity with a semantic label: concept, person, organization, technology, event, place, methodology.
+- Use consistent, lowercase relationship labels.
+- Ensure all edges reference nodes by exact name.`;
+
+        const result = await llm.streamChat({
+          requestId: crypto.randomUUID(),
+          model: config.model,
+          systemPrompt,
+          messages: [{ role: 'user', content: `Page title: ${item.title}\nURL: ${url}\n\nPage content:\n${textContent}` }],
+        }, () => {});
+
+        const jsonMatch = result.textContent.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('No JSON in LLM response');
+        const parsed = readingListExtractionSchema.parse(JSON.parse(jsonMatch[0]));
+
+        set((state) => ({
+          items: {
+            ...state.items,
+            [url]: {
+              ...state.items[url],
+              status: 'extracted',
+              summary: parsed.summary,
+              keyTopics: parsed.keyTopics,
+              extractedNodes: parsed.nodes,
+              extractedEdges: parsed.edges,
+              pageContent: textContent,
+              pageTitle: item.title,
+              extractedAt: Date.now(),
+              error: undefined,
+            },
+          },
+        }));
+        await storage.set({ readingListItems: get().items });
+      } catch (e: any) {
+        console.error('[ReadingListStore] Electron extraction failed:', e);
+        set((state) => ({
+          items: { ...state.items, [url]: { ...state.items[url], status: 'failed', error: e.message } },
+        }));
+      }
+    } else {
+      (browser as any).sendReadingListRetry(url).catch(console.error);
+    }
   },
 
   removeItem: (url) => {
