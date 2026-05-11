@@ -50,8 +50,7 @@ export class ForceLayout {
 
     for (let i = 0; i < nodes.length; i++) {
       this.nodeIdToIndex.set(nodes[i].id, i);
-      // Use provided positions or random layout
-      const hasPos = nodes[i].x !== 0 || nodes[i].y !== 0;
+      const hasPos = nodes[i].x != null && nodes[i].y != null && (nodes[i].x !== 0 || nodes[i].y !== 0);
       this.positions[i * 2] = hasPos ? nodes[i].x : (Math.random() - 0.5) * 100;
       this.positions[i * 2 + 1] = hasPos ? nodes[i].y : (Math.random() - 0.5) * 100;
     }
@@ -209,7 +208,9 @@ export class ForceLayout {
     return root;
   }
 
-  private insertIntoTree(node: QTNode, bodyIdx: number, bx: number, by: number) {
+  private insertIntoTree(node: QTNode, bodyIdx: number, bx: number, by: number, depth = 0) {
+    if (depth > 50) return; // coincident nodes — bail to prevent stack overflow
+
     if (node.isLeaf && node.bodyIndex === -1) {
       // Empty leaf: place body here
       node.bodyIndex = bodyIdx;
@@ -225,7 +226,7 @@ export class ForceLayout {
       const existing = node.bodyIndex;
       node.bodyIndex = -1;
       this.insertIntoQuadrant(node, existing,
-        this.positions[existing * 2], this.positions[existing * 2 + 1]);
+        this.positions[existing * 2], this.positions[existing * 2 + 1], depth + 1);
     }
 
     // Update center of mass
@@ -234,10 +235,10 @@ export class ForceLayout {
     node.y = (node.y * node.mass + by) / totalMass;
     node.mass = totalMass;
 
-    this.insertIntoQuadrant(node, bodyIdx, bx, by);
+    this.insertIntoQuadrant(node, bodyIdx, bx, by, depth + 1);
   }
 
-  private insertIntoQuadrant(parent: QTNode, bodyIdx: number, bx: number, by: number) {
+  private insertIntoQuadrant(parent: QTNode, bodyIdx: number, bx: number, by: number, depth = 0) {
     const midX = (parent.minX + parent.maxX) / 2;
     const midY = (parent.minY + parent.maxY) / 2;
 
@@ -277,7 +278,7 @@ export class ForceLayout {
       };
     }
 
-    this.insertIntoTree(parent.children[quadrant]!, bodyIdx, bx, by);
+    this.insertIntoTree(parent.children[quadrant]!, bodyIdx, bx, by, depth);
   }
 
   private applyAttraction() {
