@@ -58,7 +58,7 @@ export function VaultSetupScreen({ onVaultReady }: Props) {
     <div className="flex items-center justify-center h-screen bg-zinc-900">
       <div className="w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-zinc-100">Knowledge Graph</h1>
+          <h1 className="text-2xl font-semibold text-zinc-100">Synapse</h1>
           <p className="text-zinc-400 mt-2 text-sm">
             Choose a vault to get started. A vault is a folder that contains your notes, files, and graph data.
           </p>

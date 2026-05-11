@@ -29,6 +29,10 @@ export function Header({ onIngest }: HeaderProps) {
 
   return (
     <header className="flex items-center gap-2 px-3 bg-zinc-800 border-b border-zinc-700 shrink-0" style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '16px' }}>
+      <div className="flex items-center gap-2 shrink-0">
+        <h1 className="font-semibold text-zinc-100" style={{ fontSize: '16px' }}>Synapse</h1>
+      </div>
+
       <VaultSwitcher />
 
       <HeaderSearch />
