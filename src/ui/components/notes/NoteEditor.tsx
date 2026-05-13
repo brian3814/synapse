@@ -227,7 +227,11 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        if (isTab && useUIStore.getState().activeContentTabId !== `note-${rawNodeId}`) return;
+        if (isTab) {
+          const { contentColumns, activeColumnId } = useUIStore.getState();
+          const activeCol = contentColumns.find(c => c.id === activeColumnId);
+          if (activeCol?.activeTabId !== `note-${rawNodeId}`) return;
+        }
         e.preventDefault();
         handleSave();
       }

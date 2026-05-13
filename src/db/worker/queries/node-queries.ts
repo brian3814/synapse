@@ -172,14 +172,14 @@ export async function searchNodes(queryText: string, limit = 50): Promise<DbNode
            LIMIT ?;`,
           [ftsQuery, limit]
         );
-        return rows;
+        if (rows.length > 0) return rows;
       } catch {
         // FTS5 failed — fall through to LIKE
       }
     }
   }
 
-  // Fallback: LIKE-based search
+  // Fallback: LIKE-based search (also used when FTS5 returns no results)
   const pattern = `%${queryText}%`;
   const { rows } = await executeQuery<DbNode>(
     `SELECT * FROM nodes

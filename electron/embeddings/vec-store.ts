@@ -1,13 +1,9 @@
 import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 
-let vecLoaded = false;
-
 export function loadVecExtension(db: Database.Database): boolean {
-  if (vecLoaded) return true;
   try {
     db.loadExtension(sqliteVec.getLoadablePath());
-    vecLoaded = true;
     return true;
   } catch (e) {
     console.error('[vec-store] Failed to load sqlite-vec:', e);

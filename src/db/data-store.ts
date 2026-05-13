@@ -14,7 +14,6 @@ import type {
   DbEntityAlias,
   DbSourceContent,
   DbEdgeSource,
-  DbNoteFolder,
   DbIndexedFile,
   DbNoteAttachment,
   NodeType,
@@ -143,16 +142,6 @@ export interface TagRepository {
   getAllTags(): Promise<string[]>;
 }
 
-export interface NoteFolderRepository {
-  getAll(): Promise<DbNoteFolder[]>;
-  create(path: string): Promise<void>;
-  rename(oldPath: string, newPath: string): Promise<void>;
-  delete(path: string): Promise<void>;
-  moveNote(nodeId: string, folderPath: string): Promise<void>;
-  getNotesInFolder(path: string): Promise<Array<{ id: string; name: string; folder_path: string }>>;
-  getNotesRecursive(prefix: string): Promise<Array<{ id: string; name: string; folder_path: string }>>;
-}
-
 export interface EdgeSourceRepository {
   add(input: {
     edgeId: string;
@@ -267,7 +256,6 @@ export interface DataStore {
   sourceContent: SourceContentRepository;
   entityResolution: EntityResolutionRepository;
   tags: TagRepository;
-  noteFolders: NoteFolderRepository;
   edgeSources: EdgeSourceRepository;
   entitySources: EntitySourceRepository;
   indexedFiles: IndexedFileRepository;

@@ -11,7 +11,6 @@ import * as nodeTypeQueries from './worker/queries/node-type-queries';
 import * as sourceContentQueries from './worker/queries/source-content-queries';
 import * as entityResolutionQueries from './worker/queries/entity-resolution-queries';
 import * as tagQueries from './worker/queries/tag-queries';
-import * as noteFolderQueries from './worker/queries/note-folder-queries';
 import * as edgeSourceQueries from './worker/queries/edge-source-queries';
 import * as entitySourceQueries from './worker/queries/entity-source-queries';
 import * as indexedFileQueries from './worker/queries/indexed-file-queries';
@@ -110,17 +109,6 @@ export function createSqliteDataStore(
       getAllTags: () => tagQueries.getAllTags(),
     },
 
-    // ── Note Folder Repository ──────────────────────────────────────
-
-    noteFolders: {
-      getAll: () => noteFolderQueries.getAllFolders(),
-      create: (path) => noteFolderQueries.createFolder(path),
-      rename: (oldPath, newPath) => noteFolderQueries.renameFolder(oldPath, newPath),
-      delete: (path) => noteFolderQueries.deleteFolder(path),
-      moveNote: (nodeId, folderPath) => noteFolderQueries.moveNote(nodeId, folderPath),
-      getNotesInFolder: (path) => noteFolderQueries.getNotesInFolder(path),
-      getNotesRecursive: (prefix) => noteFolderQueries.getNotesRecursive(prefix),
-    },
 
     // ── Edge Source Repository ──────────────────────────────────────
 

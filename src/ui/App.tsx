@@ -12,6 +12,7 @@ import { registerQueryMessageHandler } from '../db/client/query-message-handler'
 import { SidePanelLayout } from './layouts/SidePanelLayout';
 import { TabLayout } from './layouts/TabLayout';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { LLMModal } from './components/llm/LLMModal';
 import { DropZone } from './components/ingestion/DropZone';
 import { ProcessingModePrompt } from './components/ingestion/ProcessingModePrompt';
 import { getProcessor } from '../ingestion/processor-factory';
@@ -167,6 +168,7 @@ function AppMain() {
     <>
       {displayMode === 'sidePanel' ? <SidePanelLayout onIngest={handleIngest} /> : <TabLayout onIngest={handleIngest} />}
       <SettingsModal />
+      <LLMModal />
       <DropZone onIngest={handleIngest} />
       {pendingSource && modePromptInfo && (
         <ProcessingModePrompt

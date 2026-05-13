@@ -11,7 +11,6 @@ import { DiffView } from './DiffView';
 import { ExtractionReview } from './ExtractionReview';
 import { ExtractionSummary } from './ExtractionSummary';
 import { StreamingOutput } from './StreamingOutput';
-import { PanelHeader } from '../shared/PanelHeader';
 import type { AgentStep } from '../../../shared/types';
 import type { ExtractionTab } from '../../../graph/store/llm-store';
 
@@ -156,7 +155,7 @@ const TABS: { key: ExtractionTab; label: string }[] = [
   { key: 'text', label: 'From Text' },
 ];
 
-export function LLMPanel() {
+export function LLMPanel({ onClose }: { onClose?: () => void }) {
   const status = useLLMStore((s) => s.status);
   const activeTab = useLLMStore((s) => s.activeTab);
   const setActiveTab = useLLMStore((s) => s.setActiveTab);
@@ -184,16 +183,30 @@ export function LLMPanel() {
 
   return (
     <div className="p-4 space-y-4">
-      <PanelHeader title="LLM Extraction">
-        {status !== 'idle' && (
-          <button
-            onClick={reset}
-            className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
-          >
-            Reset
-          </button>
-        )}
-      </PanelHeader>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-zinc-100">LLM Extraction</h3>
+        <div className="flex items-center gap-1">
+          {status !== 'idle' && (
+            <button
+              onClick={reset}
+              className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
+            >
+              Reset
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
+              title="Close"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Tab toggle — only show when idle/error */}
       {isIdle && (

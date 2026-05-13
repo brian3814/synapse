@@ -8,7 +8,7 @@ import { loadVecExtension, ensureVecTable, dropVecTable, knnSearch } from './vec
 import { buildEmbeddingText, computeTextHash } from './build-embedding-text';
 
 export class EmbeddingService {
-  private db: Database.Database;
+  private getDb: () => Database.Database;
   private provider: EmbeddingProvider | null = null;
   private queue: EmbeddingQueue | null = null;
   private config: EmbeddingConfig = { ...DEFAULT_EMBEDDING_CONFIG };
@@ -16,9 +16,13 @@ export class EmbeddingService {
   private progressListeners = new Set<(progress: { done: number; total: number }) => void>();
   private readNote?: (nodeId: string) => string | null;
 
-  constructor(db: Database.Database, readNote?: (nodeId: string) => string | null) {
-    this.db = db;
+  constructor(getDb: () => Database.Database, readNote?: (nodeId: string) => string | null) {
+    this.getDb = getDb;
     this.readNote = readNote;
+  }
+
+  private get db(): Database.Database {
+    return this.getDb();
   }
 
   async initialize(storedConfig?: Partial<EmbeddingConfig>): Promise<void> {
@@ -52,7 +56,7 @@ export class EmbeddingService {
       await provider.initialize();
       this.provider = provider;
       ensureVecTable(this.db, provider.dimensions);
-      this.queue = new EmbeddingQueue(this.db, provider);
+      this.queue = new EmbeddingQueue(this.getDb, provider);
       console.log(`[EmbeddingService] Provider ${provider.id} ready (${provider.dimensions}d)`);
     } catch (e) {
       console.error('[EmbeddingService] Failed to initialize provider:', e);

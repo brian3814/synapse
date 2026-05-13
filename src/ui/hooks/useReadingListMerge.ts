@@ -37,8 +37,8 @@ export function useReadingListMerge() {
     // Immediately open review UI
     await proceedToReview();
 
-    // Switch to LLM panel where ExtractionReview renders
-    useUIStore.getState().setActivePanel('llm');
+    // Open LLM modal where ExtractionReview renders
+    useUIStore.getState().setLLMModalOpen(true);
   }, [proceedToReview]);
 
   // Watch for review completion — when LLM store resets to 'idle' after we started a merge

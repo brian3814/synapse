@@ -126,8 +126,19 @@ app.whenReady().then(() => {
     if (action === 'init' && !embeddingInitStarted) {
       embeddingInitStarted = true;
       try {
-        const db = getDb();
-        embeddingService = new EmbeddingService(db, readNote);
+        embeddingService = new EmbeddingService(getDb, (nodeId: string) => {
+          const ctx = vaultManager.getContext();
+          if (ctx) {
+            const row = getDb().prepare('SELECT vault_path FROM nodes WHERE id = ?')
+              .get(nodeId) as { vault_path: string | null } | undefined;
+            if (row?.vault_path) {
+              const absPath = path.join(ctx.path, row.vault_path);
+              if (fs.existsSync(absPath)) return fs.readFileSync(absPath, 'utf-8');
+              return null;
+            }
+          }
+          return readNote(nodeId);
+        });
         const storedConfig = storage.get('embeddingConfig');
         await embeddingService.initialize(storedConfig?.embeddingConfig ?? undefined);
         setupProgressBroadcast(embeddingService);
@@ -178,30 +189,79 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('notes:init', () => {
+    if (vaultManager.getContext()) return;
     notesBackend.initNotesDir();
   });
 
   ipcMain.handle('notes:read', (_event, nodeId: string) => {
+    const ctx = vaultManager.getContext();
+    if (ctx) {
+      const row = getDb().prepare('SELECT vault_path FROM nodes WHERE id = ?')
+        .get(nodeId) as { vault_path: string | null } | undefined;
+      if (row?.vault_path) {
+        const absPath = path.join(ctx.path, row.vault_path);
+        if (fs.existsSync(absPath)) return fs.readFileSync(absPath, 'utf-8');
+        return null;
+      }
+    }
     return notesBackend.readNote(nodeId);
   });
 
   ipcMain.handle('notes:write', (_event, nodeId: string, markdown: string) => {
+    const ctx = vaultManager.getContext();
+    if (ctx) {
+      const row = getDb().prepare('SELECT vault_path FROM nodes WHERE id = ?')
+        .get(nodeId) as { vault_path: string | null } | undefined;
+      if (row?.vault_path) {
+        const absPath = path.join(ctx.path, row.vault_path);
+        fs.mkdirSync(path.dirname(absPath), { recursive: true });
+        fs.writeFileSync(absPath, markdown, 'utf-8');
+        const stat = fs.statSync(absPath);
+        getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ? WHERE id = ?')
+          .run(Math.floor(stat.mtimeMs), stat.size, nodeId);
+        return;
+      }
+    }
     notesBackend.writeNote(nodeId, markdown);
   });
 
   ipcMain.handle('notes:remove', (_event, nodeId: string) => {
+    const ctx = vaultManager.getContext();
+    if (ctx) {
+      const row = getDb().prepare('SELECT vault_path FROM nodes WHERE id = ?')
+        .get(nodeId) as { vault_path: string | null } | undefined;
+      if (row?.vault_path) {
+        const absPath = path.join(ctx.path, row.vault_path);
+        try { fs.unlinkSync(absPath); } catch { /* not found */ }
+        return;
+      }
+    }
     notesBackend.removeNote(nodeId);
   });
 
   ipcMain.handle('notes:list', () => {
+    const ctx = vaultManager.getContext();
+    if (ctx) {
+      const rows = getDb().prepare('SELECT id FROM nodes WHERE type = ? AND vault_path IS NOT NULL')
+        .all('note') as { id: string }[];
+      return rows.map((r: { id: string }) => r.id);
+    }
     return notesBackend.listNotes();
   });
 
   ipcMain.handle('notes:exists', (_event, nodeId: string) => {
+    const ctx = vaultManager.getContext();
+    if (ctx) {
+      const row = getDb().prepare('SELECT vault_path FROM nodes WHERE id = ?')
+        .get(nodeId) as { vault_path: string | null } | undefined;
+      return row?.vault_path ? fs.existsSync(path.join(ctx.path, row.vault_path)) : false;
+    }
     return notesBackend.noteExists(nodeId);
   });
 
   ipcMain.handle('notes:getPath', () => {
+    const ctx = vaultManager.getContext();
+    if (ctx) return path.join(ctx.path, 'notes');
     return notesBackend.getNotesPath();
   });
 
@@ -360,6 +420,10 @@ app.whenReady().then(() => {
     syncBroadcastHandler = null;
     resourceDetectionHandler?.unregister();
     resourceDetectionHandler = null;
+    // Reset so embedding service re-initializes with the new vault's DB
+    embeddingInitStarted = false;
+    embeddingService?.dispose();
+    embeddingService = null;
   }
 
   ipcMain.handle('vault-workspace:get-status', () => {

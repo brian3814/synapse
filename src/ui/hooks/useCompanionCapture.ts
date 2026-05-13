@@ -10,7 +10,7 @@ export function useCompanionCapture() {
     const cleanupCapture = browser.onPageCapture((data) => {
       console.log(`[Companion] Received page capture: ${data.url} (${data.content.length} chars)`);
       useLLMStore.getState().setPendingCapture({ url: data.url, content: data.content });
-      useUIStore.getState().forceActivePanel('llm');
+      useUIStore.getState().setLLMModalOpen(true);
     });
 
     const cleanupQueue = browser.onReadingQueue(async (data) => {

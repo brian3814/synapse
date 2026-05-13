@@ -14,7 +14,7 @@ interface HeaderProps {
 
 export function Header({ onIngest }: HeaderProps) {
   const { displayMode, toggleMode } = useDisplayMode();
-  const { activePanel, setActivePanel, settingsOpen, setSettingsOpen } = useUIStore();
+  const { activePanel, setActivePanel, settingsOpen, setSettingsOpen, llmModalOpen, setLLMModalOpen } = useUIStore();
   const readingListItems = useReadingListStore((s) => s.items);
   const readyCount = Object.values(readingListItems).filter(i => i.status === 'extracted').length;
   const isSidePanel = displayMode === 'sidePanel';
@@ -62,8 +62,8 @@ export function Header({ onIngest }: HeaderProps) {
         </ToolbarButton>
 
         <ToolbarButton
-          active={activePanel === 'llm'}
-          onClick={() => setActivePanel('llm')}
+          active={llmModalOpen}
+          onClick={() => setLLMModalOpen(!llmModalOpen)}
           title="LLM Extract"
         >
           <SparklesIcon />

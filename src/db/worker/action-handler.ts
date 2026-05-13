@@ -314,41 +314,6 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.edgeSources.getEdgesFromNote(params as string) };
       }
 
-      // Note folder operations (S3-style hierarchy for note organization)
-      case 'noteFolders.getAll': {
-        ensureInit();
-        return { result: await dataStore.noteFolders.getAll() };
-      }
-      case 'noteFolders.create': {
-        ensureInit();
-        await dataStore.noteFolders.create(params as string);
-        return { result: { success: true } };
-      }
-      case 'noteFolders.rename': {
-        ensureInit();
-        const p = params as { oldPath: string; newPath: string };
-        await dataStore.noteFolders.rename(p.oldPath, p.newPath);
-        return { result: { success: true } };
-      }
-      case 'noteFolders.delete': {
-        ensureInit();
-        await dataStore.noteFolders.delete(params as string);
-        return { result: { success: true } };
-      }
-      case 'noteFolders.moveNote': {
-        ensureInit();
-        const p = params as { nodeId: string; folderPath: string };
-        await dataStore.noteFolders.moveNote(p.nodeId, p.folderPath);
-        return { result: { success: true } };
-      }
-      case 'noteFolders.getNotesInFolder': {
-        ensureInit();
-        return { result: await dataStore.noteFolders.getNotesInFolder(params as string) };
-      }
-      case 'noteFolders.getNotesRecursive': {
-        ensureInit();
-        return { result: await dataStore.noteFolders.getNotesRecursive(params as string) };
-      }
 
       // Indexed file operations
       case 'indexedFiles.save': {

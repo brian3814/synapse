@@ -12,11 +12,15 @@ export class EmbeddingQueue {
   private queue: QueueItem[] = [];
   private processing = false;
   private idleDelay = 50;
-  private db: Database.Database;
+  private getDb: () => Database.Database;
   private provider: EmbeddingProvider;
-  constructor(db: Database.Database, provider: EmbeddingProvider) {
-    this.db = db;
+  constructor(getDb: () => Database.Database, provider: EmbeddingProvider) {
+    this.getDb = getDb;
     this.provider = provider;
+  }
+
+  private get db(): Database.Database {
+    return this.getDb();
   }
 
   enqueue(nodeId: string, text: string): void {

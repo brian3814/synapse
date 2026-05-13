@@ -2,25 +2,37 @@ import React, { useCallback } from 'react';
 import { useUIStore } from '../../graph/store/ui-store';
 import type { ContentTab } from '../../graph/store/ui-store';
 
-export function ContentTabBar() {
-  const contentTabs = useUIStore((s) => s.contentTabs);
-  const activeContentTabId = useUIStore((s) => s.activeContentTabId);
+interface ContentTabBarProps {
+  columnId: string;
+  tabs: ContentTab[];
+  activeTabId: string;
+  isActiveColumn: boolean;
+}
+
+export function ContentTabBar({ tabs, activeTabId, isActiveColumn }: ContentTabBarProps) {
   const focusContentTab = useUIStore((s) => s.focusContentTab);
   const closeContentTab = useUIStore((s) => s.closeContentTab);
+  const splitContentTab = useUIStore((s) => s.splitContentTab);
+  const columnCount = useUIStore((s) => s.contentColumns.length);
 
-  if (contentTabs.length <= 1) return null;
+  if (tabs.length <= 1 && columnCount <= 1) return null;
 
   return (
-    <div className="flex items-center bg-zinc-800/80 border-b border-zinc-700 shrink-0 overflow-x-auto scrollbar-none">
-      {contentTabs.map((tab) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          active={tab.id === activeContentTabId}
-          onFocus={focusContentTab}
-          onClose={closeContentTab}
-        />
-      ))}
+    <div className={`flex items-center bg-zinc-800/80 border-b shrink-0 overflow-x-auto scrollbar-none ${
+      isActiveColumn ? 'border-zinc-700' : 'border-zinc-700/50'
+    }`}>
+      <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
+        {tabs.map((tab) => (
+          <TabItem
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTabId}
+            onFocus={focusContentTab}
+            onClose={closeContentTab}
+            onSplit={splitContentTab}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -30,11 +42,13 @@ function TabItem({
   active,
   onFocus,
   onClose,
+  onSplit,
 }: {
   tab: ContentTab;
   active: boolean;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
+  onSplit: (id: string) => void;
 }) {
   const isGraph = tab.type.kind === 'graph';
 
@@ -58,14 +72,23 @@ function TabItem({
     >
       {isGraph ? <GraphIcon /> : <NoteTabIcon />}
       <span className="truncate">{tab.title}</span>
-      {!isGraph && (
+      <span className="flex items-center ml-1 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <span
-          onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}
-          className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-600 transition-opacity"
+          onClick={(e) => { e.stopPropagation(); onSplit(tab.id); }}
+          className="p-0.5 rounded hover:bg-zinc-600"
+          title="Split right"
         >
-          <CloseIcon />
+          <SplitIcon />
         </span>
-      )}
+        {!isGraph && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}
+            className="p-0.5 rounded hover:bg-zinc-600"
+          >
+            <CloseIcon />
+          </span>
+        )}
+      </span>
     </button>
   );
 }
@@ -84,6 +107,13 @@ const NoteTabIcon = () => (
   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
     <polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+
+const SplitIcon = () => (
+  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <line x1="12" y1="3" x2="12" y2="21" />
   </svg>
 );
 

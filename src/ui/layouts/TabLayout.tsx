@@ -7,6 +7,7 @@ import { ResizeHandle } from '../components/ResizeHandle';
 import { ContentTabBar } from '../components/ContentTabBar';
 import { NoteEditor } from '../components/notes/NoteEditor';
 import { useUIStore } from '../../graph/store/ui-store';
+import type { ContentColumn } from '../../graph/store/ui-store';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
 interface TabLayoutProps {
@@ -21,8 +22,8 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
   const chatSidebarWidth = useUIStore((s) => s.chatSidebarWidth);
   const setPanelWidth = useUIStore((s) => s.setPanelWidth);
   const setChatSidebarWidth = useUIStore((s) => s.setChatSidebarWidth);
-  const contentTabs = useUIStore((s) => s.contentTabs);
-  const activeContentTabId = useUIStore((s) => s.activeContentTabId);
+  const contentColumns = useUIStore((s) => s.contentColumns);
+  const activeColumnId = useUIStore((s) => s.activeColumnId);
   const showChatSidebar = chatOpen && chatDisplayMode === 'sidebar';
 
   const onPanelResize = useCallback((delta: number) => {
@@ -37,26 +38,15 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
     <div className="flex flex-col h-full bg-zinc-900 relative">
       <Header onIngest={onIngest} />
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Main content area — tabbed (graph + note editors) */}
-        <div className="flex-1 min-h-0 flex flex-col">
-          <ContentTabBar />
-          <div className="flex-1 min-h-0 relative">
-            {contentTabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={`absolute inset-0 ${activeContentTabId === tab.id ? '' : 'hidden'}`}
-              >
-                {tab.type.kind === 'graph' ? (
-                  <KnowledgeGraph />
-                ) : (
-                  <div className="h-full overflow-y-auto bg-zinc-900">
-                    <NoteEditor nodeId={tab.type.noteId} isTab />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Content columns — each has its own tab bar + content */}
+        {contentColumns.map((col, i) => (
+          <ContentColumnView
+            key={col.id}
+            column={col}
+            isActive={col.id === activeColumnId}
+            showDivider={i > 0}
+          />
+        ))}
         {activePanel !== 'none' && (
           <>
             <ResizeHandle onResize={onPanelResize} />
@@ -77,5 +67,49 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
       {/* Float mode FAB / overlay */}
       {(!chatOpen || chatDisplayMode === 'float') && <ChatBot />}
     </div>
+  );
+}
+
+function ContentColumnView({
+  column,
+  isActive,
+  showDivider,
+}: {
+  column: ContentColumn;
+  isActive: boolean;
+  showDivider: boolean;
+}) {
+  return (
+    <>
+      {showDivider && <div className="w-px bg-zinc-600 shrink-0" />}
+      <div
+        className={`flex-1 min-w-0 min-h-0 flex flex-col ${isActive ? '' : 'opacity-90'}`}
+        onClick={() => useUIStore.getState().activeColumnId !== column.id &&
+          useUIStore.setState({ activeColumnId: column.id })}
+      >
+        <ContentTabBar
+          columnId={column.id}
+          tabs={column.tabs}
+          activeTabId={column.activeTabId}
+          isActiveColumn={isActive}
+        />
+        <div className="flex-1 min-h-0 relative">
+          {column.tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={`absolute inset-0 ${column.activeTabId === tab.id ? '' : 'hidden'}`}
+            >
+              {tab.type.kind === 'graph' ? (
+                <KnowledgeGraph />
+              ) : (
+                <div className="h-full overflow-y-auto bg-zinc-900">
+                  <NoteEditor nodeId={tab.type.noteId} isTab />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

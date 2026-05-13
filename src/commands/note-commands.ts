@@ -11,7 +11,6 @@ export async function saveNote(
     name: string;
     content: string;
     isNew: boolean;
-    folderPath?: string;
     sourceUrl?: string;
   },
 ): Promise<{ nodeId: string }> {
@@ -25,7 +24,6 @@ export async function saveNote(
     const result = await graphCommands.createNode(ctx, {
       name: params.name,
       type: 'note',
-      folderPath: params.folderPath,
       properties: { wikiLinks },
       sourceUrl: params.sourceUrl,
     });

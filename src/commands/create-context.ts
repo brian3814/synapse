@@ -17,7 +17,6 @@ function dbClientAsDataStore(): DataStore {
     } as any,
     entityResolution: dbClient.entityResolution as any,
     tags: dbClient.tags as any,
-    noteFolders: dbClient.noteFolders as any,
     edgeSources: dbClient.edgeSources as any,
     entitySources: dbClient.entitySources as any,
     indexedFiles: dbClient.indexedFiles as any,
