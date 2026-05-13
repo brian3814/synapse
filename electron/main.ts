@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, protocol, net, ipcMain, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { spawn } from 'child_process';
 import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction } from './db-backend';
 import * as notesBackend from './notes-backend';
@@ -471,9 +472,18 @@ app.whenReady().then(() => {
     await vaultManager.close();
   });
 
-  // Open a vault in a new OS process (like Obsidian)
+  // Open a vault in a new OS process — keeps current instance running
+  function spawnVaultProcess(vaultPath: string): void {
+    const baseArgs = process.argv.slice(1).filter((a: string) => a !== '--vault' && !a.startsWith('--vault='));
+    const child = spawn(process.execPath, [...baseArgs, '--vault', vaultPath], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+  }
+
   ipcMain.handle('vault-workspace:open-new-window', async (_event, vaultPath: string) => {
-    app.relaunch({ args: ['--vault', vaultPath] });
+    spawnVaultProcess(vaultPath);
   });
 
   ipcMain.handle('vault-workspace:pick-create-new-window', async () => {
@@ -485,7 +495,7 @@ app.whenReady().then(() => {
     const vaultPath = result.filePaths[0];
     const name = vaultPath.split('/').pop() ?? 'My Vault';
     scaffoldVault(vaultPath, name);
-    app.relaunch({ args: ['--vault', vaultPath] });
+    spawnVaultProcess(vaultPath);
   });
 
   ipcMain.handle('vault-workspace:pick-open-new-window', async () => {
@@ -494,7 +504,7 @@ app.whenReady().then(() => {
       properties: ['openDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return;
-    app.relaunch({ args: ['--vault', result.filePaths[0]] });
+    spawnVaultProcess(result.filePaths[0]);
   });
 
   createWindow();
