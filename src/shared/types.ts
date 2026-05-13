@@ -411,7 +411,8 @@ export interface AppSettings {
 }
 
 // Reading list types
-export type ReadingListItemStatus = 'pending' | 'fetching' | 'extracting' | 'extracted' | 'failed';
+export type ReadingListItemStatus = 'pending' | 'processing' | 'ready' | 'complete' | 'failed'
+  | 'fetching' | 'extracting' | 'extracted'; // Chrome legacy
 
 // Stored in chrome.storage.local by the SW
 export interface ReadingListItem {
@@ -427,4 +428,6 @@ export interface ReadingListItem {
   pageContent?: string;  // cleaned HTML text for source_content saving on merge
   pageTitle?: string;
   extractedAt?: number;
+  targetVaultPath?: string;
+  targetVaultName?: string;
 }

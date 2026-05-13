@@ -74,11 +74,11 @@ export function useReadingListMerge() {
           // 3. Remove from Chrome reading list via service worker
           await (browser as any).sendReadingListRemove(url);
 
-          // 4. Remove from reading list store
-          useReadingListStore.getState().removeItem(url);
+          // 4. Soft-delete: mark as complete in reading list store
+          await useReadingListStore.getState().markComplete(url);
 
           // 5. Switch back to reading list panel
-          useUIStore.getState().setActivePanel('readingList');
+          useUIStore.getState().forceActivePanel('readingList');
         } catch (e) {
           console.error('[ReadingListMerge] Post-merge cleanup failed:', e);
         }

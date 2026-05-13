@@ -16,7 +16,7 @@ export function Header({ onIngest }: HeaderProps) {
   const { displayMode, toggleMode } = useDisplayMode();
   const { activePanel, setActivePanel, settingsOpen, setSettingsOpen, llmModalOpen, setLLMModalOpen } = useUIStore();
   const readingListItems = useReadingListStore((s) => s.items);
-  const readyCount = Object.values(readingListItems).filter(i => i.status === 'extracted').length;
+  const readyCount = Object.values(readingListItems).filter(i => i.status === 'ready' || i.status === 'extracted').length;
   const isSidePanel = displayMode === 'sidePanel';
 
   const handleSettingsClick = useCallback(() => {

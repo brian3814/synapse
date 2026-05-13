@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
-import { browser, storage } from '@platform';
+import { browser, storage, platformId, vaultWorkspace } from '@platform';
 import type { ReadingListItem } from '../../shared/types';
 
 export function useCompanionCapture() {
@@ -18,11 +18,14 @@ export function useCompanionCapture() {
       try {
         const result = await storage.get('readingListItems') as Record<string, any>;
         const items: Record<string, ReadingListItem> = result.readingListItems ?? {};
+        const vault = platformId === 'electron' ? await vaultWorkspace.getStatus() : null;
         items[data.url] = {
           url: data.url,
           title: data.title,
           addedAt: Date.now(),
           status: 'pending',
+          targetVaultPath: vault?.path,
+          targetVaultName: vault?.name,
         };
         await storage.set({ readingListItems: items });
         useReadingListStore.getState().loadFromStorage();

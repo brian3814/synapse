@@ -93,6 +93,8 @@ interface UIStore {
   setContentTabTitle: (id: string, title: string) => void;
   splitContentTab: (tabId: string) => void;
   moveTabToColumn: (tabId: string, targetColumnId: string) => void;
+  reorderContentTabs: (fromColId: string, toColId: string, fromIndex: number, toIndex: number) => void;
+  insertColumnAt: (tabId: string, columnIndex: number) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -247,10 +249,60 @@ export const useUIStore = create<UIStore>((set) => ({
     };
   }),
 
+  reorderContentTabs: (fromColId, toColId, fromIndex, toIndex) => set((state) => {
+    if (fromColId === toColId) {
+      return {
+        contentColumns: state.contentColumns.map(c => {
+          if (c.id !== fromColId) return c;
+          const tabs = [...c.tabs];
+          const [moved] = tabs.splice(fromIndex, 1);
+          tabs.splice(toIndex, 0, moved);
+          return { ...c, tabs };
+        }),
+      };
+    }
+    const srcCol = state.contentColumns.find(c => c.id === fromColId);
+    const dstCol = state.contentColumns.find(c => c.id === toColId);
+    if (!srcCol || !dstCol) return {};
+    const srcTabs = [...srcCol.tabs];
+    const [moved] = srcTabs.splice(fromIndex, 1);
+    const dstTabs = [...dstCol.tabs];
+    dstTabs.splice(toIndex, 0, moved);
+    let cols = state.contentColumns.map(c => {
+      if (c.id === fromColId) {
+        if (srcTabs.length === 0) return null;
+        return { ...c, tabs: srcTabs, activeTabId: c.activeTabId === moved.id ? srcTabs[0].id : c.activeTabId };
+      }
+      if (c.id === toColId) return { ...c, tabs: dstTabs, activeTabId: moved.id };
+      return c;
+    }).filter(Boolean) as ContentColumn[];
+    return {
+      contentColumns: cols,
+      activeColumnId: toColId,
+    };
+  }),
+
+  insertColumnAt: (tabId, columnIndex) => set((state) => {
+    const found = findTabInColumns(state.contentColumns, tabId);
+    if (!found) return {};
+    const srcCol = state.contentColumns[found.colIdx];
+    const tab = srcCol.tabs[found.tabIdx];
+    const remainingTabs = srcCol.tabs.filter(t => t.id !== tabId);
+    const newColId = nextColumnId();
+    const newCol: ContentColumn = { id: newColId, tabs: [tab], activeTabId: tab.id };
+    let cols = state.contentColumns.map(c => {
+      if (c.id !== srcCol.id) return c;
+      if (remainingTabs.length === 0) return null;
+      return { ...c, tabs: remainingTabs, activeTabId: c.activeTabId === tabId ? remainingTabs[0].id : c.activeTabId };
+    }).filter(Boolean) as ContentColumn[];
+    const insertIdx = Math.min(columnIndex, cols.length);
+    cols.splice(insertIdx, 0, newCol);
+    return { contentColumns: cols, activeColumnId: newColId };
+  }),
+
   toggleLayer: (layer) =>
     set((state) => {
       const next = { ...state.visibleLayers, [layer]: !state.visibleLayers[layer] };
-      // Always keep at least one layer visible so the graph isn't empty.
       if (!next.entity && !next.note && !next.resource) next.entity = true;
       return { visibleLayers: next, graphKey: state.graphKey + 1 };
     }),

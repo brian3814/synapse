@@ -4,24 +4,34 @@ import { storage, browser, platformId, llm } from '@platform';
 import { readingListExtractionSchema } from '../../shared/schema';
 
 interface ReadingListStore {
-  items: Record<string, ReadingListItem>; // keyed by URL
+  items: Record<string, ReadingListItem>;
   loading: boolean;
   selectedUrl: string | null;
+  selectedUrls: string[];
 
-  // Lifecycle
   loadFromStorage: () => Promise<void>;
-  startSyncListener: () => () => void; // returns cleanup function
+  startSyncListener: () => () => void;
 
-  // Actions
   selectItem: (url: string | null) => void;
+  toggleSelectUrl: (url: string) => void;
+  selectAllPending: () => void;
+  clearSelection: () => void;
+  addItem: (url: string, title: string, vaultPath: string, vaultName: string) => Promise<void>;
+  startBatchExtraction: () => void;
   retryExtraction: (url: string) => void;
+  markComplete: (url: string) => void;
   removeItem: (url: string) => void;
+}
+
+function isProcessing(status: string): boolean {
+  return status === 'processing' || status === 'fetching' || status === 'extracting';
 }
 
 export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   items: {},
   loading: true,
   selectedUrl: null,
+  selectedUrls: [],
 
   loadFromStorage: async () => {
     set({ loading: true });
@@ -36,7 +46,6 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   },
 
   startSyncListener: () => {
-    // Listen for storage changes (SW writes to readingListItems)
     const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName === 'local' && changes.readingListItems) {
         const newItems = (changes.readingListItems.newValue as Record<string, ReadingListItem>) ?? {};
@@ -45,11 +54,8 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
     };
     const cleanupStorage = storage.onChange(storageListener);
 
-    // Also listen for extraction result broadcasts directly (for faster UI update)
     const messageListener = (message: any) => {
       if (message.type === 'READING_LIST_EXTRACTION_RESULT') {
-        // The SW will update storage, which triggers storageListener above.
-        // But we can also update immediately for faster UI response.
         const payload = message.payload;
         set((state) => {
           const items = { ...state.items };
@@ -59,7 +65,7 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
           if (payload.success) {
             items[payload.url] = {
               ...item,
-              status: 'extracted',
+              status: 'ready',
               summary: payload.summary,
               keyTopics: payload.keyTopics,
               extractedNodes: payload.nodes,
@@ -82,7 +88,6 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
     };
     const cleanupMessages = (browser as any).onRuntimeMessage(messageListener);
 
-    // Return cleanup function
     return () => {
       cleanupStorage();
       cleanupMessages();
@@ -91,13 +96,55 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
   selectItem: (url) => set({ selectedUrl: url }),
 
+  toggleSelectUrl: (url) => set((state) => {
+    const idx = state.selectedUrls.indexOf(url);
+    if (idx >= 0) {
+      return { selectedUrls: state.selectedUrls.filter((u) => u !== url) };
+    }
+    return { selectedUrls: [...state.selectedUrls, url] };
+  }),
+
+  selectAllPending: () => set((state) => {
+    const pendingUrls = Object.values(state.items)
+      .filter((i) => i.status === 'pending')
+      .map((i) => i.url);
+    return { selectedUrls: pendingUrls };
+  }),
+
+  clearSelection: () => set({ selectedUrls: [] }),
+
+  addItem: async (url, title, vaultPath, vaultName) => {
+    const normalized = url.trim();
+    if (!normalized) return;
+    if (get().items[normalized]) return;
+    const item: ReadingListItem = {
+      url: normalized,
+      title: title.trim() || normalized,
+      addedAt: Date.now(),
+      status: 'pending',
+      targetVaultPath: vaultPath,
+      targetVaultName: vaultName,
+    };
+    set((state) => ({ items: { ...state.items, [normalized]: item } }));
+    await storage.set({ readingListItems: get().items });
+  },
+
+  startBatchExtraction: () => {
+    const { items, selectedUrls } = get();
+    const urls = selectedUrls.filter((url) => items[url]?.status === 'pending');
+    set({ selectedUrls: [] });
+    for (const url of urls) {
+      get().retryExtraction(url);
+    }
+  },
+
   retryExtraction: async (url) => {
     if (platformId === 'electron') {
       const item = get().items[url];
       if (!item) return;
 
       set((state) => ({
-        items: { ...state.items, [url]: { ...state.items[url], status: 'extracting', error: undefined } },
+        items: { ...state.items, [url]: { ...state.items[url], status: 'processing', error: undefined } },
       }));
 
       try {
@@ -147,7 +194,7 @@ Rules:
             ...state.items,
             [url]: {
               ...state.items[url],
-              status: 'extracted',
+              status: 'ready',
               summary: parsed.summary,
               keyTopics: parsed.keyTopics,
               extractedNodes: parsed.nodes.map((n) => ({ name: n.name, type: n.type ?? 'entity', properties: n.properties })),
@@ -171,6 +218,18 @@ Rules:
     }
   },
 
+  markComplete: async (url) => {
+    set((state) => {
+      const item = state.items[url];
+      if (!item) return state;
+      return {
+        items: { ...state.items, [url]: { ...item, status: 'complete' as const } },
+        selectedUrl: state.selectedUrl === url ? null : state.selectedUrl,
+      };
+    });
+    await storage.set({ readingListItems: get().items });
+  },
+
   removeItem: (url) => {
     set((state) => {
       const items = { ...state.items };
@@ -182,3 +241,5 @@ Rules:
     });
   },
 }));
+
+export { isProcessing };

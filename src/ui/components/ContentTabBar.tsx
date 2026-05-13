@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useSortable } from '@dnd-kit/react/sortable';
 import { useUIStore } from '../../graph/store/ui-store';
 import type { ContentTab } from '../../graph/store/ui-store';
 
@@ -9,7 +10,7 @@ interface ContentTabBarProps {
   isActiveColumn: boolean;
 }
 
-export function ContentTabBar({ tabs, activeTabId, isActiveColumn }: ContentTabBarProps) {
+export function ContentTabBar({ columnId, tabs, activeTabId, isActiveColumn }: ContentTabBarProps) {
   const focusContentTab = useUIStore((s) => s.focusContentTab);
   const closeContentTab = useUIStore((s) => s.closeContentTab);
   const splitContentTab = useUIStore((s) => s.splitContentTab);
@@ -22,10 +23,12 @@ export function ContentTabBar({ tabs, activeTabId, isActiveColumn }: ContentTabB
       isActiveColumn ? 'border-zinc-700' : 'border-zinc-700/50'
     }`}>
       <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => (
-          <TabItem
+        {tabs.map((tab, index) => (
+          <SortableTab
             key={tab.id}
             tab={tab}
+            index={index}
+            columnId={columnId}
             active={tab.id === activeTabId}
             onFocus={focusContentTab}
             onClose={closeContentTab}
@@ -37,20 +40,32 @@ export function ContentTabBar({ tabs, activeTabId, isActiveColumn }: ContentTabB
   );
 }
 
-function TabItem({
+function SortableTab({
   tab,
+  index,
+  columnId,
   active,
   onFocus,
   onClose,
   onSplit,
 }: {
   tab: ContentTab;
+  index: number;
+  columnId: string;
   active: boolean;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onSplit: (id: string) => void;
 }) {
   const isGraph = tab.type.kind === 'graph';
+
+  const { ref, isDragging } = useSortable({
+    id: tab.id,
+    index,
+    group: columnId,
+    type: 'tab',
+    accept: 'tab',
+  });
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 1 && !isGraph) {
@@ -61,12 +76,16 @@ function TabItem({
 
   return (
     <button
+      ref={ref}
       onClick={() => onFocus(tab.id)}
       onMouseDown={handleMouseDown}
-      className={`group flex items-center gap-1.5 px-3 h-7 text-[11px] whitespace-nowrap border-r border-zinc-700/50 shrink-0 transition-colors ${
-        active
-          ? 'bg-zinc-900 text-zinc-100 border-b-2 border-b-indigo-500'
-          : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border-b-2 border-b-transparent'
+      data-dragging={isDragging || undefined}
+      className={`group flex items-center gap-1.5 px-3 h-7 text-[11px] whitespace-nowrap border-r border-zinc-700/50 shrink-0 transition-colors cursor-grab active:cursor-grabbing ${
+        isDragging
+          ? 'bg-indigo-900/50 text-zinc-300 opacity-70 border-b-2 border-b-indigo-500'
+          : active
+            ? 'bg-zinc-900 text-zinc-100 border-b-2 border-b-indigo-500'
+            : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border-b-2 border-b-transparent'
       }`}
       style={{ maxWidth: 180 }}
     >
