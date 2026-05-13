@@ -1,10 +1,11 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Header } from '../components/Header';
 import { KnowledgeGraph } from '../components/graph/KnowledgeGraph';
 import { ActivePanel } from '../components/ActivePanel';
 import { ChatBot } from '../components/chat/ChatBot';
-import { RelatedWidget } from '../components/RelatedWidget';
 import { ResizeHandle } from '../components/ResizeHandle';
+import { ContentTabBar } from '../components/ContentTabBar';
+import { NoteEditor } from '../components/notes/NoteEditor';
 import { useUIStore } from '../../graph/store/ui-store';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
@@ -20,6 +21,8 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
   const chatSidebarWidth = useUIStore((s) => s.chatSidebarWidth);
   const setPanelWidth = useUIStore((s) => s.setPanelWidth);
   const setChatSidebarWidth = useUIStore((s) => s.setChatSidebarWidth);
+  const contentTabs = useUIStore((s) => s.contentTabs);
+  const activeContentTabId = useUIStore((s) => s.activeContentTabId);
   const showChatSidebar = chatOpen && chatDisplayMode === 'sidebar';
 
   const onPanelResize = useCallback((delta: number) => {
@@ -34,8 +37,25 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
     <div className="flex flex-col h-full bg-zinc-900 relative">
       <Header onIngest={onIngest} />
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 min-h-0 relative">
-          <KnowledgeGraph />
+        {/* Main content area — tabbed (graph + note editors) */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <ContentTabBar />
+          <div className="flex-1 min-h-0 relative">
+            {contentTabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={`absolute inset-0 ${activeContentTabId === tab.id ? '' : 'hidden'}`}
+              >
+                {tab.type.kind === 'graph' ? (
+                  <KnowledgeGraph />
+                ) : (
+                  <div className="h-full overflow-y-auto bg-zinc-900">
+                    <NoteEditor nodeId={tab.type.noteId} isTab />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
         {activePanel !== 'none' && (
           <>

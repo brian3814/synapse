@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { PropertyEditor } from './PropertyEditor';
@@ -12,6 +12,7 @@ export function NodeDetailPanel() {
   const edges = useGraphStore((s) => s.edges);
   const updateNode = useGraphStore((s) => s.updateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
+  const selectNode = useGraphStore((s) => s.selectNode);
   const selectEdge = useGraphStore((s) => s.selectEdge);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const nodeTypesList = useNodeTypeStore((s) => s.types);
@@ -126,9 +127,6 @@ export function NodeDetailPanel() {
     return [...noteIds].map((id) => nodes.find((n) => n.id === id)).filter(Boolean) as typeof nodes;
   }, [node, edges, nodes]);
 
-  const forceActivePanel = useUIStore((s) => s.forceActivePanel);
-  const setPendingEditNoteId = useUIStore((s) => s.setPendingEditNoteId);
-
   // Multi-select: delegate to dedicated panel
   if (selectedNodeIds.size > 1) {
     return <MultiSelectPanel />;
@@ -143,8 +141,23 @@ export function NodeDetailPanel() {
   }
 
   const handleOpenNote = (noteId: string) => {
-    setPendingEditNoteId(noteId);
-    forceActivePanel('notes');
+    const noteNode = nodes.find(n => n.id === noteId);
+    useUIStore.getState().openContentTab(
+      { kind: 'noteEditor', noteId },
+      noteNode?.name ?? 'Note'
+    );
+  };
+
+  const handleNavigateToNode = (nodeId: string) => {
+    const targetNode = nodes.find((n) => n.id === nodeId);
+    if (targetNode) {
+      const { visibleLayers, toggleLayer } = useUIStore.getState();
+      const layer = targetNode.type as 'entity' | 'note' | 'resource';
+      if (!visibleLayers[layer]) toggleLayer(layer);
+    }
+    selectNode(nodeId);
+    const cb = useUIStore.getState().focusNodeCallback;
+    if (cb) cb(nodeId);
   };
 
   const handleSave = async () => {
@@ -335,16 +348,6 @@ export function NodeDetailPanel() {
           </div>
         )}
 
-        {/* Folder path (notes only) */}
-        {node.type === 'note' && node.folderPath !== undefined && (
-          <div>
-            <label className="text-xs font-medium text-zinc-400 block mb-1">Folder</label>
-            <span className="text-xs text-zinc-300 font-mono">
-              {node.folderPath || <em className="text-zinc-500">root</em>}
-            </span>
-          </div>
-        )}
-
         {/* Tags */}
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">Tags</label>
@@ -410,15 +413,16 @@ export function NodeDetailPanel() {
           </label>
           <div className="space-y-1">
             {connectedResources.map((src) => (
-              <div
+              <button
                 key={src.id}
-                className="text-xs text-indigo-400 break-all bg-zinc-800 rounded px-2 py-1 flex justify-between gap-2"
+                onClick={() => handleNavigateToNode(src.id)}
+                className="w-full text-left text-xs bg-zinc-800 rounded px-2 py-1 hover:bg-zinc-700 flex justify-between gap-2 transition-colors"
               >
-                <span className="truncate">{src.name}</span>
+                <span className="text-indigo-400 truncate">{src.name}</span>
                 <span className="text-zinc-500 shrink-0">
                   {src.noteCount} {src.noteCount === 1 ? 'note' : 'notes'}
                 </span>
-              </div>
+              </button>
             ))}
             {connectedResources.length === 0 && node.sourceUrl && (
               <span className="text-xs text-indigo-400 break-all">{node.sourceUrl}</span>

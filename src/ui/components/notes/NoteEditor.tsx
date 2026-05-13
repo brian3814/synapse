@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
-import { noteSearch, noteFolders, noteAttachments } from '../../../db/client/db-client';
+import { noteSearch, noteAttachments } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
@@ -13,17 +13,19 @@ type EditorTab = 'write' | 'preview';
 
 interface NoteEditorProps {
   nodeId: string | null; // null = new note
-  onBack: () => void;
+  onBack?: () => void;
+  isTab?: boolean;
 }
 
-export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
+export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps) {
+  const isNewNote = !rawNodeId || rawNodeId.startsWith('new-');
+  const nodeId = isNewNote ? null : rawNodeId;
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [folderPath, setFolderPath] = useState('');
-  const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<EditorTab>('write');
+  const [activeTab, setActiveTab] = useState<EditorTab>(isNewNote ? 'write' : 'preview');
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const graphStore = useGraphStore();
@@ -37,7 +39,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     const node = graphStore.nodes.find((n) => n.id === nodeId);
     if (node) {
       setTitle(node.name);
-      setFolderPath(node.folderPath ?? '');
     }
     // Read content from OPFS (canonical source)
     notes.read(nodeId).then((md) => {
@@ -65,22 +66,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     return () => channel.close();
   }, [nodeId]);
 
-  // Load the set of folder choices (distinct folder_paths from notes + markers).
-  useEffect(() => {
-    (async () => {
-      try {
-        const markers = await noteFolders.getAll();
-        const noteFolderPaths = new Set<string>(['']);
-        for (const n of useGraphStore.getState().nodes) {
-          if (n.type === 'note' && n.folderPath) noteFolderPaths.add(n.folderPath);
-        }
-        for (const m of markers) noteFolderPaths.add(m.path);
-        setFolderOptions([...noteFolderPaths].sort());
-      } catch {
-        setFolderOptions(['']);
-      }
-    })();
-  }, []);
 
   // Auto-focus textarea
   useEffect(() => {
@@ -104,7 +89,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         await graphStore.updateNode({
           id: nodeId,
           name: title,
-          folderPath,
           properties: { wikiLinks },
         });
       } else {
@@ -112,7 +96,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         const node = await graphStore.createNode({
           name: title,
           type: 'note',
-          folderPath,
           properties: { wikiLinks },
         });
 
@@ -145,15 +128,27 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
 
-      if (!nodeId) {
-        onBack();
+      if (!nodeId && isTab) {
+        const created = graphStore.nodes.find((n) => n.name === title && n.type === 'note');
+        if (created) {
+          useUIStore.getState().closeContentTab(`note-${rawNodeId ?? ''}`);
+          useUIStore.getState().openContentTab(
+            { kind: 'noteEditor', noteId: created.id },
+            title
+          );
+        }
+      } else if (!nodeId) {
+        onBack?.();
       }
     } catch (e: any) {
       console.error('[NoteEditor] Save failed:', e);
     } finally {
       setSaving(false);
     }
-  }, [title, content, nodeId, graphStore, onBack, folderPath]);
+      if (isTab && nodeId) {
+        useUIStore.getState().setContentTabTitle(`note-${nodeId}`, title);
+      }
+  }, [title, content, nodeId, graphStore, onBack, isTab]);
 
   // Keep effectiveNodeIdRef in sync
   useEffect(() => { effectiveNodeIdRef.current = nodeId; }, [nodeId]);
@@ -228,27 +223,30 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
     [insertImageFiles]
   );
 
-  // Ctrl+S / Cmd+S to save
+  // Ctrl+S / Cmd+S to save — only when this tab is active
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        if (isTab && useUIStore.getState().activeContentTabId !== `note-${rawNodeId}`) return;
         e.preventDefault();
         handleSave();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [handleSave]);
+  }, [handleSave, isTab, rawNodeId]);
 
   return (
     <div className="p-4 space-y-3 flex flex-col h-full">
       <div className="flex items-center gap-2">
-        <button
-          onClick={onBack}
-          className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
-        >
-          &larr; Back
-        </button>
+        {!isTab && (
+          <button
+            onClick={onBack}
+            className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
+          >
+            &larr; Back
+          </button>
+        )}
         <span className="text-xs text-zinc-500 ml-auto">
           {saved ? 'Saved!' : saving ? 'Saving...' : ''}
         </span>
@@ -261,26 +259,6 @@ export function NoteEditor({ nodeId, onBack }: NoteEditorProps) {
         placeholder="Note title..."
         className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600 font-medium"
       />
-
-      {/* Folder selection (three-layer model: Phase 5) */}
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        <span className="shrink-0">Folder:</span>
-        <select
-          value={folderPath}
-          onChange={(e) => setFolderPath(e.target.value)}
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-200 outline-none focus:border-indigo-500"
-        >
-          {folderOptions.map((opt) => (
-            <option key={opt || '__root__'} value={opt}>
-              {opt === '' ? '(root)' : opt}
-            </option>
-          ))}
-          {/* Allow typing a brand-new path by always listing the current value */}
-          {!folderOptions.includes(folderPath) && folderPath && (
-            <option value={folderPath}>{folderPath}</option>
-          )}
-        </select>
-      </div>
 
       {/* Write / Preview tabs */}
       <div className="flex border-b border-zinc-700 shrink-0">

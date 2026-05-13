@@ -407,7 +407,6 @@ export type DisplayMode = 'sidePanel' | 'tab' | 'desktop';
 export interface AppSettings {
   displayMode: DisplayMode;
   llmConfig?: LLMConfig;
-  clusteringEnabled: boolean;
   defaultLayout: string;
 }
 

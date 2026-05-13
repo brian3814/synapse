@@ -47,8 +47,6 @@ export function MultiSelectPanel() {
   const createEdge = useGraphStore((s) => s.createEdge);
   const selectNode = useGraphStore((s) => s.selectNode);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const forceActivePanel = useUIStore((s) => s.forceActivePanel);
-  const setPendingEditNoteId = useUIStore((s) => s.setPendingEditNoteId);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
   const [action, setAction] = useState<Action>('none');
@@ -107,9 +105,11 @@ export function MultiSelectPanel() {
       )
     );
 
-    // Navigate to NoteEditor
-    setPendingEditNoteId(noteNode.id);
-    forceActivePanel('notes');
+    // Open note in content tab
+    useUIStore.getState().openContentTab(
+      { kind: 'noteEditor', noteId: noteNode.id },
+      noteNode.name
+    );
   };
 
   // --- Delete All ---
