@@ -3,7 +3,7 @@
  * Canonical source — both Chrome offscreen and Electron main import from here.
  */
 
-export function getAgentSystemPrompt(notesEnabled: boolean): string {
+export function getAgentSystemPrompt(notesEnabled: boolean, customInstructions?: string): string {
   const notesRules = notesEnabled
     ? `
 
@@ -44,5 +44,5 @@ Rules for EDGES:
 - Ensure all edges reference entities that exist in your nodes array by their exact name.
 - Call save_entities exactly once when done — it is the terminal tool.${notesRules}
 
-Be efficient: don't call tools unnecessarily. If get_page_content gives you everything you need, proceed directly to save_entities.`;
+Be efficient: don't call tools unnecessarily. If get_page_content gives you everything you need, proceed directly to save_entities.${customInstructions ? `\n\n## Custom Instructions\n${customInstructions}` : ''}`;
 }

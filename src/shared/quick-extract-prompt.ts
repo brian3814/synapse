@@ -3,7 +3,7 @@
  * cross-cutting Phase 4 feature — when enabled, we add a `notes[]` array
  * alongside nodes/edges and instruct the LLM to produce focused prose units.
  */
-export function getQuickExtractSystemPrompt(notesEnabled: boolean): string {
+export function getQuickExtractSystemPrompt(notesEnabled: boolean, customInstructions?: string): string {
   const notesBlock = notesEnabled
     ? `
   "notes": [
@@ -67,7 +67,7 @@ Rules for EDGES:
 - Ensure all edges reference entities that exist in the nodes array by their exact name.
 - If none of the seed labels fit, use a short snake_case label describing the relationship.${notesRules}
 
-Return ONLY valid JSON, no other text.`;
+Return ONLY valid JSON, no other text.${customInstructions ? `\n\n## Custom Instructions\n${customInstructions}` : ''}`;
 }
 
 /** Backwards-compatible default export (notes off). */
