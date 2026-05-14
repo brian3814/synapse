@@ -7,6 +7,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   preference: 'bg-blue-900/40 text-blue-300 border-blue-800/50',
   fact: 'bg-emerald-900/40 text-emerald-300 border-emerald-800/50',
   instruction: 'bg-amber-900/40 text-amber-300 border-amber-800/50',
+  episodic: 'bg-purple-900/40 text-purple-300 border-purple-800/50',
 };
 
 export function MemorySection() {
@@ -15,8 +16,10 @@ export function MemorySection() {
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({ type: '', description: '', content: '' });
+  const [editTagsInput, setEditTagsInput] = useState('');
   const [addingNew, setAddingNew] = useState(false);
   const [newDraft, setNewDraft] = useState({ type: 'fact', name: '', description: '', content: '' });
+  const [tagsInput, setTagsInput] = useState('');
   const [clearing, setClearing] = useState(false);
 
   const refresh = async () => {
@@ -51,6 +54,7 @@ export function MemorySection() {
   const handleStartEdit = (m: MemoryEntry) => {
     setEditingFile(m.filename);
     setEditDraft({ type: m.type, description: m.description, content: m.content });
+    setEditTagsInput(m.tags.join(', '));
   };
 
   const handleSaveEdit = async () => {
@@ -62,8 +66,10 @@ export function MemorySection() {
       type: editDraft.type,
       description: editDraft.description,
       content: editDraft.content,
+      tags: editTagsInput.split(',').map(t => t.trim()).filter(Boolean),
     });
     setEditingFile(null);
+    setEditTagsInput('');
     await refresh();
   };
 
@@ -76,9 +82,11 @@ export function MemorySection() {
       name: newDraft.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
       description: newDraft.description.trim() || newDraft.content.trim().slice(0, 80),
       content: newDraft.content.trim(),
+      tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
     });
     setAddingNew(false);
     setNewDraft({ type: 'fact', name: '', description: '', content: '' });
+    setTagsInput('');
     await refresh();
   };
 
@@ -86,6 +94,7 @@ export function MemorySection() {
     preference: memories.filter((m) => m.type === 'preference'),
     fact: memories.filter((m) => m.type === 'fact'),
     instruction: memories.filter((m) => m.type === 'instruction'),
+    episodic: memories.filter((m) => m.type === 'episodic'),
   };
 
   return (
@@ -114,6 +123,7 @@ export function MemorySection() {
               <option value="fact">fact</option>
               <option value="preference">preference</option>
               <option value="instruction">instruction</option>
+              <option value="episodic">episodic</option>
             </select>
             <input
               type="text"
@@ -137,6 +147,16 @@ export function MemorySection() {
             rows={3}
             className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-100 resize-none"
           />
+          <div>
+            <label className="text-[10px] text-zinc-500 block mb-0.5">Tags (comma-separated)</label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g., communication, preferences"
+              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+            />
+          </div>
           <div className="flex gap-2">
             <button onClick={handleCreate} className="flex-1 bg-indigo-600 text-white text-xs py-1 rounded hover:bg-indigo-500">Save</button>
             <button onClick={() => setAddingNew(false)} className="flex-1 bg-zinc-700 text-zinc-300 text-xs py-1 rounded hover:bg-zinc-600">Cancel</button>
@@ -150,7 +170,7 @@ export function MemorySection() {
         <p className="text-xs text-zinc-500">No memories yet. The agent will learn about you as you chat.</p>
       ) : (
         <div className="space-y-3">
-          {(['preference', 'fact', 'instruction'] as const).map((category) => {
+          {(['preference', 'fact', 'instruction', 'episodic'] as const).map((category) => {
             const items = grouped[category];
             if (items.length === 0) return null;
             return (
@@ -171,6 +191,9 @@ export function MemorySection() {
                           className="flex-1 min-w-0 text-left"
                         >
                           {m.description || m.content.slice(0, 60)}
+                          {!m.valid && (
+                            <span className="text-[9px] text-zinc-600 italic ml-2">superseded</span>
+                          )}
                         </button>
                         <div className="flex gap-1 shrink-0">
                           <button
@@ -194,6 +217,13 @@ export function MemorySection() {
                           </button>
                         </div>
                       </div>
+                      {m.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {m.tags.map((tag) => (
+                            <span key={tag} className="text-[9px] bg-zinc-700 text-zinc-400 rounded px-1 py-0.5">{tag}</span>
+                          ))}
+                        </div>
+                      )}
 
                       {expandedFile === m.filename && editingFile !== m.filename && (
                         <div className="mt-1 px-2 py-1.5 bg-zinc-900 rounded text-[10px] text-zinc-400 whitespace-pre-wrap">
@@ -211,6 +241,7 @@ export function MemorySection() {
                             <option value="fact">fact</option>
                             <option value="preference">preference</option>
                             <option value="instruction">instruction</option>
+                            <option value="episodic">episodic</option>
                           </select>
                           <input
                             type="text"
@@ -224,6 +255,16 @@ export function MemorySection() {
                             rows={3}
                             className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-100 resize-none"
                           />
+                          <div>
+                            <label className="text-[10px] text-zinc-500 block mb-0.5">Tags (comma-separated)</label>
+                            <input
+                              type="text"
+                              value={editTagsInput}
+                              onChange={(e) => setEditTagsInput(e.target.value)}
+                              placeholder="e.g., communication, preferences"
+                              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
+                            />
+                          </div>
                           <div className="flex gap-2">
                             <button onClick={handleSaveEdit} className="flex-1 bg-indigo-600 text-white text-xs py-1 rounded hover:bg-indigo-500">Save</button>
                             <button onClick={() => setEditingFile(null)} className="flex-1 bg-zinc-700 text-zinc-300 text-xs py-1 rounded hover:bg-zinc-600">Cancel</button>
