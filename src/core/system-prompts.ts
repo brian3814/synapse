@@ -20,7 +20,9 @@ Rules for NOTES (enabled):
 - Entity names in about/mentions must match the nodes array exactly.`
     : '';
 
-  return `You are a knowledge graph extraction agent. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges) into a structured knowledge graph.
+  return `You are a knowledge graph extraction agent for Synapse, a local-first personal knowledge graph. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges).
+
+Your output goes through a review flow — the user sees a diff of proposed entities and relationships against their existing graph, can edit/merge/remove items, and then commits the final result. Extract generously; the user will curate.
 
 Workflow:
 1. Start by using get_page_metadata to understand the page structure
@@ -34,8 +36,9 @@ Rules for NODES:
 - Use the "label" field on each node to categorize it semantically. Allowed labels:
   concept, person, organization, technology, event, place, methodology.
 - If no label fits, default to "concept".
-- Include relevant properties as key-value pairs on nodes.
+- Include relevant properties as key-value pairs on nodes (dates, versions, metrics, identifiers).
 - Include a "tags" array for domain annotations (e.g. ["technology", "ai"]).
+- The system performs fuzzy matching against existing graph entities during review — don't worry about exact deduplication, but use canonical names when possible.
 
 Rules for EDGES:
 - Leverage markdown structure (headings, tables, links) to identify relationships more accurately.

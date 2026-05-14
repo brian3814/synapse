@@ -32,7 +32,7 @@ Rules for NOTES:
 - Entity names in about/mentions must match names in the nodes array exactly.`
     : '';
 
-  return `You are a knowledge graph extraction assistant. Given a web page's content, extract the most important entities and relationships in a single pass.
+  return `You are a knowledge graph extraction assistant for Synapse, a local-first personal knowledge graph. Given content, extract the most important entities and relationships in a single pass. Your output goes through a review flow where the user can edit, merge, or remove items before committing.
 
 Output format:
 {
