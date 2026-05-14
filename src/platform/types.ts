@@ -71,6 +71,8 @@ export interface AgentRequest {
   model: string;
   tabId?: number;
   notesEnabled: boolean;
+  customInstructions?: string;
+  disabledTools?: string[];
 }
 
 export interface ChatRequest {

@@ -34,6 +34,8 @@ export interface AgentLoopConfig {
   model: string;
   maxIterations?: number;
   notesEnabled?: boolean;
+  customInstructions?: string;
+  disabledTools?: string[];
 }
 
 export async function runAgentLoop(
@@ -43,8 +45,11 @@ export async function runAgentLoop(
   onProgress: (event: AgentProgressEvent) => void,
 ): Promise<void> {
   const maxIter = config.maxIterations ?? MAX_ITERATIONS;
-  const systemPrompt = getAgentSystemPrompt(config.notesEnabled ?? false);
-  const anthropicTools = toAnthropicTools(AGENT_TOOLS);
+  const systemPrompt = getAgentSystemPrompt(config.notesEnabled ?? false, config.customInstructions);
+  const filteredTools = config.disabledTools?.length
+    ? AGENT_TOOLS.filter((t) => t.name === 'save_entities' || !config.disabledTools!.includes(t.name))
+    : AGENT_TOOLS;
+  const anthropicTools = toAnthropicTools(filteredTools);
   const messages: AnthropicMessage[] = [{ role: 'user', content: config.userPrompt }];
 
   let totalInputTokens = 0;

@@ -109,6 +109,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       model: message.payload.model,
       maxIterations: message.payload.maxIterations,
       notesEnabled: message.payload.notesEnabled,
+      customInstructions: message.payload.customInstructions,
+      disabledTools: message.payload.disabledTools,
       onProgress: (event) => {
         if (event.type === 'llm_chunk') {
           chunkBuffer.add(event.text ?? '');

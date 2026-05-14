@@ -15,6 +15,8 @@ interface AgentLoopParams {
   model: string;
   maxIterations?: number;
   notesEnabled?: boolean;
+  customInstructions?: string;
+  disabledTools?: string[];
   onProgress: (event: AgentProgressEvent) => void;
 }
 
@@ -65,6 +67,8 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
       model: params.model,
       maxIterations: params.maxIterations,
       notesEnabled: params.notesEnabled,
+      customInstructions: params.customInstructions,
+      disabledTools: params.disabledTools,
     },
     streamAnthropicWithTools,
     toolExecutor,

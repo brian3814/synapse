@@ -79,6 +79,8 @@ export class ChromeLLM implements PlatformLLM {
           model: request.model,
           tabId: request.tabId,
           notesEnabled: request.notesEnabled,
+          customInstructions: request.customInstructions,
+          disabledTools: request.disabledTools,
         },
       });
     });

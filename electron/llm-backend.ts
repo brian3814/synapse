@@ -258,7 +258,7 @@ export async function handleStreamExtraction(payload: any, send: SendFn): Promis
 }
 
 export async function handleRunAgent(payload: any, send: SendFn): Promise<void> {
-  const { runId, userPrompt, model, notesEnabled } = payload;
+  const { runId, userPrompt, model, notesEnabled, customInstructions, disabledTools } = payload;
   try {
     const apiKey = await getApiKey();
 
@@ -280,7 +280,7 @@ export async function handleRunAgent(payload: any, send: SendFn): Promise<void> 
     };
 
     await coreRunAgentLoop(
-      { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false },
+      { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false, customInstructions, disabledTools },
       streamAnthropicWithTools,
       toolExecutor,
       (event: AgentProgressEvent) => {

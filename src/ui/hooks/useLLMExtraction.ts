@@ -7,6 +7,8 @@ import { createUICommandContext } from '../../commands/create-context';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
 import { getQuickExtractSystemPrompt } from '../../shared/quick-extract-prompt';
+import { AGENT_PROMPT_CONFIG_KEY, AGENT_TOOL_CONFIG_KEY } from '../../shared/agent-settings-types';
+import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
 
 const EXTRACTION_NOTES_ENABLED_KEY = 'extractionNotesEnabled';
 
@@ -184,6 +186,13 @@ export async function buildDiffItems(
 }
 
 export function useLLMExtraction() {
+  const getAgentConfig = useCallback(async () => {
+    const data = await storage.get([AGENT_PROMPT_CONFIG_KEY, AGENT_TOOL_CONFIG_KEY]);
+    const promptConfig = (data as any)[AGENT_PROMPT_CONFIG_KEY] as AgentPromptConfig | undefined;
+    const toolConfig = (data as any)[AGENT_TOOL_CONFIG_KEY] as AgentToolConfig | undefined;
+    return { promptConfig, toolConfig };
+  }, []);
+
   const startExtraction = useCallback(async (text: string, sourceUrl?: string) => {
     // Privacy disclosure gate
     const disc = await storage.get('privacyDisclosureAccepted') as Record<string, any>;
@@ -213,12 +222,13 @@ export function useLLMExtraction() {
       }
 
       const notesOn = await isNotesEnabled();
+      const { promptConfig } = await getAgentConfig();
 
       const streamResult = await llm.streamExtraction(
         {
           prompt: text,
           model: config.model,
-          systemPrompt: getQuickExtractSystemPrompt(notesOn),
+          systemPrompt: getQuickExtractSystemPrompt(notesOn, promptConfig?.extractionInstructions),
         },
         (chunk) => {
           useLLMStore.getState().appendToCurrentStep(chunk);
@@ -539,6 +549,7 @@ export function useLLMExtraction() {
     llmStore.setSourceUrl(sourceUrl ?? tab.url ?? null);
 
     const notesOn = await isNotesEnabled();
+    const { promptConfig, toolConfig } = await getAgentConfig();
 
     // Build agent prompt: include custom URL if provided, so the agent
     // uses fetch_url to retrieve it instead of reading the active tab.
@@ -555,6 +566,8 @@ export function useLLMExtraction() {
           model: config.model,
           tabId: tab.id,
           notesEnabled: notesOn,
+          customInstructions: promptConfig?.extractionInstructions,
+          disabledTools: toolConfig?.disabledExtractionTools,
         },
         async (event) => {
           const store = useLLMStore.getState();
@@ -1085,6 +1098,7 @@ export function useLLMExtraction() {
     llmStore.setSourceUrl(source.name);
 
     const notesOn = await isNotesEnabled();
+    const { promptConfig } = await getAgentConfig();
 
     try {
       const { result: extractionResult } = await runIngestionPipeline(
@@ -1108,7 +1122,7 @@ export function useLLMExtraction() {
             llm.streamExtraction(request, onChunk, (info) => {
               useLLMStore.getState().setRateLimitWait({ ...info, startedAt: Date.now() });
             }),
-          getSystemPrompt: getQuickExtractSystemPrompt,
+          getSystemPrompt: (notesEnabled: boolean) => getQuickExtractSystemPrompt(notesEnabled, promptConfig?.extractionInstructions),
           notesEnabled: notesOn,
           model: config.model,
         },
