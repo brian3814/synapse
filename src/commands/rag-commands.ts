@@ -2,6 +2,7 @@ import type { CommandContext } from './types';
 import { parseMarkdown } from '../notes/markdown-utils';
 import type { DbNode, DbEdge, DbSourceContent } from '../shared/types';
 import { embedding } from '@platform';
+import { extractSearchTerms } from '../utils/text-search';
 
 export interface RAGContext {
   relevantNodes: DbNode[];
@@ -29,36 +30,6 @@ function reciprocalRankFusion(
     scores.set(nodeId, (scores.get(nodeId) ?? 0) + 1 / (k + rank));
   });
   return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
-}
-
-function extractSearchTerms(question: string): string[] {
-  const stopWords = new Set([
-    'what', 'who', 'where', 'when', 'why', 'how', 'is', 'are', 'was', 'were',
-    'do', 'does', 'did', 'have', 'has', 'had', 'can', 'could', 'would', 'should',
-    'will', 'shall', 'may', 'might', 'the', 'a', 'an', 'and', 'or', 'but', 'in',
-    'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'about', 'between',
-    'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down',
-    'i', 'me', 'my', 'we', 'our', 'you', 'your', 'they', 'them', 'their',
-    'it', 'its', 'this', 'that', 'these', 'those', 'know', 'tell', 'give',
-    'find', 'show', 'get', 'all', 'any', 'some', 'every', 'each', 'much',
-    'many', 'more', 'most', 'other', 'another', 'such', 'no', 'not', 'only',
-    'very', 'just', 'also', 'than', 'too', 'so', 'if', 'then', 'because',
-    'while', 'although', 'though', 'even', 'still', 'already', 'yet',
-  ]);
-
-  const quotedPhrases: string[] = [];
-  const withoutQuotes = question.replace(/"([^"]+)"/g, (_, phrase) => {
-    quotedPhrases.push(phrase.trim());
-    return '';
-  });
-
-  const words = withoutQuotes
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !stopWords.has(w));
-
-  return [...quotedPhrases, ...words];
 }
 
 async function findRelevantNodes(ctx: CommandContext, terms: string[], limit = 30): Promise<DbNode[]> {
