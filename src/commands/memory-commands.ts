@@ -8,6 +8,11 @@ export interface MemoryEntry {
   content: string;
   created_at: string;
   updated_at: string;
+  tags: string[];
+  superseded_by: string | null;
+  valid: boolean;
+  access_count: number;
+  last_accessed: string | null;
 }
 
 interface WriteMemoryInput {
@@ -21,7 +26,7 @@ interface WriteMemoryInput {
 
 const FILENAME_RE = /^[a-z0-9_-]+\.md$/;
 const NAME_RE = /^[a-z0-9-]+$/;
-const VALID_TYPES = ['preference', 'fact', 'instruction'];
+const VALID_TYPES = ['preference', 'fact', 'instruction', 'episodic'];
 
 function validateFilename(filename: string): void {
   if (!FILENAME_RE.test(filename)) {
@@ -40,8 +45,8 @@ function escapeYaml(value: string): string {
   return clean;
 }
 
-function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } {
-  const meta: Record<string, string> = {};
+function parseFrontmatter(raw: string): { meta: Record<string, any>; body: string } {
+  const meta: Record<string, any> = {};
   if (!raw.startsWith('---')) {
     return { meta, body: raw };
   }
@@ -56,6 +61,15 @@ function parseFrontmatter(raw: string): { meta: Record<string, string>; body: st
     if (colon === -1) continue;
     const key = line.slice(0, colon).trim();
     let value = line.slice(colon + 1).trim();
+
+    if (value.startsWith('[') && value.endsWith(']')) {
+      meta[key] = value.slice(1, -1).split(',').map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    if (value === 'true') { meta[key] = true; continue; }
+    if (value === 'false') { meta[key] = false; continue; }
+    if (value === '' || value === 'null') { meta[key] = null; continue; }
+    if (/^\d+$/.test(value)) { meta[key] = parseInt(value, 10); continue; }
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
@@ -65,13 +79,36 @@ function parseFrontmatter(raw: string): { meta: Record<string, string>; body: st
   return { meta, body };
 }
 
-function generateMemoryFile(entry: { name: string; type: string; description: string; content: string; created_at: string; updated_at: string }): string {
+function generateMemoryFile(entry: {
+  name: string;
+  type: string;
+  description: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  tags?: string[];
+  superseded_by?: string | null;
+  valid?: boolean;
+  access_count?: number;
+  last_accessed?: string | null;
+}): string {
+  const tags = entry.tags?.length ? `[${entry.tags.join(', ')}]` : '[]';
+  const valid = entry.valid !== false ? 'true' : 'false';
+  const accessCount = entry.access_count ?? 0;
+  const lastAccessed = entry.last_accessed ?? '';
+  const supersededBy = entry.superseded_by ?? '';
+
   return `---
 name: ${escapeYaml(entry.name)}
 description: ${escapeYaml(entry.description)}
 type: ${entry.type}
+tags: ${tags}
+superseded_by: ${supersededBy}
+valid: ${valid}
 created_at: ${entry.created_at}
 updated_at: ${entry.updated_at}
+access_count: ${accessCount}
+last_accessed: ${lastAccessed}
 ---
 
 ${entry.content}`;
@@ -103,6 +140,11 @@ export async function listMemories(ctx: CommandContext): Promise<MemoryEntry[]> 
       content: body,
       created_at: meta.created_at ?? '',
       updated_at: meta.updated_at ?? '',
+      tags: Array.isArray(meta.tags) ? meta.tags : [],
+      superseded_by: meta.superseded_by ?? null,
+      valid: meta.valid !== false,
+      access_count: typeof meta.access_count === 'number' ? meta.access_count : 0,
+      last_accessed: meta.last_accessed ?? null,
     });
   }
 
@@ -123,6 +165,11 @@ export async function readMemory(ctx: CommandContext, filename: string): Promise
     content: body,
     created_at: meta.created_at ?? '',
     updated_at: meta.updated_at ?? '',
+    tags: Array.isArray(meta.tags) ? meta.tags : [],
+    superseded_by: meta.superseded_by ?? null,
+    valid: meta.valid !== false,
+    access_count: typeof meta.access_count === 'number' ? meta.access_count : 0,
+    last_accessed: meta.last_accessed ?? null,
   };
 }
 
@@ -223,6 +270,11 @@ export async function loadAllForPrompt(ctx: CommandContext): Promise<Array<{ cat
   }
 
   return result;
+}
+
+export async function loadValidMemories(ctx: CommandContext): Promise<MemoryEntry[]> {
+  const all = await listMemories(ctx);
+  return all.filter((e) => e.valid !== false);
 }
 
 export async function executeManageMemory(ctx: CommandContext, input: Record<string, unknown>): Promise<string> {
