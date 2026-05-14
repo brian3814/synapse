@@ -591,6 +591,50 @@ The RAG prompt includes node IDs in entity listings (`(id:abc-123)`) and instruc
 
 ---
 
+## Agent Settings Panel
+
+User-configurable agent behavior via Settings → Agent tab. Hybrid storage model:
+
+- **App-level** (`PlatformStorage`): Prompt customization (`agentPromptConfig`) and tool toggles (`agentToolConfig`). Extraction and chat agents have independent custom instructions (append-only) and per-tool enable/disable toggles.
+- **Vault-level** (`.kg/agent-config.json`): Sandbox rules — directory allowlist and extension blocklist. Enforced in `VaultFileWatcher` and `ResourceDetectionHandler`.
+
+Tool filtering happens at call time: `AGENT_TOOLS` filtered in `agent-loop.ts`, `CHAT_AGENT_TOOLS` filtered in `chat-agent-loop.ts`. `save_entities` is never filterable.
+
+---
+
+## Agent Memory System
+
+Governed memory with modular retrieval pipeline. Files in `.kg/agent/memory/` are the source of truth with extended YAML frontmatter (`tags`, `valid`, `superseded_by`, `access_count`, `last_accessed`).
+
+### Write Path
+
+The agent self-governs via system prompt rules (Memory Guidelines). The `manage_memory` tool accepts `tags` for retrieval keywords and `supersedes` to replace an old memory (marks it `valid: false`). Episodic summaries (session end) write to files (`episodic_{date}-{slug}.md`) with richer LLM output (JSON: summary + tags + slug).
+
+### Read Path
+
+```
+User query → loadValidMemories() → metadata retriever → RRF fuser → annotated formatter → prompt
+```
+
+The metadata retriever scores memories by: tag match (×2.0), content word match (×1.0), recency (+0.5), access frequency (+0.3), instruction type (+0.2). Falls back to top-3 by access count when nothing matches. Output format: `- [type, ★★★] content` with 3-tier confidence stars.
+
+The pipeline is pluggable — a vector retriever (Phase 2) can be added alongside metadata retrieval with RRF fusion combining both signal sources.
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `src/memory/types.ts` | Pipeline interfaces: `MemoryRetriever`, `MemoryFuser`, `MemoryFormatter` |
+| `src/memory/pipeline.ts` | `retrieveMemories()` runner |
+| `src/memory/retrievers/metadata-retriever.ts` | Tag/keyword scoring |
+| `src/memory/fusers/rrf-fuser.ts` | Reciprocal rank fusion (k=60) |
+| `src/memory/formatters/annotated-formatter.ts` | Confidence-annotated output |
+| `src/memory/governance.ts` | `markSuperseded()`, `updateAccessStats()` |
+| `src/commands/memory-commands.ts` | `MemoryEntry` type, file I/O, `loadValidMemories()` |
+| `src/core/prompt-assembler.ts` | `assembleSystemPrompt()` with `memoryContext` + Memory Guidelines |
+
+---
+
 ## Pitfalls Encountered and Solutions
 
 ### Pitfall #1: Troika Blob URL Workers Blocked by Chrome Extension CSP
