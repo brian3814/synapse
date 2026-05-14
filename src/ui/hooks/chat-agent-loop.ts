@@ -22,7 +22,6 @@ export interface ChatAgentProgress {
 }
 
 const MAX_ITERATIONS = 10;
-const BASE_TOOL_DEFS = toAnthropicChatTools(CHAT_AGENT_TOOLS);
 
 const SEMANTIC_SEARCH_TOOL = {
   name: 'semantic_search',
@@ -37,9 +36,20 @@ const SEMANTIC_SEARCH_TOOL = {
   },
 };
 
-function getToolDefs(): typeof BASE_TOOL_DEFS {
-  if (platformId !== 'electron') return BASE_TOOL_DEFS;
-  return [...BASE_TOOL_DEFS, SEMANTIC_SEARCH_TOOL];
+function getToolDefs(disabledTools?: string[]) {
+  let defs = [...CHAT_AGENT_TOOLS];
+
+  if (disabledTools?.length) {
+    defs = defs.filter((t) => !disabledTools.includes(t.name));
+  }
+
+  const tools = toAnthropicChatTools(defs);
+
+  if (platformId === 'electron' && !disabledTools?.includes('semantic_search')) {
+    tools.push(SEMANTIC_SEARCH_TOOL);
+  }
+
+  return tools;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +63,7 @@ interface RunChatAgentParams {
   provider: string;
   model: string;
   systemPrompt: string;
+  disabledTools?: string[];
   onProgress: (event: ChatAgentProgress) => void;
 }
 
@@ -63,6 +74,7 @@ export async function runChatAgent({
   provider,
   model,
   systemPrompt,
+  disabledTools,
   onProgress,
 }: RunChatAgentParams): Promise<string> {
   // Build initial messages: prior turns + current user message
@@ -93,7 +105,7 @@ export async function runChatAgent({
         model,
         systemPrompt,
         messages,
-        tools: getToolDefs(),
+        tools: getToolDefs(disabledTools),
       },
       onProgress,
     );

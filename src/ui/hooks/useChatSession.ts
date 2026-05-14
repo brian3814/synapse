@@ -10,7 +10,7 @@ import { assembleSystemPrompt } from '../../core/prompt-assembler';
 import { summarizeSession } from '../../core/memory-extractor';
 import { createUICommandContext } from '../../commands/create-context';
 import * as memoryCommands from '../../commands/memory-commands';
-import type { AgentPromptConfig } from '../../shared/agent-settings-types';
+import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -151,8 +151,9 @@ export function useChatSession() {
       const { config } = await fetchLLMConfigAndTypes();
 
       // Assemble system prompt with harness context
-      const storageData = await storage.get(['agentPromptConfig', 'harnessPresets', 'harnessActivePresetId']);
+      const storageData = await storage.get(['agentPromptConfig', 'agentToolConfig', 'harnessPresets', 'harnessActivePresetId']);
       const promptConfig = (storageData as any).agentPromptConfig as AgentPromptConfig | undefined;
+      const toolConfig = (storageData as any).agentToolConfig as AgentToolConfig | undefined;
       const globalInstructions = promptConfig?.chatInstructions || null;
       const presets = (storageData as any).harnessPresets ?? [];
       const activePresetId = (storageData as any).harnessActivePresetId ?? null;
@@ -182,6 +183,7 @@ export function useChatSession() {
         provider: config.provider,
         model: config.model,
         systemPrompt,
+        disabledTools: toolConfig?.disabledChatTools,
         onProgress: (event: ChatAgentProgress) => {
           switch (event.type) {
             case 'text_chunk':
