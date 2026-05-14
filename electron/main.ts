@@ -405,11 +405,13 @@ app.whenReady().then(() => {
     syncBroadcastHandler = new SyncBroadcastHandler();
     syncBroadcastHandler.register(ctx.eventBus);
 
-    resourceDetectionHandler = new ResourceDetectionHandler(ctx);
+    const getSandboxConfig = () => vaultManager.getContext()!.sandboxConfig;
+
+    resourceDetectionHandler = new ResourceDetectionHandler(ctx, getSandboxConfig);
     resourceDetectionHandler.register(ctx.eventBus);
 
     // Start file watcher for live changes
-    fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus);
+    fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
     fileWatcher.start();
   }
 

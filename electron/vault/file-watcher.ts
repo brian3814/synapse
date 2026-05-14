@@ -1,6 +1,7 @@
 import { watch, statSync, existsSync, type FSWatcher } from 'fs';
 import { sep } from 'path';
 import type { VaultEventBus } from './event-bus';
+import type { VaultSandboxConfig } from '../../src/shared/agent-settings-types';
 
 const IGNORE_DIRS = new Set(['.kg', '.git', 'node_modules']);
 const IGNORE_FILES = new Set(['.DS_Store', 'Thumbs.db', '.gitignore']);
@@ -12,10 +13,12 @@ export class VaultFileWatcher {
   private eventBus: VaultEventBus;
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private recentlyWritten = new Set<string>();
+  private getSandboxConfig: () => VaultSandboxConfig;
 
-  constructor(vaultPath: string, eventBus: VaultEventBus) {
+  constructor(vaultPath: string, eventBus: VaultEventBus, getSandboxConfig: () => VaultSandboxConfig) {
     this.vaultPath = vaultPath;
     this.eventBus = eventBus;
+    this.getSandboxConfig = getSandboxConfig;
   }
 
   start(): void {
@@ -106,6 +109,17 @@ export class VaultFileWatcher {
     // Ignore specific filenames
     const filename = parts[parts.length - 1];
     if (IGNORE_FILES.has(filename)) return true;
+
+    // Sandbox: blocked extensions
+    const sandbox = this.getSandboxConfig();
+    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
+    if (ext && sandbox.blockedExtensions.includes(ext.toLowerCase())) return true;
+
+    // Sandbox: allowed directories (empty = allow all)
+    if (sandbox.allowedDirs.length > 0) {
+      const inAllowed = sandbox.allowedDirs.some((dir) => relativePath.startsWith(dir));
+      if (!inAllowed) return true;
+    }
 
     return false;
   }

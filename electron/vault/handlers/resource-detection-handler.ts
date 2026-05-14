@@ -3,6 +3,7 @@ import { extname, basename } from 'path';
 import { randomUUID } from 'crypto';
 import type { VaultContext } from '../vault-context';
 import type { VaultEventBus } from '../event-bus';
+import type { VaultSandboxConfig } from '../../../src/shared/agent-settings-types';
 
 const MIME_MAP: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -25,9 +26,11 @@ const MIME_MAP: Record<string, string> = {
 export class ResourceDetectionHandler {
   private ctx: VaultContext;
   private unsubscribers: (() => void)[] = [];
+  private getSandboxConfig: () => VaultSandboxConfig;
 
-  constructor(ctx: VaultContext) {
+  constructor(ctx: VaultContext, getSandboxConfig: () => VaultSandboxConfig) {
     this.ctx = ctx;
+    this.getSandboxConfig = getSandboxConfig;
   }
 
   register(eventBus: VaultEventBus): void {
@@ -47,6 +50,15 @@ export class ResourceDetectionHandler {
   }
 
   private handleFileAdded(relativePath: string): void {
+    // Sandbox check
+    const sandbox = this.getSandboxConfig();
+    const ext = extname(relativePath).toLowerCase();
+    if (ext && sandbox.blockedExtensions.includes(ext)) return;
+    if (sandbox.allowedDirs.length > 0) {
+      const inAllowed = sandbox.allowedDirs.some((dir) => relativePath.startsWith(dir));
+      if (!inAllowed) return;
+    }
+
     // Check if a node already exists for this path
     const existing = this.ctx.db.prepare(
       'SELECT id FROM nodes WHERE vault_path = ?'
@@ -67,7 +79,6 @@ export class ResourceDetectionHandler {
       return;
     }
 
-    const ext = extname(relativePath).toLowerCase();
     const name = basename(relativePath, ext);
     const contentType = MIME_MAP[ext] ?? null;
     const id = randomUUID();
