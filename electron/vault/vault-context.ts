@@ -2,6 +2,8 @@ import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import type Database from 'better-sqlite3';
 import { VaultEventBus } from './event-bus';
+import type { VaultSandboxConfig } from '../../src/shared/agent-settings-types';
+import { DEFAULT_SANDBOX_CONFIG } from '../../src/shared/agent-settings-types';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ export interface VaultContext {
   readonly db: Database.Database;
   readonly config: VaultConfig;
   readonly eventBus: VaultEventBus;
+  sandboxConfig: VaultSandboxConfig;
 
   resolve(relativePath: string): string;
   relative(absolutePath: string): string;
@@ -38,6 +41,17 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
   const config: VaultConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   const eventBus = new VaultEventBus();
 
+  // Load sandbox config
+  const agentConfigPath = join(kgPath, 'agent-config.json');
+  let sandboxConfig: VaultSandboxConfig = { ...DEFAULT_SANDBOX_CONFIG };
+  if (existsSync(agentConfigPath)) {
+    try {
+      sandboxConfig = JSON.parse(readFileSync(agentConfigPath, 'utf-8'));
+    } catch {
+      // Corrupt file — use defaults
+    }
+  }
+
   return {
     path: vaultPath,
     kgPath,
@@ -46,6 +60,7 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
     db,
     config,
     eventBus,
+    sandboxConfig,
 
     resolve(relativePath: string): string {
       return join(vaultPath, relativePath);

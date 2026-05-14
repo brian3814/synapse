@@ -14,6 +14,7 @@ import { registerEmbeddingHandlers, setupProgressBroadcast } from './embeddings/
 import { readNote } from './notes-backend';
 import { VaultManager } from './vault/vault-manager';
 import { scaffoldVault } from './vault/vault-context';
+import type { VaultSandboxConfig } from '../src/shared/agent-settings-types';
 import { NoteFileHandler } from './vault/handlers/note-file-handler';
 import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
@@ -372,7 +373,7 @@ app.whenReady().then(() => {
     }
   });
 
-  startCompanionServer();
+  startCompanionServer(storage);
 
   // ── Vault Workspace Management ──────────────────────────────────────
   const vaultManager = new VaultManager(storage);
@@ -470,6 +471,20 @@ app.whenReady().then(() => {
   ipcMain.handle('vault-workspace:close', async () => {
     unregisterVaultHandlers();
     await vaultManager.close();
+  });
+
+  ipcMain.handle('vault-workspace:get-sandbox-config', () => {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return null;
+    return ctx.sandboxConfig;
+  });
+
+  ipcMain.handle('vault-workspace:set-sandbox-config', (_event, config: VaultSandboxConfig) => {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return;
+    ctx.sandboxConfig = config;
+    const agentConfigPath = path.join(ctx.kgPath, 'agent-config.json');
+    fs.writeFileSync(agentConfigPath, JSON.stringify(config, null, 2), 'utf-8');
   });
 
   // Open a vault in a new OS process — keeps current instance running

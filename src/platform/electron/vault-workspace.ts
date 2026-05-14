@@ -1,3 +1,5 @@
+import type { VaultSandboxConfig } from '../../shared/agent-settings-types';
+
 declare const window: Window & {
   electronIPC: {
     invoke(channel: string, ...args: unknown[]): Promise<unknown>;
@@ -51,5 +53,13 @@ export const vaultWorkspace = {
 
   async close(): Promise<void> {
     await window.electronIPC.invoke('vault-workspace:close');
+  },
+
+  async getSandboxConfig(): Promise<VaultSandboxConfig | null> {
+    return window.electronIPC.invoke('vault-workspace:get-sandbox-config') as Promise<VaultSandboxConfig | null>;
+  },
+
+  async setSandboxConfig(config: VaultSandboxConfig): Promise<void> {
+    await window.electronIPC.invoke('vault-workspace:set-sandbox-config', config);
   },
 };
