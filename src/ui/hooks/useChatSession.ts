@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { chat, memory as memoryDb, noteSearch, sourceContent } from '../../db/client/db-client';
+import { chat, noteSearch, sourceContent } from '../../db/client/db-client';
 import { type AttachedNode } from '../../graph/store/chat-context-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { serializeAttachedContext } from '../utils/chat-context-serializer';
@@ -9,7 +9,11 @@ import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubg
 import { assembleSystemPrompt } from '../../core/prompt-assembler';
 import { summarizeSession } from '../../core/memory-extractor';
 import { createUICommandContext } from '../../commands/create-context';
-import * as memoryCommands from '../../commands/memory-commands';
+import { loadValidMemories } from '../../commands/memory-commands';
+import { retrieveMemories } from '../../memory/pipeline';
+import { createMetadataRetriever } from '../../memory/retrievers/metadata-retriever';
+import { createRRFFuser } from '../../memory/fusers/rrf-fuser';
+import { createAnnotatedFormatter } from '../../memory/formatters/annotated-formatter';
 import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
@@ -162,15 +166,32 @@ export function useChatSession() {
         : null;
 
       const memCtx = createUICommandContext();
-      const semanticMemories = await memoryCommands.loadAllForPrompt(memCtx);
-      const episodicSummaries = await memoryDb.getRecentEpisodic(3) as Array<{ summary: string }>;
+      const allMemories = await loadValidMemories(memCtx);
+
+      const { formatted: memoryContext } = await retrieveMemories(
+        input,
+        allMemories,
+        [createMetadataRetriever()],
+        createRRFFuser(),
+        createAnnotatedFormatter(),
+        { topK: 10, charBudget: 2000 },
+        memCtx,
+      );
+
+      const episodicMemories = allMemories
+        .filter((m) => m.type === 'episodic')
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+        .slice(0, 3);
 
       const systemPrompt = assembleSystemPrompt({
         globalInstructions,
         presetPrompt: activePreset?.prompt ?? null,
         presetName: activePreset?.name ?? null,
-        semanticMemories,
-        recentSessionSummaries: episodicSummaries,
+        memoryContext,
+        recentSessionSummaries: episodicMemories.map((m) => ({
+          summary: m.content,
+          created_at: m.created_at,
+        })),
       });
 
       // Run agentic chat loop
