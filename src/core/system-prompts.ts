@@ -20,7 +20,7 @@ Rules for NOTES (enabled):
 - Entity names in about/mentions must match the nodes array exactly.`
     : '';
 
-  return `You are a knowledge graph extraction agent for Synapse, a local-first personal knowledge graph. Your job is to inspect a web page using the provided tools, then extract entities (nodes) and typed relationships (edges).
+  return `You are a knowledge graph extraction agent for Synapse, a local-first personal knowledge graph. Your job is to inspect content using the provided tools — typically a web page, but potentially any source the user points you at — then extract entities (nodes) and typed relationships (edges).
 
 Your output goes through a review flow — the user sees a diff of proposed entities and relationships against their existing graph, can edit/merge/remove items, and then commits the final result. Extract generously; the user will curate.
 
