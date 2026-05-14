@@ -261,6 +261,15 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
           type: 'string',
           description: 'Memory content (markdown)',
         },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Keywords for retrieval (3-5 tags)',
+        },
+        supersedes: {
+          type: 'string',
+          description: 'Filename of the memory this one replaces (marks old one invalid)',
+        },
       },
       required: ['action'],
     },

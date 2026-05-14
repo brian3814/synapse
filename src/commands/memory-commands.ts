@@ -22,6 +22,8 @@ interface WriteMemoryInput {
   name?: string;
   description?: string;
   content?: string;
+  tags?: string[];
+  supersedes?: string;
 }
 
 const FILENAME_RE = /^[a-z0-9_-]+\.md$/;
@@ -187,7 +189,9 @@ export async function writeMemory(ctx: CommandContext, input: WriteMemoryInput):
       throw new Error(`Invalid name: ${input.name}. Must be kebab-case [a-z0-9-]`);
     }
 
-    const filename = `${input.type}_${input.name}.md`;
+    const filename = input.type === 'episodic'
+      ? `episodic_${input.name}.md`
+      : `${input.type}_${input.name}.md`;
     validateFilename(filename);
 
     const existing = await ctx.files.read(`memory/${filename}`);
@@ -202,9 +206,16 @@ export async function writeMemory(ctx: CommandContext, input: WriteMemoryInput):
       content: input.content,
       created_at: now,
       updated_at: now,
+      tags: input.tags,
     });
 
     await ctx.files.write(`memory/${filename}`, content);
+
+    if (input.supersedes) {
+      const { markSuperseded } = await import('../memory/governance');
+      await markSuperseded(ctx, input.supersedes, filename);
+    }
+
     await regenerateIndex(ctx);
     return filename;
   }
@@ -223,6 +234,11 @@ export async function writeMemory(ctx: CommandContext, input: WriteMemoryInput):
       content: input.content ?? existing.content,
       created_at: existing.created_at || now,
       updated_at: now,
+      tags: input.tags ?? existing.tags,
+      superseded_by: existing.superseded_by,
+      valid: existing.valid,
+      access_count: existing.access_count,
+      last_accessed: existing.last_accessed,
     });
 
     await ctx.files.write(`memory/${input.filename}`, updated);
@@ -301,6 +317,8 @@ export async function executeManageMemory(ctx: CommandContext, input: Record<str
       name: input.name as string | undefined,
       description: input.description as string | undefined,
       content: input.content as string | undefined,
+      tags: input.tags as string[] | undefined,
+      supersedes: input.supersedes as string | undefined,
     });
     return JSON.stringify({ success: true, action, filename });
   } catch (e: any) {
