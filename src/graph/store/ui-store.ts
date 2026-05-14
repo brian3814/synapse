@@ -7,7 +7,8 @@ type ChatDisplayMode = 'float' | 'sidebar';
 
 export type ContentTabType =
   | { kind: 'graph' }
-  | { kind: 'noteEditor'; noteId: string };
+  | { kind: 'noteEditor'; noteId: string }
+  | { kind: 'extractionReview' };
 
 export interface ContentTab {
   id: string;
@@ -19,10 +20,12 @@ export interface ContentColumn {
   id: string;
   tabs: ContentTab[];
   activeTabId: string;
+  flex: number;
 }
 
 function contentTabId(type: ContentTabType): string {
   if (type.kind === 'graph') return 'graph';
+  if (type.kind === 'extractionReview') return 'extraction-review';
   return `note-${type.noteId}`;
 }
 
@@ -95,6 +98,7 @@ interface UIStore {
   moveTabToColumn: (tabId: string, targetColumnId: string) => void;
   reorderContentTabs: (fromColId: string, toColId: string, fromIndex: number, toIndex: number) => void;
   insertColumnAt: (tabId: string, columnIndex: number) => void;
+  setColumnFlex: (columnId: string, flex: number) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -136,6 +140,7 @@ export const useUIStore = create<UIStore>((set) => ({
     id: 'col-0',
     tabs: [{ id: 'graph', type: { kind: 'graph' } as ContentTabType, title: 'Graph' }],
     activeTabId: 'graph',
+    flex: 1,
   }],
   activeColumnId: 'col-0',
 
@@ -222,6 +227,7 @@ export const useUIStore = create<UIStore>((set) => ({
       id: newColId,
       tabs: [tab],
       activeTabId: tab.id,
+      flex: 1,
     });
     return { contentColumns: updatedCols, activeColumnId: newColId };
   }),
@@ -289,7 +295,7 @@ export const useUIStore = create<UIStore>((set) => ({
     const tab = srcCol.tabs[found.tabIdx];
     const remainingTabs = srcCol.tabs.filter(t => t.id !== tabId);
     const newColId = nextColumnId();
-    const newCol: ContentColumn = { id: newColId, tabs: [tab], activeTabId: tab.id };
+    const newCol: ContentColumn = { id: newColId, tabs: [tab], activeTabId: tab.id, flex: 1 };
     let cols = state.contentColumns.map(c => {
       if (c.id !== srcCol.id) return c;
       if (remainingTabs.length === 0) return null;
@@ -299,6 +305,12 @@ export const useUIStore = create<UIStore>((set) => ({
     cols.splice(insertIdx, 0, newCol);
     return { contentColumns: cols, activeColumnId: newColId };
   }),
+
+  setColumnFlex: (columnId, flex) => set((state) => ({
+    contentColumns: state.contentColumns.map(c =>
+      c.id === columnId ? { ...c, flex: Math.max(0.2, flex) } : c
+    ),
+  })),
 
   toggleLayer: (layer) =>
     set((state) => {

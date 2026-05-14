@@ -25,6 +25,7 @@ export function ReadingListPanel() {
   const [mergingUrl, setMergingUrl] = useState<string | null>(null);
   const [expandedUrls, setExpandedUrls] = useState<string[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
 
   // Vault info for filtering + add form
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
@@ -153,26 +154,43 @@ export function ReadingListPanel() {
         ))}
       </div>
 
-      {/* Pending tab: batch action bar */}
+      {/* Pending tab: select mode bar */}
       {activeTab === 'pending' && pending.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
-          <button
-            onClick={() => {
-              if (selectedUrls.length === pending.length) clearSelection();
-              else selectAllPending();
-            }}
-            className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            {selectedUrls.length === pending.length ? 'Deselect All' : 'Select All'}
-          </button>
-          <div className="flex-1" />
-          {selectedPendingCount > 0 && (
+          {!selectMode ? (
             <button
-              onClick={startBatchExtraction}
-              className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors"
+              onClick={() => setSelectMode(true)}
+              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
             >
-              Extract ({selectedPendingCount})
+              Select
             </button>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  if (selectedUrls.length === pending.length) clearSelection();
+                  else selectAllPending();
+                }}
+                className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                {selectedUrls.length === pending.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={() => { clearSelection(); setSelectMode(false); }}
+                className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                Clear
+              </button>
+              <div className="flex-1" />
+              {selectedPendingCount > 0 && (
+                <button
+                  onClick={() => { startBatchExtraction(); setSelectMode(false); }}
+                  className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors"
+                >
+                  Extract ({selectedPendingCount})
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -205,6 +223,7 @@ export function ReadingListPanel() {
               key={item.url}
               item={item}
               mode={activeTab}
+              selectMode={selectMode}
               selected={selectedUrl === item.url}
               checked={selectedUrls.includes(item.url)}
               expanded={expandedUrls.includes(item.url)}

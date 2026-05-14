@@ -8,6 +8,7 @@ import { useAuthStore } from '../graph/store/auth-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { useCompanionCapture } from './hooks/useCompanionCapture';
 import { useLLMExtraction } from './hooks/useLLMExtraction';
+import { useLLMStore } from '../graph/store/llm-store';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
 import { TabLayout } from './layouts/TabLayout';
@@ -141,6 +142,16 @@ function AppMain() {
       };
     }
   }, [ready, loadAll, loadTypes, startSyncListener]);
+
+  useEffect(() => {
+    const extractionStates = new Set(['extracting', 'agent-running']);
+    return useLLMStore.subscribe((state, prev) => {
+      if (extractionStates.has(state.status) && prev.status === 'idle') {
+        useUIStore.getState().setLLMModalOpen(false);
+        useUIStore.getState().openContentTab({ kind: 'extractionReview' }, 'Extraction');
+      }
+    });
+  }, []);
 
   if (dbError) {
     return (

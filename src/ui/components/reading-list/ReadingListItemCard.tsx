@@ -4,6 +4,7 @@ import { useReadingListStore } from '../../../graph/store/reading-list-store';
 interface Props {
   item: ReadingListItem;
   mode: 'pending' | 'processing' | 'ready';
+  selectMode?: boolean;
   selected: boolean;
   checked: boolean;
   expanded: boolean;
@@ -33,7 +34,7 @@ function timeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
-export function ReadingListItemCard({ item, mode, selected, checked, expanded, onSelect, onCheck, onToggleExpand, onMerge, isMerging }: Props) {
+export function ReadingListItemCard({ item, mode, selectMode, selected, checked, expanded, onSelect, onCheck, onToggleExpand, onMerge, isMerging }: Props) {
   const retryExtraction = useReadingListStore((s) => s.retryExtraction);
   const entityCount = item.extractedNodes?.length ?? 0;
   const edgeCount = item.extractedEdges?.length ?? 0;
@@ -41,7 +42,7 @@ export function ReadingListItemCard({ item, mode, selected, checked, expanded, o
   if (mode === 'pending') {
     return (
       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700/50">
-        {item.status === 'pending' && (
+        {selectMode && item.status === 'pending' && (
           <input
             type="checkbox"
             checked={checked}
@@ -50,9 +51,19 @@ export function ReadingListItemCard({ item, mode, selected, checked, expanded, o
           />
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-zinc-200 line-clamp-1 leading-tight">
-            {item.pageTitle || item.title}
-          </h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-sm font-medium text-zinc-200 line-clamp-1 leading-tight flex-1 min-w-0">
+              {item.pageTitle || item.title}
+            </h3>
+            {!selectMode && item.status === 'pending' && (
+              <button
+                className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors flex-shrink-0"
+                onClick={(e) => { e.stopPropagation(); retryExtraction(item.url); }}
+              >
+                Extract
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-zinc-500">{getDomain(item.url)}</span>
             <span className="text-xs text-zinc-600">&middot;</span>

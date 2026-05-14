@@ -18,7 +18,7 @@ interface ReadingListStore {
   clearSelection: () => void;
   addItem: (url: string, title: string, vaultPath: string, vaultName: string) => Promise<void>;
   startBatchExtraction: () => void;
-  retryExtraction: (url: string) => void;
+  retryExtraction: (url: string) => Promise<void>;
   markComplete: (url: string) => void;
   removeItem: (url: string) => void;
 }
@@ -129,13 +129,31 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
     await storage.set({ readingListItems: get().items });
   },
 
-  startBatchExtraction: () => {
+  startBatchExtraction: async () => {
     const { items, selectedUrls } = get();
     const urls = selectedUrls.filter((url) => items[url]?.status === 'pending');
     set({ selectedUrls: [] });
-    for (const url of urls) {
-      get().retryExtraction(url);
-    }
+
+    const configResult = await storage.get('maxParallelExtractions') as Record<string, any>;
+    const cap = configResult.maxParallelExtractions ?? 4;
+
+    let active = 0;
+    let idx = 0;
+    await new Promise<void>((resolve) => {
+      const next = () => {
+        while (active < cap && idx < urls.length) {
+          const url = urls[idx++];
+          active++;
+          get().retryExtraction(url).finally(() => {
+            active--;
+            if (idx >= urls.length && active === 0) resolve();
+            else next();
+          });
+        }
+        if (urls.length === 0) resolve();
+      };
+      next();
+    });
   },
 
   retryExtraction: async (url) => {

@@ -75,12 +75,12 @@ function SortableTab({
   }, [tab.id, isGraph, onClose]);
 
   return (
-    <button
+    <div
       ref={ref}
       onClick={() => onFocus(tab.id)}
       onMouseDown={handleMouseDown}
       data-dragging={isDragging || undefined}
-      className={`group flex items-center gap-1.5 px-3 h-7 text-[11px] whitespace-nowrap border-r border-zinc-700/50 shrink-0 transition-colors cursor-grab active:cursor-grabbing ${
+      className={`group flex items-center gap-1.5 px-3 h-7 text-[11px] whitespace-nowrap border-r border-zinc-700/50 shrink-0 select-none cursor-grab active:cursor-grabbing ${
         isDragging
           ? 'bg-indigo-900/50 text-zinc-300 opacity-70 border-b-2 border-b-indigo-500'
           : active
@@ -89,8 +89,10 @@ function SortableTab({
       }`}
       style={{ maxWidth: 180 }}
     >
-      {isGraph ? <GraphIcon /> : <NoteTabIcon />}
-      <span className="truncate">{tab.title}</span>
+      <span className="pointer-events-none flex items-center gap-1.5 truncate">
+        {isGraph ? <GraphIcon /> : <NoteTabIcon />}
+        <span className="truncate">{tab.title}</span>
+      </span>
       <span className="flex items-center ml-1 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <span
           onClick={(e) => { e.stopPropagation(); onSplit(tab.id); }}
@@ -108,7 +110,7 @@ function SortableTab({
           </span>
         )}
       </span>
-    </button>
+    </div>
   );
 }
 

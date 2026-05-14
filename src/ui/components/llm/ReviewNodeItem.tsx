@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { useExtractionReviewStore, type ReviewNode, type PendingConversion } from '../../../graph/store/extraction-review-store';
+import { useState, useMemo } from 'react';
+import { useExtractionReviewStore, type ReviewNode } from '../../../graph/store/extraction-review-store';
+import { useGraphStore } from '../../../graph/store/graph-store';
+import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { SourceLocationBadge } from '../ingestion/SourceLocationBadge';
 
@@ -31,8 +33,6 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
   const isSelected = selectedTempId === node.tempId;
   const [editName, setEditName] = useState(node.name);
   const [editLabel, setEditLabel] = useState(node.label ?? 'concept');
-  const [showMergeDetail, setShowMergeDetail] = useState(false);
-
   const merge = node.mergeRecommendation;
   const isPendingConversion = pendingConversion?.nodeTempId === node.tempId;
   const isEntity = node.type === 'entity';
@@ -95,18 +95,6 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
           {isEntity ? (node.label ?? 'concept') : node.type}
         </span>
 
-        {/* Merge badge */}
-        {merge?.status === 'pending' && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMergeDetail(!showMergeDetail);
-            }}
-            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-800/60 text-amber-200 hover:bg-amber-700/60"
-          >
-            similar
-          </button>
-        )}
         {merge?.status === 'accepted' && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-800/60 text-green-200">
             merging
@@ -115,33 +103,25 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
         {node.sourceLocation && <SourceLocationBadge location={node.sourceLocation} />}
       </div>
 
-      {/* Merge detail expansion */}
-      {merge && showMergeDetail && merge.status === 'pending' && (
+      {/* Merge actions — always visible for pending merges */}
+      {merge?.status === 'pending' && (
         <div className="px-3 pb-2 pl-7 space-y-1">
           <p className="text-xs text-amber-400/80">
-            Match: <span className="text-zinc-300">{merge.existingName}</span>
+            Similar: <span className="text-zinc-300">{merge.existingName}</span>
             <span className="text-zinc-500 ml-1">({Math.round(merge.similarity * 100)}% {merge.matchType})</span>
           </p>
           <div className="flex gap-1">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                acceptMerge(node.tempId);
-                setShowMergeDetail(false);
-              }}
+              onClick={(e) => { e.stopPropagation(); acceptMerge(node.tempId); }}
               className="text-[10px] px-2 py-0.5 rounded bg-green-800 text-green-200 hover:bg-green-700"
             >
-              Accept
+              Merge
             </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                dismissMerge(node.tempId);
-                setShowMergeDetail(false);
-              }}
+              onClick={(e) => { e.stopPropagation(); dismissMerge(node.tempId); }}
               className="text-[10px] px-2 py-0.5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
             >
-              Dismiss
+              Keep Separate
             </button>
           </div>
         </div>
@@ -149,10 +129,28 @@ export function ReviewNodeItem({ node }: ReviewNodeItemProps) {
 
       {/* Accepted merge indicator */}
       {merge?.status === 'accepted' && (
-        <div className="px-3 pb-2 pl-7">
-          <p className="text-xs text-green-400/80">
+        <div className="px-3 pb-2 pl-7 flex items-center gap-2">
+          <p className="text-xs text-green-400/80 flex-1">
             Merging with: <span className="text-zinc-300">{merge.existingName}</span>
           </p>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const { visibleLayers, toggleLayer } = useUIStore.getState();
+              const targetNode = useGraphStore.getState().nodes.find((n) => n.id === merge.existingNodeId);
+              if (targetNode) {
+                const layer = targetNode.type as 'entity' | 'note' | 'resource';
+                if (!visibleLayers[layer]) toggleLayer(layer);
+              }
+              useGraphStore.getState().selectNode(merge.existingNodeId);
+              useUIStore.getState().focusContentTab('graph');
+              const cb = useUIStore.getState().focusNodeCallback;
+              if (cb) cb(merge.existingNodeId);
+            }}
+            className="text-[10px] px-2 py-0.5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 shrink-0"
+          >
+            View in Graph
+          </button>
         </div>
       )}
 

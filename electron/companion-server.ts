@@ -1,5 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow } from 'electron';
+import { StorageBackend } from './storage-backend';
 
 const PORT = 19876;
 
@@ -24,7 +25,7 @@ function json(res: ServerResponse, status: number, data: any): void {
   res.end(JSON.stringify(data));
 }
 
-export function startCompanionServer(): void {
+export function startCompanionServer(storageBackend?: StorageBackend): void {
   const server = createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       cors(res);
@@ -38,10 +39,24 @@ export function startCompanionServer(): void {
       return;
     }
 
+    if (req.url === '/api/vaults' && req.method === 'GET') {
+      const vaults: Array<{ path: string; name: string; lastOpened: string }> = [];
+      if (storageBackend) {
+        const data = storageBackend.get('recentVaults');
+        if (Array.isArray(data.recentVaults)) {
+          for (const v of data.recentVaults) {
+            if (v.path && v.name) vaults.push(v);
+          }
+        }
+      }
+      json(res, 200, { vaults });
+      return;
+    }
+
     if (req.url === '/api/capture' && req.method === 'POST') {
       try {
         const body = await readBody(req);
-        const { title, url, content } = JSON.parse(body);
+        const { title, url, content, targetVaultPath, targetVaultName } = JSON.parse(body);
 
         if (!content) {
           json(res, 400, { error: 'No content provided' });
@@ -51,7 +66,7 @@ export function startCompanionServer(): void {
         const windows = BrowserWindow.getAllWindows();
         console.log(`[Companion Server] Received capture: "${title}" (${url}), ${content.length} chars, broadcasting to ${windows.length} windows`);
         for (const win of windows) {
-          win.webContents.send('companion:capture', { title, url, content });
+          win.webContents.send('companion:capture', { title, url, content, targetVaultPath, targetVaultName });
         }
 
         json(res, 200, { success: true });
@@ -64,7 +79,7 @@ export function startCompanionServer(): void {
     if (req.url === '/api/reading-queue' && req.method === 'POST') {
       try {
         const body = await readBody(req);
-        const { url, title } = JSON.parse(body);
+        const { url, title, targetVaultPath, targetVaultName } = JSON.parse(body);
 
         if (!url) {
           json(res, 400, { error: 'No URL provided' });
@@ -74,7 +89,7 @@ export function startCompanionServer(): void {
         const windows = BrowserWindow.getAllWindows();
         console.log(`[Companion Server] Reading queue: "${title}" (${url}), broadcasting to ${windows.length} windows`);
         for (const win of windows) {
-          win.webContents.send('companion:reading-queue', { url, title: title ?? url });
+          win.webContents.send('companion:reading-queue', { url, title: title ?? url, targetVaultPath, targetVaultName });
         }
 
         json(res, 200, { success: true });

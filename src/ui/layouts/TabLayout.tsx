@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { Header } from '../components/Header';
@@ -6,9 +6,11 @@ import { KnowledgeGraph } from '../components/graph/KnowledgeGraph';
 import { ActivePanel } from '../components/ActivePanel';
 import { ChatBot } from '../components/chat/ChatBot';
 import { ResizeHandle } from '../components/ResizeHandle';
+import { ColumnResizeHandle } from '../components/ColumnResizeHandle';
 import { ContentTabBar } from '../components/ContentTabBar';
 import { ColumnDropZone } from '../components/ColumnDropZone';
 import { NoteEditor } from '../components/notes/NoteEditor';
+import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
 import { useUIStore } from '../../graph/store/ui-store';
 import type { ContentColumn } from '../../graph/store/ui-store';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
@@ -28,9 +30,17 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
   const contentColumns = useUIStore((s) => s.contentColumns);
   const activeColumnId = useUIStore((s) => s.activeColumnId);
   const reorderContentTabs = useUIStore((s) => s.reorderContentTabs);
+  const setColumnFlex = useUIStore((s) => s.setColumnFlex);
   const showChatSidebar = chatOpen && chatDisplayMode === 'sidebar';
 
   const snapshot = useRef(contentColumns);
+  const columnsContainerRef = useRef<HTMLDivElement | null>(null);
+  const totalFlex = useMemo(() => contentColumns.reduce((sum, c) => sum + c.flex, 0), [contentColumns]);
+
+  const handleColumnResize = useCallback((leftId: string, leftFlex: number, rightId: string, rightFlex: number) => {
+    setColumnFlex(leftId, leftFlex);
+    setColumnFlex(rightId, rightFlex);
+  }, [setColumnFlex]);
 
   const onPanelResize = useCallback((delta: number) => {
     setPanelWidth(panelWidth + delta);
@@ -77,7 +87,7 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
     <div className="flex flex-col h-full bg-zinc-900 relative">
       <Header onIngest={onIngest} />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="flex-1 flex overflow-hidden min-h-0" ref={columnsContainerRef}>
           {contentColumns.map((col, i) => (
             <ColumnWithDropZones
               key={col.id}
@@ -86,6 +96,10 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
               isActive={col.id === activeColumnId}
               isFirst={i === 0}
               isLast={i === contentColumns.length - 1}
+              prevColumn={i > 0 ? contentColumns[i - 1] : null}
+              totalFlex={totalFlex}
+              containerRef={columnsContainerRef}
+              onColumnResize={handleColumnResize}
             />
           ))}
           {activePanel !== 'none' && (
@@ -147,19 +161,41 @@ function ColumnWithDropZones({
   isActive,
   isFirst,
   isLast,
+  prevColumn,
+  totalFlex,
+  containerRef,
+  onColumnResize,
 }: {
   column: ContentColumn;
   index: number;
   isActive: boolean;
   isFirst: boolean;
   isLast: boolean;
+  prevColumn: ContentColumn | null;
+  totalFlex: number;
+  containerRef: React.RefObject<HTMLElement | null>;
+  onColumnResize: (leftId: string, leftFlex: number, rightId: string, rightFlex: number) => void;
 }) {
   return (
     <>
       {isFirst && <ColumnDropZone id={`gap-before-0`} columnIndex={0} />}
-      {!isFirst && <ColumnDropZone id={`gap-before-${index}`} columnIndex={index} />}
+      {!isFirst && prevColumn && (
+        <>
+          <ColumnResizeHandle
+            leftColumnId={prevColumn.id}
+            rightColumnId={column.id}
+            leftFlex={prevColumn.flex}
+            rightFlex={column.flex}
+            totalFlex={totalFlex}
+            containerRef={containerRef}
+            onResize={onColumnResize}
+          />
+          <ColumnDropZone id={`gap-before-${index}`} columnIndex={index} />
+        </>
+      )}
       <div
-        className={`flex-1 min-w-0 min-h-0 flex flex-col ${isActive ? '' : 'opacity-90'}`}
+        style={{ flex: column.flex }}
+        className={`min-w-0 min-h-0 flex flex-col ${isActive ? '' : 'opacity-90'}`}
         onClick={() => useUIStore.getState().activeColumnId !== column.id &&
           useUIStore.setState({ activeColumnId: column.id })}
       >
@@ -177,6 +213,8 @@ function ColumnWithDropZones({
             >
               {tab.type.kind === 'graph' ? (
                 <KnowledgeGraph />
+              ) : tab.type.kind === 'extractionReview' ? (
+                <ExtractionReviewTab />
               ) : (
                 <div className="h-full overflow-y-auto bg-zinc-900">
                   <NoteEditor nodeId={tab.type.noteId} isTab />

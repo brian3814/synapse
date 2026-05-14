@@ -34,11 +34,8 @@ export function useReadingListMerge() {
     llm.setDiff({ items, notes });
     llm.setStatus('extracted');
 
-    // Immediately open review UI
+    // Advance to review — app-level effect opens the review content tab
     await proceedToReview();
-
-    // Open LLM modal where ExtractionReview renders
-    useUIStore.getState().setLLMModalOpen(true);
   }, [proceedToReview]);
 
   // Watch for review completion — when LLM store resets to 'idle' after we started a merge

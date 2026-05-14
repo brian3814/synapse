@@ -64,57 +64,105 @@ function capturePageContent(): { title: string; url: string; content: string } {
   return { title, url, content };
 }
 
+interface VaultInfo {
+  path: string;
+  name: string;
+  lastOpened: string;
+}
+
+let cachedVaults: VaultInfo[] = [];
+let selectedVaultPath: string | null = null;
+
+async function checkDesktopOnline(): Promise<boolean> {
+  try {
+    const res = await fetch(`${DESKTOP_URL}/api/identify`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchVaults(): Promise<VaultInfo[]> {
+  try {
+    const res = await fetch(`${DESKTOP_URL}/api/vaults`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.vaults ?? [];
+  } catch {
+    return [];
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'kg-extract-page',
-    title: 'Extract with KG app',
+    title: 'Extract with Synapse',
     contexts: ['page', 'link'],
   });
   chrome.contextMenus.create({
     id: 'kg-reading-queue',
-    title: 'Add to KG app reading queue',
+    title: 'Add to Synapse reading list',
     contexts: ['page', 'link'],
   });
 });
 
-function showBadge(tabId: number, success: boolean): void {
-  chrome.action.setBadgeText({ text: success ? '✓' : '✗', tabId });
+function showBadge(tabId: number, success: boolean, text?: string): void {
+  chrome.action.setBadgeText({ text: text ?? (success ? '✓' : '✗'), tabId });
   chrome.action.setBadgeBackgroundColor({ color: success ? '#22c55e' : '#ef4444', tabId });
-  setTimeout(() => chrome.action.setBadgeText({ text: '', tabId }), 2000);
+  setTimeout(() => chrome.action.setBadgeText({ text: '', tabId }), 3000);
 }
 
 async function captureAndSend(tabId: number): Promise<void> {
+  const online = await checkDesktopOnline();
+  if (!online) throw new Error('Synapse desktop app is not running');
+
+  if (cachedVaults.length === 0) cachedVaults = await fetchVaults();
+  const vault = selectedVaultPath
+    ? cachedVaults.find((v) => v.path === selectedVaultPath)
+    : cachedVaults[0];
+
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: capturePageContent,
   });
 
   const captured = results?.[0]?.result;
-  if (!captured?.content) {
-    throw new Error('No content captured');
-  }
+  if (!captured?.content) throw new Error('No content captured');
 
   const response = await fetch(`${DESKTOP_URL}/api/capture`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(captured),
+    body: JSON.stringify({
+      ...captured,
+      targetVaultPath: vault?.path,
+      targetVaultName: vault?.name,
+    }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Desktop returned ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Desktop returned ${response.status}`);
 }
 
 async function addToReadingQueue(url: string, title: string): Promise<void> {
+  const online = await checkDesktopOnline();
+  if (!online) throw new Error('Synapse desktop app is not running');
+
+  if (cachedVaults.length === 0) cachedVaults = await fetchVaults();
+  const vault = selectedVaultPath
+    ? cachedVaults.find((v) => v.path === selectedVaultPath)
+    : cachedVaults[0];
+
   const response = await fetch(`${DESKTOP_URL}/api/reading-queue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, title }),
+    body: JSON.stringify({
+      url,
+      title,
+      targetVaultPath: vault?.path,
+      targetVaultName: vault?.name,
+    }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Desktop returned ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Desktop returned ${response.status}`);
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -137,23 +185,49 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   } catch (e: any) {
     console.error('[Companion] Context menu action failed:', e);
-    showBadge(tab.id, false);
+    showBadge(tab.id, false, '!');
   }
 });
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !tab.url) return;
-
-  if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-    showBadge(tab.id, false);
-    return;
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'GET_VAULTS') {
+    (async () => {
+      const online = await checkDesktopOnline();
+      if (!online) {
+        sendResponse({ online: false, vaults: [] });
+        return;
+      }
+      cachedVaults = await fetchVaults();
+      sendResponse({ online: true, vaults: cachedVaults, selected: selectedVaultPath });
+    })();
+    return true;
   }
-
-  try {
-    await captureAndSend(tab.id);
-    showBadge(tab.id, true);
-  } catch (e: any) {
-    console.error('[Companion] Capture failed:', e);
-    showBadge(tab.id, false);
+  if (message.type === 'SET_VAULT') {
+    selectedVaultPath = message.path;
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.type === 'DO_CAPTURE') {
+    (async () => {
+      try {
+        await captureAndSend(message.tabId);
+        sendResponse({ ok: true });
+      } catch (e: any) {
+        sendResponse({ ok: false, error: e.message });
+      }
+    })();
+    return true;
+  }
+  if (message.type === 'DO_READING_QUEUE') {
+    (async () => {
+      try {
+        await addToReadingQueue(message.url, message.title);
+        sendResponse({ ok: true });
+      } catch (e: any) {
+        sendResponse({ ok: false, error: e.message });
+      }
+    })();
+    return true;
   }
 });
