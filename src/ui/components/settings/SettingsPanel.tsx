@@ -7,9 +7,9 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, disconnectFolder, type FolderStatus } from '../../../filesystem/folder-access';
 import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
 import { indexedFiles, stressTest } from '../../../db/client/db-client';
-import { CustomInstructionsSection } from './CustomInstructionsSection';
 import { MemorySection } from './MemorySection';
 import { EmbeddingSettings } from './EmbeddingSettings';
+import { AgentSettingsTab } from './AgentSettingsTab';
 import type { SettingsTab } from './SettingsModal';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
@@ -52,6 +52,10 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   };
 
   const models = LLM_MODELS[provider] ?? [];
+
+  if (activeTab === 'agent') {
+    return <AgentSettingsTab />;
+  }
 
   if (activeTab === 'model') {
     return (
@@ -123,8 +127,6 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
           </div>
         </div>
 
-        <CustomInstructionsSection />
-
         <MemorySection />
       </div>
     );
@@ -170,6 +172,8 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       <EmbeddingSettings />
 
       {platformId !== 'electron' && <FolderSection />}
+
+      <ReadingListSettings />
 
       <StressTest />
 
@@ -606,6 +610,53 @@ function FolderSection() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ReadingListSettings() {
+  const [cap, setCap] = useState(4);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    storage.get('maxParallelExtractions').then((result: Record<string, any>) => {
+      if (result.maxParallelExtractions != null) setCap(result.maxParallelExtractions);
+    }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    await storage.set({ maxParallelExtractions: cap });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-3 border-t border-zinc-800 pt-5 mt-5">
+      <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">Reading List</h3>
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">
+          Max Parallel Extractions
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={cap}
+            onChange={(e) => setCap(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+            className="w-20 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+          />
+          <button
+            onClick={handleSave}
+            className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-500 transition-colors"
+          >
+            {saved ? 'Saved!' : 'Save'}
+          </button>
+        </div>
+        <p className="text-[10px] text-zinc-500 mt-1">
+          Number of reading list items to extract simultaneously (1-10).
+        </p>
+      </div>
     </div>
   );
 }
