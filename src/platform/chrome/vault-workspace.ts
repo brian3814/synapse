@@ -1,3 +1,5 @@
+import type { VaultSandboxConfig } from '../../shared/agent-settings-types';
+
 export interface VaultStatus {
   open: boolean;
   path?: string;
@@ -37,4 +39,8 @@ export const vaultWorkspace = {
     return null;
   },
   async close(): Promise<void> {},
+  async getSandboxConfig(): Promise<VaultSandboxConfig | null> {
+    return null;
+  },
+  async setSandboxConfig(_config: VaultSandboxConfig): Promise<void> {},
 };
