@@ -35,12 +35,19 @@ export const BASE_CHAT_SYSTEM_PROMPT = `You are a helpful assistant integrated i
 - Be concise but thorough
 - If search returns no results, say so clearly`;
 
+const MEMORY_GUIDELINES = `## Memory Guidelines
+When you learn something worth remembering:
+1. Check if it contradicts or duplicates a memory shown above
+2. If contradicting: use manage_memory with supersedes to replace the old one
+3. If new: use manage_memory with descriptive tags for future retrieval
+4. Skip ephemeral information — only save durable preferences, facts, or instructions`;
+
 export interface PromptContext {
   globalInstructions: string | null;
   presetPrompt: string | null;
   presetName: string | null;
-  semanticMemories: Array<{ category: string; content: string }>;
-  recentSessionSummaries: Array<{ summary: string }>;
+  memoryContext: string;
+  recentSessionSummaries: Array<{ summary: string; created_at?: string }>;
 }
 
 export function assembleSystemPrompt(ctx: PromptContext): string {
@@ -54,15 +61,21 @@ export function assembleSystemPrompt(ctx: PromptContext): string {
     sections.push(`## Session Mode: ${ctx.presetName ?? 'Custom'}\n${ctx.presetPrompt}`);
   }
 
-  if (ctx.semanticMemories.length > 0) {
-    const lines = ctx.semanticMemories.map((m) => `- [${m.category}] ${m.content}`);
-    sections.push(`## What I Know About You\n${lines.join('\n')}`);
+  if (ctx.memoryContext) {
+    sections.push(`## What I Know About You\n${ctx.memoryContext}`);
   }
 
   if (ctx.recentSessionSummaries.length > 0) {
-    const lines = ctx.recentSessionSummaries.map((s) => `- ${s.summary}`);
-    sections.push(`## Recent Context\n${lines.join('\n')}`);
+    const lines = ctx.recentSessionSummaries.map((s) => {
+      const dateStr = s.created_at
+        ? `(${new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}) `
+        : '';
+      return `- ${dateStr}${s.summary}`;
+    });
+    sections.push(`## Recent Sessions\n${lines.join('\n')}`);
   }
+
+  sections.push(MEMORY_GUIDELINES);
 
   return sections.join('\n\n');
 }
