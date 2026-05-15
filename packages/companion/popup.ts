@@ -21,7 +21,7 @@ function showOffline() {
 
 function showOnline(vaults: VaultInfo[], selected: string | null) {
   const options = vaults.map((v) =>
-    `<option value="${v.path}" ${v.path === selected ? 'selected' : ''}>${v.name}</option>`
+    `<option value="${v.path}" ${v.path === selected ? 'selected' : ''}>${v.name} — ${v.path}</option>`
   ).join('');
 
   const vaultSelector = vaults.length > 0 ? `
