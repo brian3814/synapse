@@ -207,6 +207,26 @@ export async function executeTool(
       };
     }
 
+    case 'get_nodes_batch': {
+      const ids = (input.node_ids as string[]).slice(0, 50);
+      const nodes = await Promise.all(ids.map((id) => ctx.db.nodes.getById(id)));
+      const results = nodes
+        .filter(Boolean)
+        .map((n: any) => ({
+          id: n.id,
+          name: n.name,
+          type: n.type,
+          label: n.label,
+          summary: n.summary,
+          properties: typeof n.properties === 'string' ? JSON.parse(n.properties) : n.properties,
+          sourceUrl: n.source_url,
+        }));
+      return {
+        result: JSON.stringify({ nodes: results, found: results.length, requested: ids.length }),
+        collectedNodeIds: results.map((n) => n.id),
+      };
+    }
+
     case 'delete_node': {
       const nodeId = input.node_id as string;
       const node = await ctx.db.nodes.getById(nodeId);
@@ -214,6 +234,25 @@ export async function executeTool(
       const result = await graphCommands.deleteNode(ctx, nodeId);
       return {
         result: JSON.stringify({ deleted: result.data, id: nodeId, name: (node as any).name }),
+      };
+    }
+
+    case 'delete_nodes_batch': {
+      const ids = (input.node_ids as string[]).slice(0, 50);
+      const deleted: Array<{ id: string; name: string }> = [];
+      const errors: string[] = [];
+      for (const id of ids) {
+        const node = await ctx.db.nodes.getById(id);
+        if (!node) { errors.push(`${id}: not found`); continue; }
+        try {
+          await graphCommands.deleteNode(ctx, id);
+          deleted.push({ id, name: (node as any).name });
+        } catch (e: any) {
+          errors.push(`${id}: ${e.message}`);
+        }
+      }
+      return {
+        result: JSON.stringify({ deleted: deleted.length, nodes: deleted, errors }),
       };
     }
 

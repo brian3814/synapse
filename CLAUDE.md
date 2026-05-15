@@ -440,7 +440,9 @@ User query → loadValidMemories() → retrievers → RRF fuser → annotated fo
 | `create_node` | Add new node |
 | `update_node` | Modify existing node |
 | `create_edge` | Add relationship |
-| `delete_node` | Remove node and all edges |
+| `get_nodes_batch` | Fetch multiple nodes by ID array (max 50) |
+| `delete_node` | Remove single node and all edges |
+| `delete_nodes_batch` | Remove multiple nodes by ID array (max 50) |
 | `merge_nodes` | Merge duplicates: transfer edges, add alias, delete secondary |
 | `index_notes_folder` | Re-index markdown folder |
 | `manage_memory` | CRUD for agent memory with tags and supersession |

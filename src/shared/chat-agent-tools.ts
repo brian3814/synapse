@@ -276,9 +276,26 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     executionContext: 'ui',
   },
   {
+    name: 'get_nodes_batch',
+    description:
+      'Get full details of multiple nodes by their IDs in a single call. Use this instead of calling get_node_details repeatedly when you have multiple node IDs to look up.',
+    parameters: {
+      type: 'object',
+      properties: {
+        node_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of node IDs to retrieve (max 50)',
+        },
+      },
+      required: ['node_ids'],
+    },
+    executionContext: 'ui',
+  },
+  {
     name: 'delete_node',
     description:
-      'Delete a node from the knowledge graph by ID. Also removes all edges connected to it. Use with caution — this is irreversible.',
+      'Delete a single node from the knowledge graph by ID. Also removes all edges connected to it. For deleting multiple nodes, use delete_nodes_batch instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -288,6 +305,23 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
         },
       },
       required: ['node_id'],
+    },
+    executionContext: 'ui',
+  },
+  {
+    name: 'delete_nodes_batch',
+    description:
+      'Delete multiple nodes from the knowledge graph in a single call. Also removes all edges connected to them. Use this instead of calling delete_node repeatedly. Irreversible.',
+    parameters: {
+      type: 'object',
+      properties: {
+        node_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of node IDs to delete (max 50)',
+        },
+      },
+      required: ['node_ids'],
     },
     executionContext: 'ui',
   },

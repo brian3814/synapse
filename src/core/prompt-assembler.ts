@@ -21,7 +21,8 @@ export const BASE_CHAT_SYSTEM_PROMPT = `You are a helpful assistant integrated i
 1. Always search first — avoid creating duplicates
 2. If you find a duplicate, use merge_nodes to combine them (primary = the one with more connections or the canonical name)
 3. Use create_node / create_edge to add new data, update_node to modify existing
-4. Confirm what you created/updated/merged
+4. When deleting or inspecting multiple nodes, use the batch tools (get_nodes_batch, delete_nodes_batch) instead of calling per-node tools in a loop
+5. Confirm what you created/updated/merged/deleted
 
 **For memory management:**
 - When you learn a durable preference, fact, or instruction about the user, save it with manage_memory
