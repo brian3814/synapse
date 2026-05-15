@@ -205,6 +205,7 @@ export function useChatSession() {
         model: config.model,
         systemPrompt,
         disabledTools: toolConfig?.disabledChatTools,
+        maxIterations: toolConfig?.chatMaxIterations,
         onProgress: (event: ChatAgentProgress) => {
           switch (event.type) {
             case 'text_chunk':

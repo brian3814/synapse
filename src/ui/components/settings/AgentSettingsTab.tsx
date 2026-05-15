@@ -8,6 +8,7 @@ import { CHAT_AGENT_TOOLS } from '../../../shared/chat-agent-tools';
 import {
   AGENT_PROMPT_CONFIG_KEY,
   AGENT_TOOL_CONFIG_KEY,
+  DEFAULT_CHAT_MAX_ITERATIONS,
 } from '../../../shared/agent-settings-types';
 import type { AgentPromptConfig, AgentToolConfig } from '../../../shared/agent-settings-types';
 import { ToolToggleRow } from './ToolToggleRow';
@@ -217,6 +218,24 @@ export function AgentSettingsTab() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <label className="text-[10px] text-zinc-500 block mb-1">Max Tool Iterations</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={5}
+              max={500}
+              value={toolConfig.chatMaxIterations ?? DEFAULT_CHAT_MAX_ITERATIONS}
+              onChange={(e) => {
+                const val = Math.max(5, Math.min(500, parseInt(e.target.value) || DEFAULT_CHAT_MAX_ITERATIONS));
+                saveToolConfig({ ...toolConfig, chatMaxIterations: val });
+              }}
+              className="w-20 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs text-zinc-100 outline-none focus:border-indigo-500"
+            />
+            <span className="text-[10px] text-zinc-600">LLM round-trips per request (default {DEFAULT_CHAT_MAX_ITERATIONS})</span>
           </div>
         </div>
       </div>

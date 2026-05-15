@@ -21,7 +21,7 @@ export interface ChatAgentProgress {
   error?: string;
 }
 
-const MAX_ITERATIONS = 10;
+import { DEFAULT_CHAT_MAX_ITERATIONS } from '../../shared/agent-settings-types';
 
 const SEMANTIC_SEARCH_TOOL = {
   name: 'semantic_search',
@@ -64,6 +64,7 @@ interface RunChatAgentParams {
   model: string;
   systemPrompt: string;
   disabledTools?: string[];
+  maxIterations?: number;
   onProgress: (event: ChatAgentProgress) => void;
 }
 
@@ -75,9 +76,11 @@ export async function runChatAgent({
   model,
   systemPrompt,
   disabledTools,
+  maxIterations,
   onProgress,
 }: RunChatAgentParams): Promise<string> {
-  // Build initial messages: prior turns + current user message
+  const iterLimit = maxIterations ?? DEFAULT_CHAT_MAX_ITERATIONS;
+
   const userMessage = attachedContext
     ? `${attachedContext}\n\n${currentPrompt}`
     : currentPrompt;
@@ -95,7 +98,7 @@ export async function runChatAgent({
   const collectedEdgeIds = new Set<string>();
   const ctx = createUICommandContext();
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
+  for (let i = 0; i < iterLimit; i++) {
     // Send one LLM call with tools
     const requestId = crypto.randomUUID();
     const result = await sendChatLLMRequest(

@@ -8,7 +8,10 @@ export interface AgentPromptConfig {
 export interface AgentToolConfig {
   disabledExtractionTools: string[];
   disabledChatTools: string[];
+  chatMaxIterations?: number;
 }
+
+export const DEFAULT_CHAT_MAX_ITERATIONS = 100;
 
 export interface VaultSandboxConfig {
   allowedDirs: string[];
