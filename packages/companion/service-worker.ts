@@ -106,6 +106,15 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+function updateMenuTitles(): void {
+  const vault = selectedVaultPath
+    ? cachedVaults.find((v) => v.path === selectedVaultPath)
+    : cachedVaults[0];
+  const suffix = vault ? ` → ${vault.name}` : '';
+  chrome.contextMenus.update('kg-extract-page', { title: `Extract with Synapse${suffix}` });
+  chrome.contextMenus.update('kg-reading-queue', { title: `Add to Synapse reading list${suffix}` });
+}
+
 function showBadge(tabId: number, success: boolean, text?: string): void {
   chrome.action.setBadgeText({ text: text ?? (success ? '✓' : '✗'), tabId });
   chrome.action.setBadgeBackgroundColor({ color: success ? '#22c55e' : '#ef4444', tabId });
@@ -199,12 +208,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       cachedVaults = await fetchVaults();
+      updateMenuTitles();
       sendResponse({ online: true, vaults: cachedVaults, selected: selectedVaultPath });
     })();
     return true;
   }
   if (message.type === 'SET_VAULT') {
     selectedVaultPath = message.path;
+    updateMenuTitles();
     sendResponse({ ok: true });
     return true;
   }
