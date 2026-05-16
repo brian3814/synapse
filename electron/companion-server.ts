@@ -25,7 +25,18 @@ function json(res: ServerResponse, status: number, data: any): void {
   res.end(JSON.stringify(data));
 }
 
-export function startCompanionServer(storageBackend?: StorageBackend): void {
+interface CompanionServerOptions {
+  storage?: StorageBackend;
+  getMcpHandler?: () => ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | null;
+}
+
+export function startCompanionServer(options: CompanionServerOptions | StorageBackend = {}): void {
+  // Support legacy call signature: startCompanionServer(storage)
+  const opts: CompanionServerOptions = options instanceof StorageBackend
+    ? { storage: options }
+    : options;
+  const storageBackend = opts.storage;
+
   const server = createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       cors(res);
@@ -96,6 +107,20 @@ export function startCompanionServer(storageBackend?: StorageBackend): void {
       } catch (e: any) {
         json(res, 400, { error: e.message });
       }
+      return;
+    }
+
+    if (req.url?.startsWith('/mcp') && opts.getMcpHandler) {
+      const handler = opts.getMcpHandler();
+      if (handler) {
+        try {
+          await handler(req, res);
+        } catch (e: any) {
+          json(res, 500, { error: e.message });
+        }
+        return;
+      }
+      json(res, 503, { error: 'MCP server not ready (vault not open)' });
       return;
     }
 

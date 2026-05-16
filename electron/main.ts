@@ -25,7 +25,8 @@ import { ToolRegistry } from './mcp/tool-registry';
 import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
 import { createMainProcessContext } from './mcp/main-process-context';
 import { McpClientManager } from './mcp/mcp-client-manager';
-import { loadMcpClientConfig } from './mcp/mcp-config';
+import { loadMcpClientConfig, loadMcpServerConfig } from './mcp/mcp-config';
+import { McpServerBridge } from './mcp/mcp-server-bridge';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -379,11 +380,17 @@ app.whenReady().then(() => {
     }
   });
 
-  startCompanionServer(storage);
+  startCompanionServer({
+    storage,
+    getMcpHandler: () => mcpServerBridge
+      ? (req, res) => mcpServerBridge!.handleRequest(req, res)
+      : null,
+  });
 
   // ── MCP / Tool Registry ──────────────────────────────────────────
   let toolRegistry: ToolRegistry | null = null;
   let mcpClientManager: McpClientManager | null = null;
+  let mcpServerBridge: McpServerBridge | null = null;
 
   registerToolIpcHandlers(() => toolRegistry);
   registerMcpClientIpcHandlers(() => mcpClientManager);
@@ -466,6 +473,13 @@ app.whenReady().then(() => {
         console.error('[MCP] Failed to connect servers:', e)
       );
     }
+
+    // MCP Server — expose graph tools to external agents
+    const serverConfig = loadMcpServerConfig(ctx.path);
+    if (serverConfig.enabled && toolRegistry) {
+      mcpServerBridge = new McpServerBridge(toolRegistry, serverConfig);
+      console.log('[MCP] Server bridge started');
+    }
   }
 
   function unregisterVaultHandlers() {
@@ -485,6 +499,8 @@ app.whenReady().then(() => {
     mcpClientManager = null;
     toolRegistry?.dispose();
     toolRegistry = null;
+    mcpServerBridge?.dispose();
+    mcpServerBridge = null;
   }
 
   ipcMain.handle('vault-workspace:get-status', () => {
