@@ -5,4 +5,4 @@ import { createActionHandler } from '../src/db/worker/action-handler';
 const dataStore = createSqliteDataStore(initBetterSQLite, resetBetterSQLite);
 const handleAction = createActionHandler(dataStore);
 
-export { handleAction };
+export { handleAction, dataStore };
