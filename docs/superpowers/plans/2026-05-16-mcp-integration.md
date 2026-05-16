@@ -159,32 +159,57 @@ git add -A && git commit -m "feat(mcp): install SDK and define tool registry typ
 
 ---
 
-## Task 2: Refactor chat-tool-executor to remove @platform import
+## Task 2: Remove index_notes_folder + refactor executor for main-process compatibility
 
-The executor currently imports `embedding` from `@platform` (line 8). This prevents main-process usage. Move embedding into `CommandContext`.
+Three changes: (1) remove the legacy `index_notes_folder` tool and its UI, (2) promote `semantic_search` into `CHAT_AGENT_TOOLS`, (3) move embedding into `CommandContext` using existing `searchSimilar` semantics.
 
 **Files:**
-- Modify: `src/commands/types.ts`
-- Modify: `src/commands/chat-tool-executor.ts`
-- Modify: `src/commands/create-context.ts`
+- Delete: `src/filesystem/indexing-pipeline.ts`
+- Modify: `src/shared/chat-agent-tools.ts` — remove `index_notes_folder`, add `semantic_search`
+- Modify: `src/commands/chat-tool-executor.ts` — remove `index_notes_folder` case + `@platform` import, use `ctx.embedding`
+- Modify: `src/commands/types.ts` — add embedding to CommandContext
+- Modify: `src/commands/create-context.ts` — pass embedding through context
+- Modify: `src/ui/components/settings/SettingsPanel.tsx` — remove "Markdown Folder" section
+- Modify: `src/ui/components/settings/AgentSettingsTab.tsx` — remove `index_notes_folder` from tool list
 
-- [ ] **Step 1: Add embedding to CommandContext**
+- [ ] **Step 1: Delete indexing-pipeline.ts**
 
-In `src/commands/types.ts`, add an `EmbeddingSearch` type and include it in `CommandContext`:
+```bash
+rm src/filesystem/indexing-pipeline.ts
+```
+
+- [ ] **Step 2: Remove index_notes_folder from CHAT_AGENT_TOOLS and add semantic_search**
+
+In `src/shared/chat-agent-tools.ts`:
+- Remove the `index_notes_folder` tool definition object from the `CHAT_AGENT_TOOLS` array
+- Add `semantic_search` as a first-class tool:
+
+```typescript
+{
+  name: 'semantic_search',
+  description:
+    'Find nodes semantically similar to a query, even without keyword overlap. Use when keyword search returns few results or you need conceptually related nodes. Returns empty results if embeddings are not enabled.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Natural language search query' },
+      limit: { type: 'number', description: 'Max results to return (default 5)' },
+    },
+    required: ['query'],
+  },
+  executionContext: 'ui',
+},
+```
+
+- [ ] **Step 3: Add embedding to CommandContext using existing SemanticSearchResult type**
+
+In `src/commands/types.ts`:
 
 ```typescript
 import type { DataStore } from '../db/data-store';
 import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser } from '../platform/types';
 import type { GraphNode, GraphEdge, DbNode, DbEdge, NodeType } from '../shared/types';
-
-export interface EmbeddingSearchResult {
-  nodeId: string;
-  distance: number;
-}
-
-export interface EmbeddingSearch {
-  search(query: string, limit?: number, excludeNodeId?: string): Promise<EmbeddingSearchResult[]>;
-}
+import type { SemanticSearchResult } from '../embeddings/types';
 
 export interface CommandContext {
   db: DataStore;
@@ -193,25 +218,53 @@ export interface CommandContext {
   files: PlatformFiles;
   llm: PlatformLLM;
   browser: PlatformBrowser;
-  embedding?: EmbeddingSearch;
+  embedding?: {
+    searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
+  };
   getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 }
 ```
 
-- [ ] **Step 2: Update chat-tool-executor.ts**
+Uses the existing `SemanticSearchResult` type (`{ nodeId: string; score: number }`) from `src/embeddings/types.ts` — no new interfaces.
 
-Remove the `@platform` import and use `ctx.embedding`:
+- [ ] **Step 4: Update chat-tool-executor.ts**
 
-Replace line 8:
+Remove these imports:
 ```typescript
+import { getStoredFolder, requestPermission } from '../filesystem/folder-access';
+import { indexMarkdownFolder } from '../filesystem/indexing-pipeline';
 import { embedding } from '@platform';
 ```
 
-Remove it entirely. Then in the `semantic_search` case (find it in the switch), replace `embedding.search(...)` with `ctx.embedding?.search(...)`. If `ctx.embedding` is undefined, return an error result saying embeddings are not configured.
+Remove the entire `case 'index_notes_folder'` block.
 
-- [ ] **Step 3: Update create-context.ts to pass embedding**
+Update `case 'semantic_search'` to use `ctx.embedding`:
 
-In `src/commands/create-context.ts`, import `embedding` from `@platform` and pass it into the context:
+```typescript
+case 'semantic_search': {
+  const query = input.query as string;
+  const limit = (input.limit as number) ?? 5;
+  if (!ctx.embedding) {
+    return { result: JSON.stringify({ message: 'Embeddings not enabled. Configure in Settings > Embeddings.' }) };
+  }
+  const results = await ctx.embedding.searchSimilar(query, limit);
+  if (results.length === 0) {
+    return { result: JSON.stringify({ message: 'No semantic matches found.' }) };
+  }
+  const nodeDetails = [];
+  for (const r of results) {
+    const node = await ctx.db.nodes.getById(r.nodeId);
+    if (node) {
+      nodeDetails.push({ id: (node as any).id, name: (node as any).name, type: (node as any).type, similarity: r.score.toFixed(2) });
+    }
+  }
+  return { result: JSON.stringify(nodeDetails), collectedNodeIds: nodeDetails.map((n) => n.id) };
+}
+```
+
+- [ ] **Step 5: Update create-context.ts to pass embedding**
+
+In `src/commands/create-context.ts`:
 
 ```typescript
 import * as dbClient from '../db/client/db-client';
@@ -230,7 +283,7 @@ export function createUICommandContext(): CommandContext {
     files,
     llm,
     browser,
-    embedding: embedding as any,
+    embedding,
     getGraphSnapshot: () => {
       const state = useGraphStore.getState();
       return Promise.resolve({ nodes: state.nodes, edges: state.edges });
@@ -239,18 +292,28 @@ export function createUICommandContext(): CommandContext {
 }
 ```
 
-- [ ] **Step 4: Verify both builds**
+- [ ] **Step 6: Remove "Markdown Folder" section from SettingsPanel**
+
+In `src/ui/components/settings/SettingsPanel.tsx`:
+- Remove the import of `indexMarkdownFolder` and `type IndexingProgress` from `'../../../filesystem/indexing-pipeline'`
+- Remove the import of `pickFolder`, `getFolderStatus`, `getStoredFolder`, `requestPermission`, `disconnectFolder`, `type FolderStatus` from `'../../../filesystem/folder-access'`
+- Remove all state and UI related to the markdown folder section (folder status, connect/disconnect buttons, re-index button, progress display)
+
+In `src/ui/components/settings/AgentSettingsTab.tsx` (line 22):
+- Remove `'index_notes_folder'` from the tools array
+
+- [ ] **Step 7: Verify both builds**
 
 ```bash
 npm run build:electron-main && npm run build:electron-renderer
 ```
 
-Expected: Both succeed. The renderer still works as before (embedding passed through context now), and the main process no longer has a transitive @platform dependency from the executor.
+Expected: Both succeed. No `@platform` dependency from the executor. No reference to deleted `indexing-pipeline.ts`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add -A && git commit -m "refactor: move embedding into CommandContext, remove @platform from executor"
+git add -A && git commit -m "refactor: remove index_notes_folder, promote semantic_search, move embedding into CommandContext"
 ```
 
 ---
@@ -378,16 +441,33 @@ git add -A && git commit -m "feat(mcp): implement ToolRegistry with provider dis
 ## Task 4: BuiltinToolProvider + MainProcessContext
 
 **Files:**
+- Modify: `electron/db-backend.ts` — export `dataStore`
 - Create: `electron/mcp/main-process-context.ts`
 - Create: `electron/mcp/builtin-tool-provider.ts`
 
-- [ ] **Step 1: Create MainProcessContext factory**
+- [ ] **Step 1: Export dataStore from db-backend.ts**
+
+In `electron/db-backend.ts`, add `dataStore` to exports:
+
+```typescript
+import { initBetterSQLite, resetBetterSQLite } from './better-sqlite3-engine';
+import { createSqliteDataStore } from '../src/db/sqlite-data-store';
+import { createActionHandler } from '../src/db/worker/action-handler';
+
+const dataStore = createSqliteDataStore(initBetterSQLite, resetBetterSQLite);
+const handleAction = createActionHandler(dataStore);
+
+export { handleAction, dataStore };
+```
+
+- [ ] **Step 2: Create MainProcessContext factory**
 
 Create `electron/mcp/main-process-context.ts`:
 
 ```typescript
-import type { CommandContext, EmbeddingSearch } from '../../src/commands/types';
+import type { CommandContext } from '../../src/commands/types';
 import type { DataStore } from '../../src/db/data-store';
+import type { SemanticSearchResult } from '../../src/embeddings/types';
 import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser } from '../../src/platform/types';
 
 interface MainProcessDeps {
@@ -395,7 +475,9 @@ interface MainProcessDeps {
   storage: PlatformStorage;
   readNote: (nodeId: string) => Promise<string | null>;
   writeNote: (nodeId: string, content: string) => Promise<void>;
-  embedding?: EmbeddingSearch;
+  embedding?: {
+    searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
+  };
 }
 
 export function createMainProcessContext(deps: MainProcessDeps): CommandContext {
@@ -552,22 +634,27 @@ export function broadcastToolsChanged(): void {
 
 - [ ] **Step 2: Register in main.ts**
 
-In `electron/main.ts`, import and call registration after the vault setup area (near line 376 where `startCompanionServer` is called):
+In `electron/main.ts`:
 
-Add import at top of file:
+Add imports at top of file:
 ```typescript
-import { registerToolIpcHandlers, broadcastToolsChanged } from './mcp/mcp-ipc';
+import { registerToolIpcHandlers, registerMcpClientIpcHandlers, broadcastToolsChanged } from './mcp/mcp-ipc';
 import { ToolRegistry } from './mcp/tool-registry';
 import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
 import { createMainProcessContext } from './mcp/main-process-context';
+import { dataStore } from './db-backend';
 ```
 
-After `startCompanionServer(storage);` (line 376), add:
+**IMPORTANT: Register ALL IPC handlers ONCE at startup** (after `startCompanionServer`, before vault handlers). Use getter functions so they resolve the current instance after vault open/switch:
 
 ```typescript
 // ── MCP / Tool Registry ──────────────────────────────────────────
 let toolRegistry: ToolRegistry | null = null;
+let mcpClientManager: McpClientManager | null = null;
+
+// Register IPC handlers ONCE — they use getters to access current instances
 registerToolIpcHandlers(() => toolRegistry);
+registerMcpClientIpcHandlers(() => mcpClientManager);
 ```
 
 Then inside `registerVaultHandlers()` function (after reconciliation completes), initialize the registry:
@@ -580,8 +667,7 @@ const mainCtx = createMainProcessContext({
   readNote: async (nodeId) => readNote(nodeId),
   writeNote: async (nodeId, content) => writeNote(nodeId, content),
   embedding: embeddingService ? {
-    search: (query, limit, excludeNodeId) =>
-      embeddingService!.search(query, limit ?? 5, excludeNodeId),
+    searchSimilar: (query, topK) => embeddingService!.search(query, topK ?? 5),
   } : undefined,
 });
 toolRegistry = new ToolRegistry();
@@ -589,7 +675,21 @@ toolRegistry.registerProvider(new BuiltinToolProvider(mainCtx));
 toolRegistry.onToolsChanged(() => broadcastToolsChanged());
 ```
 
-Note: `dataStore` is already accessible from `db-backend.ts` imports. `readNote`/`writeNote` are from `notes-backend.ts`. Adjust variable references to match what's in scope.
+**Add MCP cleanup to `unregisterVaultHandlers()`** (alongside existing embedding/watcher cleanup):
+
+```typescript
+function unregisterVaultHandlers() {
+  // ... existing cleanup (fileWatcher, noteFileHandler, etc.) ...
+
+  // MCP cleanup
+  mcpClientManager?.dispose();
+  mcpClientManager = null;
+  toolRegistry?.dispose();
+  toolRegistry = null;
+}
+```
+
+This ensures vault switch properly tears down MCP connections and the registry, then re-initializes on the new vault.
 
 - [ ] **Step 3: Verify build**
 
