@@ -56,6 +56,9 @@ npm run dist:mac                 # Package macOS app via electron-builder
 
 # Companion extension
 npm run build:companion          # Vite build → dist-companion/
+
+# MCP CLI (standalone stdio server)
+npm run build:mcp                # esbuild → packages/synapse-mcp/dist/
 ```
 
 No test framework or linter is configured. For Chrome, load `dist/` as an unpacked extension in `chrome://extensions` (developer mode). For Electron, run `npx electron .` after building.
@@ -424,33 +427,51 @@ User query → loadValidMemories() → retrievers → RRF fuser → annotated fo
 - `src/commands/memory-commands.ts` — `MemoryEntry`, `writeMemory()`, `loadValidMemories()`
 - `src/utils/text-search.ts` — Shared `extractSearchTerms()` (stop-word filtering + keyword extraction)
 
+## MCP Integration & Tool Registry
+
+Synapse is both an **MCP client** (consumes external MCP servers) and **MCP server** (exposes graph tools to external agents like Claude Code, Cursor). Built on a unified ToolRegistry in the main process.
+
+**Architecture:** All tool execution (built-in + MCP) routes through `ToolRegistry` in the Electron main process. The renderer calls `tools:list` and `tools:execute` IPC channels. See `ARCHITECTURE.md` § "MCP & Tool Registry" for full details.
+
+**Key files:**
+- `electron/mcp/types.ts` — `ToolProvider`, `IToolRegistry`, `ToolFilter`, config interfaces
+- `electron/mcp/tool-registry.ts` — Singleton registry with namespace-based dispatch (`__` separator)
+- `electron/mcp/builtin-tool-provider.ts` — Wraps existing chat tools for main-process execution
+- `electron/mcp/mcp-client-manager.ts` — Outbound MCP connections (stdio transport)
+- `electron/mcp/mcp-server-bridge.ts` — Exposes graph as MCP server (HTTP on companion server `/mcp`)
+- `electron/mcp/mcp-config.ts` — Two-layer config merge (global + vault `.kg/mcp.json`)
+- `packages/synapse-mcp/` — Standalone stdio CLI (`synapse-mcp --vault <path>`)
+
+**Configuration:** Global at `~/Library/Application Support/kg-desktop/mcp-config.json`, vault-level at `.kg/mcp.json`. Vault config overrides/extends global. Secrets via `${secret:name}` placeholders.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-15-mcp-integration-design.md`](docs/superpowers/specs/2026-05-15-mcp-integration-design.md)
+
 ## Chat Agent Tools
 
-14 tools available to the chat agent in `src/shared/chat-agent-tools.ts` + dynamic additions:
+Tools defined in `src/shared/chat-agent-tools.ts`, executed via ToolRegistry (`electron/mcp/builtin-tool-provider.ts` → `src/commands/chat-tool-executor.ts`):
 
-| Tool | Purpose |
-|---|---|
-| `search_knowledge` | RAG search with 1-hop expansion and source retrieval |
-| `search_nodes` | FTS5 node search |
-| `get_node_details` | Fetch single node by ID |
-| `get_neighbors` | N-hop graph traversal |
-| `get_edges_for_node` | Fetch edges for a node |
-| `search_sources` | Search stored source content |
-| `get_source_content` | Full source text retrieval |
-| `create_node` | Add new node |
-| `update_node` | Modify existing node |
-| `create_edge` | Add relationship |
-| `get_nodes_batch` | Fetch multiple nodes by ID array (max 50) |
-| `delete_node` | Remove single node and all edges |
-| `delete_nodes_batch` | Remove multiple nodes by ID array (max 50) |
-| `merge_nodes` | Merge duplicates: transfer edges, add alias, delete secondary |
-| `index_notes_folder` | Re-index markdown folder |
-| `manage_memory` | CRUD for agent memory with tags and supersession |
-| `semantic_search` | (Electron-only, dynamic) Vector similarity search |
+| Tool | Category | Purpose |
+|---|---|---|
+| `search_knowledge` | read | RAG search with 1-hop expansion and source retrieval |
+| `search_nodes` | read | FTS5 node search |
+| `get_node_details` | read | Fetch single node by ID |
+| `get_neighbors` | read | N-hop graph traversal |
+| `get_edges_for_node` | read | Fetch edges for a node |
+| `search_sources` | read | Search stored source content |
+| `get_source_content` | read | Full source text retrieval |
+| `semantic_search` | read | Vector similarity search (requires embeddings enabled) |
+| `create_node` | write | Add new node |
+| `update_node` | write | Modify existing node |
+| `create_edge` | write | Add relationship |
+| `get_nodes_batch` | read | Fetch multiple nodes by ID array (max 50) |
+| `delete_node` | write | Remove single node and all edges |
+| `delete_nodes_batch` | write | Remove multiple nodes by ID array (max 50) |
+| `merge_nodes` | write | Merge duplicates: transfer edges, add alias, delete secondary |
+| `manage_memory` | execute | CRUD for agent memory with tags and supersession |
 
-The `merge_nodes` tool is the preferred way to handle entity deduplication — the LLM identifies duplicates using world knowledge, then executes the merge via the tool. This replaced the earlier embedding-based approach which couldn't handle acronyms or alternate names.
+The `merge_nodes` tool is the preferred way to handle entity deduplication — the LLM identifies duplicates using world knowledge, then executes the merge via the tool.
 
-Tool execution is in `src/commands/chat-tool-executor.ts`. The `semantic_search` tool is dynamically added in `chat-agent-loop.ts` only when `platformId === 'electron'`.
+Tool execution flows: renderer → `tools:execute` IPC → ToolRegistry → BuiltinToolProvider → `executeTool()` in `chat-tool-executor.ts`. The executor uses `CommandContext` (with `ctx.embedding` for semantic search) and has no `@platform` imports — it runs in both renderer (Chrome fallback) and main process.
 
 ## Graph-to-Chat Context Selection
 
@@ -494,7 +515,10 @@ The graph store's `startSyncListener` subscribes to BOTH `BroadcastChannel` (Chr
 - **Shared UI**: `src/ui/components/shared/PanelHeader.tsx` — Reusable panel header with close button (used by all sidebar panels)
 - **Embedding types**: `src/embeddings/types.ts` — Type-only module for embedding interfaces (safe for both platforms)
 - **Embedding implementation**: `electron/embeddings/` — EmbeddingService, providers, queue, vec-store (Electron-only)
-- **Chat tools**: `src/shared/chat-agent-tools.ts` — 14 tool definitions; `src/commands/chat-tool-executor.ts` — execution handlers
+- **Chat tools**: `src/shared/chat-agent-tools.ts` — tool definitions; `src/commands/chat-tool-executor.ts` — execution handlers
+- **MCP / Tool Registry**: `electron/mcp/` — ToolRegistry, BuiltinToolProvider, McpClientManager, McpServerBridge, config, IPC
+- **MCP CLI**: `packages/synapse-mcp/` — standalone stdio server for Claude Code/Cursor
+- **MCP design spec**: [`docs/superpowers/specs/2026-05-15-mcp-integration-design.md`](docs/superpowers/specs/2026-05-15-mcp-integration-design.md)
 - **Chat context**: `src/graph/store/chat-context-store.ts` — Zustand store bridging graph selection and chat; `src/ui/utils/chat-context-serializer.ts` — minimal node serialization
 - **Embedding spec**: [`docs/superpowers/specs/2026-05-04-vector-embeddings-design.md`](docs/superpowers/specs/2026-05-04-vector-embeddings-design.md)
 - **DataStore interface**: `src/db/data-store.ts` — 16 repository sub-interfaces for engine-swappable persistence. `src/db/sqlite-data-store.ts` is the current implementation.

@@ -635,6 +635,103 @@ The pipeline is pluggable — a vector retriever (Phase 2) can be added alongsid
 
 ---
 
+## MCP & Tool Registry
+
+Synapse integrates with the Model Context Protocol (MCP) ecosystem as both a client and server, built on a unified ToolRegistry that replaces direct tool execution with a provider-based architecture.
+
+### Architecture
+
+```
+Renderer (React)
+  │  tools:list / tools:execute IPC
+  ▼
+Main Process — ToolRegistry (singleton)
+  ├── BuiltinToolProvider (existing chat tools, direct DB access)
+  ├── McpToolProvider("github")  (JSON-RPC → stdio subprocess)
+  ├── McpToolProvider("postgres") (JSON-RPC → HTTP)
+  └── (future: PluginToolProvider → sandboxed child process)
+
+McpClientManager             McpServerBridge
+  manages outbound            exposes graph inbound
+  MCP connections             via HTTP (:19876/mcp) + stdio CLI
+```
+
+### Tool Registry
+
+Central registry for all tool providers. The renderer never calls `executeTool()` directly — it invokes `tools:execute` IPC which routes through the registry by namespace.
+
+**Namespace convention:** Double underscore `__` separator. `"github__create_issue"` → provider `mcp:github`, tool `create_issue`. No separator → `builtin` provider.
+
+**IPC channels** (registered once at startup with getter closures):
+- `tools:list` — returns merged tool definitions (built-in + MCP, filtered by `ToolFilter`)
+- `tools:execute` — dispatches to provider by namespace, returns `ToolResult`
+- `tools:on-changed` — broadcast when tool list changes
+- `mcp:list-servers` / `mcp:connect-server` / `mcp:disconnect-server` — MCP client management
+- `mcp:server-status-changed` — broadcast on connection state change
+
+**Lifecycle:** Registry initialized in `registerVaultHandlers()` after vault opens, disposed in `unregisterVaultHandlers()` on vault close/switch. IPC handlers are registered once at startup and use getters to access the current instance.
+
+### MCP Client (Consuming External Servers)
+
+`McpClientManager` spawns stdio child processes for configured MCP servers, runs the initialize handshake, discovers tools via `client.listTools()`, and registers `McpToolProvider` instances with the registry.
+
+**Configuration (two-layer merge):**
+- Global: `~/Library/Application Support/kg-desktop/mcp-config.json`
+- Vault: `.kg/mcp.json` (overrides/extends global, can disable global servers)
+- Secrets: `${secret:name}` placeholders resolved from `mcp-secrets.json` / `.kg/secrets.json`
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "${secret:github-token}" }
+    }
+  }
+}
+```
+
+### MCP Server (Exposing Graph to External Agents)
+
+Two transports serve the same tool set:
+
+**HTTP (Streamable HTTP):** `McpServerBridge` adds an `/mcp` endpoint to the companion server (`127.0.0.1:19876`). Available when the desktop app is running. Configured via `.kg/mcp-server.json` with access profiles (read-only by default).
+
+**stdio CLI (`packages/synapse-mcp/`):** Standalone binary that opens vault DB directly via better-sqlite3. No Electron needed. Supports multi-vault (`--vault /a --vault /b`) and auto-discovery from recent vaults.
+
+```bash
+# Claude Code / Cursor config
+{ "mcpServers": { "synapse": { "command": "node", "args": ["packages/synapse-mcp/dist/index.js", "--vault", "/path"] } } }
+```
+
+### Modularity Principle
+
+Each component is independently removable:
+- Remove in-app agent → registry + MCP server still expose tools
+- Remove MCP client → built-in tools and MCP server unaffected
+- Remove MCP server → in-app agent and MCP client unaffected
+
+The in-app agent is just another consumer of the registry (calls `tools:execute` IPC). It can be replaced with an embedded MCP client without architectural changes.
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `electron/mcp/types.ts` | `ToolProvider`, `IToolRegistry`, config interfaces |
+| `electron/mcp/tool-registry.ts` | Registry singleton with namespace dispatch |
+| `electron/mcp/builtin-tool-provider.ts` | Wraps `CHAT_AGENT_TOOLS` + `executeTool()` |
+| `electron/mcp/main-process-context.ts` | Creates `CommandContext` with direct DataStore |
+| `electron/mcp/mcp-client-manager.ts` | Manages outbound stdio connections |
+| `electron/mcp/mcp-tool-provider.ts` | `ToolProvider` for a single MCP server |
+| `electron/mcp/mcp-server-bridge.ts` | Exposes tools via Streamable HTTP |
+| `electron/mcp/mcp-config.ts` | Config loading, merging, secret resolution |
+| `electron/mcp/mcp-ipc.ts` | IPC handler registration |
+| `packages/synapse-mcp/` | Standalone stdio CLI binary |
+
+---
+
 ## Pitfalls Encountered and Solutions
 
 ### Pitfall #1: Troika Blob URL Workers Blocked by Chrome Extension CSP
