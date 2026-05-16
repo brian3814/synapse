@@ -1,7 +1,7 @@
-import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
 import { llm, platformId } from '@platform';
 import { createUICommandContext } from '../../commands/create-context';
 import { executeTool as executeToolCmd } from '../../commands/chat-tool-executor';
+import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
 import type { ChatAgentTurn } from '../../shared/types';
 import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
 
@@ -23,33 +23,21 @@ export interface ChatAgentProgress {
 
 import { DEFAULT_CHAT_MAX_ITERATIONS } from '../../shared/agent-settings-types';
 
-const SEMANTIC_SEARCH_TOOL = {
-  name: 'semantic_search',
-  description: 'Find nodes semantically similar to a query, even without keyword overlap. Use when keyword search returns few results or you need conceptually related nodes.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      query: { type: 'string', description: 'Natural language search query' },
-      limit: { type: 'number', description: 'Max results to return (default 5)' },
-    },
-    required: ['query'],
-  },
-};
-
-function getToolDefs(disabledTools?: string[]) {
+async function getToolDefs(disabledTools?: string[]): Promise<Array<{ name: string; description: string; input_schema: Record<string, unknown> }>> {
+  if (platformId === 'electron') {
+    const toolDefs = await (window as any).electronIPC.invoke('tools:list', { disabledTools: disabledTools ?? [] });
+    return toolDefs.map((t: any) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters,
+    }));
+  }
+  // Chrome fallback
   let defs = [...CHAT_AGENT_TOOLS];
-
   if (disabledTools?.length) {
     defs = defs.filter((t) => !disabledTools.includes(t.name));
   }
-
-  const tools = toAnthropicChatTools(defs);
-
-  if (platformId === 'electron' && !disabledTools?.includes('semantic_search')) {
-    tools.push(SEMANTIC_SEARCH_TOOL);
-  }
-
-  return tools;
+  return toAnthropicChatTools(defs);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +84,8 @@ export async function runChatAgent({
   let finalText = '';
   const collectedNodeIds = new Set<string>();
   const collectedEdgeIds = new Set<string>();
-  const ctx = createUICommandContext();
+  const ctx = platformId !== 'electron' ? createUICommandContext() : null;
+  const tools = await getToolDefs(disabledTools);
 
   for (let i = 0; i < iterLimit; i++) {
     // Send one LLM call with tools
@@ -108,7 +97,7 @@ export async function runChatAgent({
         model,
         systemPrompt,
         messages,
-        tools: getToolDefs(disabledTools),
+        tools,
       },
       onProgress,
     );
@@ -160,10 +149,21 @@ export async function runChatAgent({
       let resultStr: string;
       let isError = false;
       try {
-        const toolResult = await executeToolCmd(ctx, tc.name, tc.input);
-        resultStr = toolResult.result;
-        if (toolResult.collectedNodeIds) for (const id of toolResult.collectedNodeIds) collectedNodeIds.add(id);
-        if (toolResult.collectedEdgeIds) for (const id of toolResult.collectedEdgeIds) collectedEdgeIds.add(id);
+        if (platformId === 'electron') {
+          const toolResult = await (window as any).electronIPC.invoke('tools:execute', {
+            name: tc.name,
+            input: tc.input,
+          });
+          resultStr = toolResult.result;
+          isError = toolResult.isError ?? false;
+          if (toolResult.collectedNodeIds) for (const id of toolResult.collectedNodeIds) collectedNodeIds.add(id);
+          if (toolResult.collectedEdgeIds) for (const id of toolResult.collectedEdgeIds) collectedEdgeIds.add(id);
+        } else {
+          const toolResult = await executeToolCmd(ctx!, tc.name, tc.input);
+          resultStr = toolResult.result;
+          if (toolResult.collectedNodeIds) for (const id of toolResult.collectedNodeIds) collectedNodeIds.add(id);
+          if (toolResult.collectedEdgeIds) for (const id of toolResult.collectedEdgeIds) collectedEdgeIds.add(id);
+        }
       } catch (e: any) {
         resultStr = JSON.stringify({ error: e.message });
         isError = true;
