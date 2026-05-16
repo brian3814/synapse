@@ -24,6 +24,8 @@ import { registerToolIpcHandlers, registerMcpClientIpcHandlers, broadcastToolsCh
 import { ToolRegistry } from './mcp/tool-registry';
 import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
 import { createMainProcessContext } from './mcp/main-process-context';
+import { McpClientManager } from './mcp/mcp-client-manager';
+import { loadMcpClientConfig } from './mcp/mcp-config';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -381,7 +383,7 @@ app.whenReady().then(() => {
 
   // ── MCP / Tool Registry ──────────────────────────────────────────
   let toolRegistry: ToolRegistry | null = null;
-  let mcpClientManager: any = null;
+  let mcpClientManager: McpClientManager | null = null;
 
   registerToolIpcHandlers(() => toolRegistry);
   registerMcpClientIpcHandlers(() => mcpClientManager);
@@ -440,6 +442,30 @@ app.whenReady().then(() => {
     toolRegistry = new ToolRegistry();
     toolRegistry.registerProvider(new BuiltinToolProvider(mainCtx));
     toolRegistry.onToolsChanged(() => broadcastToolsChanged());
+
+    // MCP Client — connect to configured external servers
+    const globalConfigPath = path.join(app.getPath('userData'), 'mcp-config.json');
+    const vaultConfigPath = path.join(ctx.path, '.kg', 'mcp.json');
+    const globalSecretsPath = path.join(app.getPath('userData'), 'mcp-secrets.json');
+    const vaultSecretsPath = path.join(ctx.path, '.kg', 'secrets.json');
+
+    const mcpConfig = loadMcpClientConfig({ globalConfigPath, vaultConfigPath });
+
+    if (Object.keys(mcpConfig.mcpServers).length > 0) {
+      mcpClientManager = new McpClientManager({
+        registry: toolRegistry!,
+        globalSecretsPath,
+        vaultSecretsPath,
+        onStatusChanged: (name, state, error) => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('mcp:server-status-changed', { name, state, error });
+          }
+        },
+      });
+      mcpClientManager.connectAll(mcpConfig).catch((e: any) =>
+        console.error('[MCP] Failed to connect servers:', e)
+      );
+    }
   }
 
   function unregisterVaultHandlers() {
