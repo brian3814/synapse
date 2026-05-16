@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { StorageBackend } from './storage-backend';
-import { handleAction as dbHandleAction } from './db-backend';
+import { handleAction as dbHandleAction, dataStore } from './db-backend';
 import * as notesBackend from './notes-backend';
 import * as filesBackend from './files-backend';
 import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat } from './llm-backend';
@@ -20,6 +20,10 @@ import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
 import { VaultFileWatcher } from './vault/file-watcher';
 import { reconcileVault } from './vault/reconciliation';
+import { registerToolIpcHandlers, registerMcpClientIpcHandlers, broadcastToolsChanged } from './mcp/mcp-ipc';
+import { ToolRegistry } from './mcp/tool-registry';
+import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
+import { createMainProcessContext } from './mcp/main-process-context';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -375,6 +379,13 @@ app.whenReady().then(() => {
 
   startCompanionServer(storage);
 
+  // ── MCP / Tool Registry ──────────────────────────────────────────
+  let toolRegistry: ToolRegistry | null = null;
+  let mcpClientManager: any = null;
+
+  registerToolIpcHandlers(() => toolRegistry);
+  registerMcpClientIpcHandlers(() => mcpClientManager);
+
   // ── Vault Workspace Management ──────────────────────────────────────
   const vaultManager = new VaultManager(storage);
 
@@ -413,6 +424,22 @@ app.whenReady().then(() => {
     // Start file watcher for live changes
     fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
     fileWatcher.start();
+
+    // Initialize tool registry with BuiltinToolProvider
+    const mainCtx = createMainProcessContext({
+      dataStore,
+      storage: storage as any,
+      readNote: async (nodeId) => readNote(nodeId),
+      writeNote: async (nodeId, content) => {
+        notesBackend.writeNote(nodeId, content);
+      },
+      embedding: embeddingService ? {
+        searchSimilar: (query: string, topK?: number) => embeddingService!.searchSimilar(query, topK ?? 5),
+      } : undefined,
+    });
+    toolRegistry = new ToolRegistry();
+    toolRegistry.registerProvider(new BuiltinToolProvider(mainCtx));
+    toolRegistry.onToolsChanged(() => broadcastToolsChanged());
   }
 
   function unregisterVaultHandlers() {
@@ -428,6 +455,10 @@ app.whenReady().then(() => {
     embeddingInitStarted = false;
     embeddingService?.dispose();
     embeddingService = null;
+    mcpClientManager?.dispose?.();
+    mcpClientManager = null;
+    toolRegistry?.dispose();
+    toolRegistry = null;
   }
 
   ipcMain.handle('vault-workspace:get-status', () => {
