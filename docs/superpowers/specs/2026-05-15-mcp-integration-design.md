@@ -392,6 +392,36 @@ packages/
     standalone-provider.ts      — opens DB directly, no Electron dependency
 ```
 
+## Modularity Principle
+
+The architecture has four independent components connected only through the ToolRegistry:
+
+```
+        ┌─────────────────┐
+        │  ToolRegistry    │  ← stable core, always exists
+        └────┬───┬───┬────┘
+             │   │   │
+   ┌─────────┘   │   └──────────┐
+   ▼             ▼               ▼
+Providers     Consumers       Consumers
+(add tools)   (use tools)     (use tools)
+   │             │               │
+   ▼             ▼               ▼
+McpClient    In-app Agent    McpServer
+(optional)   (optional)      (optional)
+```
+
+Each component can be removed without affecting the others:
+
+| Component | Remove it and... | Nothing else changes because... |
+|---|---|---|
+| In-app agent (`chat-agent-loop.ts`) | No chat panel, external agents only | Registry + MCP server still expose all tools |
+| MCP Client (`McpClientManager`) | No external tool consumption | Built-in tools and MCP server unaffected |
+| MCP Server (`McpServerBridge`) | No external agent access | In-app agent and MCP client unaffected |
+| BuiltinToolProvider | No graph tools at all | Registry still works with only MCP providers |
+
+**Design rule**: No component imports from or depends on another component. They only depend on the registry interface. The in-app agent does NOT call `executeTool()` directly — it goes through `tools:execute` IPC → registry, same as any other consumer. This means swapping the in-app agent for an embedded MCP client (Option 3 from design discussion) is a UI-only change.
+
 ## Dependencies
 
 - `@modelcontextprotocol/sdk` — MCP client and server SDK (TypeScript)
