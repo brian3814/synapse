@@ -218,13 +218,16 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     executionContext: 'ui',
   },
   {
-    name: 'index_notes_folder',
+    name: 'semantic_search',
     description:
-      'Index or re-index the connected markdown notes folder into the knowledge graph. Creates resource nodes for each .md file and edges for wiki-links. Returns indexing statistics.',
+      'Find nodes semantically similar to a query, even without keyword overlap. Use when keyword search returns few results or you need conceptually related nodes. Returns empty results if embeddings are not enabled.',
     parameters: {
       type: 'object',
-      properties: {},
-      required: [],
+      properties: {
+        query: { type: 'string', description: 'Natural language search query' },
+        limit: { type: 'number', description: 'Max results to return (default 5)' },
+      },
+      required: ['query'],
     },
     executionContext: 'ui',
   },

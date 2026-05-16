@@ -1,5 +1,5 @@
 import * as dbClient from '../db/client/db-client';
-import { storage, notes, files, llm, browser } from '@platform';
+import { storage, notes, files, llm, browser, embedding } from '@platform';
 import { useGraphStore } from '../graph/store/graph-store';
 import type { CommandContext } from './types';
 import type { DataStore } from '../db/data-store';
@@ -44,6 +44,7 @@ export function createUICommandContext(): CommandContext {
     files,
     llm,
     browser,
+    embedding,
     getGraphSnapshot: () => {
       const state = useGraphStore.getState();
       return Promise.resolve({ nodes: state.nodes, edges: state.edges });

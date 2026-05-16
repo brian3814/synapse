@@ -19,7 +19,7 @@ const CHAT_TOOL_CATEGORIES: Record<string, { tools: string[]; variant?: 'destruc
     tools: ['search_knowledge', 'search_nodes', 'get_node_details', 'get_neighbors', 'get_edges_for_node', 'search_sources', 'get_source_content'],
   },
   Write: {
-    tools: ['create_node', 'update_node', 'create_edge', 'index_notes_folder', 'manage_memory'],
+    tools: ['create_node', 'update_node', 'create_edge', 'manage_memory'],
   },
   Destructive: {
     tools: ['delete_node', 'merge_nodes'],

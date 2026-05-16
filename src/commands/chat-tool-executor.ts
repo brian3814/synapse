@@ -3,9 +3,6 @@ import { retrieveRAGContext, formatRAGPrompt } from './rag-commands';
 import { parseMarkdown } from '../notes/markdown-utils';
 import * as graphCommands from './graph-commands';
 import * as memoryCommands from './memory-commands';
-import { getStoredFolder, requestPermission } from '../filesystem/folder-access';
-import { indexMarkdownFolder } from '../filesystem/indexing-pipeline';
-import { embedding } from '@platform';
 
 export interface ToolExecResult {
   result: string;
@@ -182,31 +179,6 @@ export async function executeTool(
       return { result };
     }
 
-    case 'index_notes_folder': {
-      const handle = await getStoredFolder();
-      if (!handle) {
-        return { result: JSON.stringify({ error: 'No folder connected. Connect one in Settings > Markdown Folder.' }) };
-      }
-      const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') {
-        const granted = await requestPermission(handle);
-        if (!granted) {
-          return { result: JSON.stringify({ error: 'Permission denied. Please grant folder access in Settings.' }) };
-        }
-      }
-      const indexResult = await indexMarkdownFolder(handle);
-      return {
-        result: JSON.stringify({
-          processed: indexResult.processed,
-          created: indexResult.created,
-          updated: indexResult.updated,
-          skipped: indexResult.skipped,
-          folderStats: indexResult.folderStats,
-          rootIndex: indexResult.rootIndexContent,
-        }),
-      };
-    }
-
     case 'get_nodes_batch': {
       const ids = (input.node_ids as string[]).slice(0, 50);
       const nodes = await Promise.all(ids.map((id) => ctx.db.nodes.getById(id)));
@@ -296,9 +268,12 @@ export async function executeTool(
     case 'semantic_search': {
       const query = input.query as string;
       const limit = (input.limit as number) ?? 5;
-      const results = await embedding.searchSimilar(query, limit);
+      if (!ctx.embedding) {
+        return { result: JSON.stringify({ message: 'Embeddings not enabled. Configure in Settings > Embeddings.' }) };
+      }
+      const results = await ctx.embedding.searchSimilar(query, limit);
       if (results.length === 0) {
-        return { result: JSON.stringify({ message: 'No semantic matches found. Embeddings may not be enabled.' }) };
+        return { result: JSON.stringify({ message: 'No semantic matches found.' }) };
       }
       const nodeDetails = [];
       for (const r of results) {

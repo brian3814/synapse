@@ -1,12 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
 import { storage, platformId, notes, vaultWorkspace } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
 import { useGraphStore } from '../../../graph/store/graph-store';
-import { pickFolder, getFolderStatus, getStoredFolder, requestPermission, disconnectFolder, type FolderStatus } from '../../../filesystem/folder-access';
-import { indexMarkdownFolder, type IndexingProgress } from '../../../filesystem/indexing-pipeline';
-import { indexedFiles, stressTest } from '../../../db/client/db-client';
+import { stressTest } from '../../../db/client/db-client';
 import { MemorySection } from './MemorySection';
 import { EmbeddingSettings } from './EmbeddingSettings';
 import { AgentSettingsTab } from './AgentSettingsTab';
@@ -170,8 +168,6 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       {platformId === 'electron' ? <VaultSection /> : <NotesStorageSection />}
 
       <EmbeddingSettings />
-
-      {platformId !== 'electron' && <FolderSection />}
 
       <ReadingListSettings />
 
@@ -464,152 +460,6 @@ function NotesStorageSection() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function FolderSection() {
-  const [status, setStatus] = useState<FolderStatus | null>(null);
-  const [fileCount, setFileCount] = useState(0);
-  const [syncing, setSyncing] = useState(false);
-  const [progress, setProgress] = useState<IndexingProgress | null>(null);
-  const graphStore = useGraphStore();
-
-  const refreshStatus = useCallback(async () => {
-    try {
-      const s = await getFolderStatus();
-      setStatus(s);
-      if (s.connected) {
-        const files = await indexedFiles.getAll();
-        setFileCount(files.length);
-      }
-    } catch {
-      setStatus({ connected: false, name: null, permissionGranted: false });
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
-
-  const handleConnect = async () => {
-    try {
-      await pickFolder();
-      await refreshStatus();
-    } catch (e: any) {
-      if (e.name !== 'AbortError') console.error('[Folder] Connect failed:', e);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    await disconnectFolder();
-    setFileCount(0);
-    await refreshStatus();
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setProgress(null);
-    try {
-      let handle = await getStoredFolder();
-      if (!handle) return;
-
-      // Check permission
-      const perm = await (handle as any).queryPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') {
-        const granted = await requestPermission(handle);
-        if (!granted) return;
-      }
-
-      const result = await indexMarkdownFolder(handle, setProgress);
-      setFileCount(result.processed);
-      // Reload graph to pick up new nodes
-      await graphStore.loadAll();
-    } catch (e: any) {
-      console.error('[Folder] Sync failed:', e);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleGrantPermission = async () => {
-    const handle = await getStoredFolder();
-    if (handle) {
-      const granted = await requestPermission(handle);
-      if (granted) await refreshStatus();
-    }
-  };
-
-  return (
-    <div className="border-t border-zinc-700 pt-4 mt-4">
-      <h4 className="text-xs font-medium text-zinc-400 mb-2">Markdown Folder</h4>
-
-      {!status?.connected ? (
-        <div className="space-y-2">
-          <p className="text-xs text-zinc-500">
-            Connect a local folder to index .md files into your knowledge graph.
-          </p>
-          <button
-            onClick={handleConnect}
-            className="w-full bg-zinc-700 text-zinc-200 text-sm py-1.5 rounded hover:bg-zinc-600 transition-colors"
-          >
-            Connect Folder
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-zinc-200 font-medium">{status.name}</p>
-              <p className="text-xs text-zinc-500">{fileCount} files indexed</p>
-            </div>
-            <button
-              onClick={handleDisconnect}
-              className="text-xs px-2 py-1 text-red-400 hover:bg-red-900/30 rounded"
-            >
-              Disconnect
-            </button>
-          </div>
-
-          {!status.permissionGranted && (
-            <button
-              onClick={handleGrantPermission}
-              className="w-full bg-amber-900/30 text-amber-400 text-xs py-1.5 rounded border border-amber-800/50 hover:bg-amber-900/50"
-            >
-              Grant Permission
-            </button>
-          )}
-
-          <button
-            onClick={handleSync}
-            disabled={syncing || !status.permissionGranted}
-            className="w-full bg-indigo-600 text-white text-sm py-1.5 rounded hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncing ? 'Syncing...' : 'Sync Now'}
-          </button>
-
-          {progress && syncing && (
-            <div className="space-y-1">
-              <div className="w-full bg-zinc-700 rounded-full h-1.5">
-                <div
-                  className="bg-indigo-500 h-1.5 rounded-full transition-all"
-                  style={{ width: `${progress.total > 0 ? (progress.processed / progress.total) * 100 : 0}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                {progress.processed}/{progress.total} files
-                {progress.currentFile ? ` — ${progress.currentFile}` : ''}
-              </p>
-            </div>
-          )}
-
-          {progress && !syncing && (
-            <p className="text-xs text-zinc-500">
-              {progress.created} new, {progress.updated} updated, {progress.skipped} unchanged
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
