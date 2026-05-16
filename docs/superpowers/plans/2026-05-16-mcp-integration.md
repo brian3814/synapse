@@ -1477,9 +1477,9 @@ export class StandaloneGraphProvider {
 }
 ```
 
-- [ ] **Step 3: Create CLI entry point**
+- [ ] **Step 3: Create CLI entry point with multi-vault support**
 
-Note: The CLI ships with 3 core tools as MVP (search_nodes, get_node_details, get_neighbors). The full 12-tool set (matching the HTTP server) will be added once the standalone provider is expanded to support write operations and RAG. This keeps the initial package small and testable.
+Note: The CLI ships with 3 core read tools as MVP (search_nodes, get_node_details, get_neighbors) plus `list_vaults`. Write tools require `vault` parameter when multiple vaults are open. The full 12-tool set will be added once the standalone provider supports write operations and RAG.
 
 Create `packages/synapse-mcp/src/index.ts`:
 
@@ -1487,36 +1487,94 @@ Create `packages/synapse-mcp/src/index.ts`:
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StandaloneGraphProvider } from './standalone-provider.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
+// Parse CLI args: supports multiple --vault flags or auto-discovery
 const args = process.argv.slice(2);
-const vaultIdx = args.indexOf('--vault');
-const vaultPath = vaultIdx !== -1 ? args[vaultIdx + 1] : null;
 const allowWrite = args.includes('--allow-write');
 
-if (!vaultPath) {
-  console.error('Usage: synapse-mcp --vault <path-to-vault> [--allow-write]');
-  process.exit(1);
+function getVaultPaths(): string[] {
+  const paths: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--vault' && args[i + 1]) {
+      paths.push(args[++i]);
+    }
+  }
+
+  // Auto-discover from app's recent vaults if no --vault specified
+  if (paths.length === 0) {
+    const storagePath = path.join(
+      os.homedir(), 'Library', 'Application Support', 'kg-desktop', 'storage.json'
+    );
+    try {
+      const data = JSON.parse(fs.readFileSync(storagePath, 'utf-8'));
+      if (data.recentVaults && Array.isArray(data.recentVaults)) {
+        for (const v of data.recentVaults) {
+          if (v.path && fs.existsSync(path.join(v.path, '.kg', 'graph.db'))) {
+            paths.push(v.path);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (paths.length === 0) {
+    console.error('Usage: synapse-mcp [--vault <path>]... [--allow-write]');
+    console.error('No vaults specified and no recent vaults found.');
+    process.exit(1);
+  }
+  return paths;
 }
 
-const provider = new StandaloneGraphProvider(vaultPath, !allowWrite);
+const vaultPaths = getVaultPaths();
+const isMultiVault = vaultPaths.length > 1;
+
+// Open all vault DBs
+const vaults = new Map<string, StandaloneGraphProvider>();
+for (const vp of vaultPaths) {
+  const name = path.basename(vp);
+  vaults.set(name, new StandaloneGraphProvider(vp, !allowWrite));
+}
+
 const server = new McpServer({ name: 'synapse', version: '1.0.0' });
 
-// Register tools
+// list_vaults — always available
+server.tool(
+  'list_vaults',
+  'List all open knowledge graph vaults. Call this before write operations to confirm the target vault with the user.',
+  { type: 'object', properties: {}, required: [] },
+  async () => {
+    const list = [...vaults.keys()].map((name) => ({ name, path: vaultPaths[vaults.size] }));
+    return { content: [{ type: 'text', text: JSON.stringify([...vaults.keys()]) }] };
+  },
+);
+
+// Read tools — search across ALL vaults, results tagged with vault name
 server.tool(
   'search_nodes',
-  'Full-text search for nodes in the knowledge graph by name',
+  'Full-text search for nodes in the knowledge graph by name. Searches across all open vaults.',
   { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
   async ({ query, limit }) => {
-    const result = provider.searchNodes(query as string, limit as number);
-    return { content: [{ type: 'text', text: result.result }], isError: result.isError };
+    const allResults: Array<{ vault: string; nodes: unknown[] }> = [];
+    for (const [name, provider] of vaults) {
+      const result = provider.searchNodes(query as string, limit as number);
+      if (!result.isError) {
+        allResults.push({ vault: name, nodes: JSON.parse(result.result) });
+      }
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(allResults) }] };
   },
 );
 
 server.tool(
   'get_node_details',
   'Get full details of a node by ID including connected edges',
-  { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-  async ({ id }) => {
+  { type: 'object', properties: { id: { type: 'string' }, vault: isMultiVault ? { type: 'string', description: 'Vault name (required when multiple vaults open)' } : undefined }, required: ['id'] },
+  async ({ id, vault }) => {
+    const provider = resolveProvider(vault as string | undefined);
+    if (!provider) return { content: [{ type: 'text', text: 'Error: specify vault parameter. Call list_vaults to see options.' }], isError: true };
     const result = provider.getNodeDetails(id as string);
     return { content: [{ type: 'text', text: result.result }], isError: result.isError };
   },
@@ -1525,12 +1583,21 @@ server.tool(
 server.tool(
   'get_neighbors',
   'Get neighboring nodes within N hops of a given node',
-  { type: 'object', properties: { node_id: { type: 'string' }, depth: { type: 'number' } }, required: ['node_id'] },
-  async ({ node_id, depth }) => {
+  { type: 'object', properties: { node_id: { type: 'string' }, depth: { type: 'number' }, vault: isMultiVault ? { type: 'string', description: 'Vault name (required when multiple vaults open)' } : undefined }, required: ['node_id'] },
+  async ({ node_id, depth, vault }) => {
+    const provider = resolveProvider(vault as string | undefined);
+    if (!provider) return { content: [{ type: 'text', text: 'Error: specify vault parameter. Call list_vaults to see options.' }], isError: true };
     const result = provider.getNeighbors(node_id as string, depth as number ?? 1);
     return { content: [{ type: 'text', text: result.result }], isError: result.isError };
   },
 );
+
+// Helper: resolve vault provider (single-vault mode doesn't need vault param)
+function resolveProvider(vault?: string): StandaloneGraphProvider | null {
+  if (!isMultiVault) return vaults.values().next().value!;
+  if (!vault) return null;
+  return vaults.get(vault) ?? null;
+}
 
 // Start stdio transport
 async function main() {
@@ -1544,7 +1611,7 @@ main().catch((e) => {
 });
 
 process.on('SIGINT', () => {
-  provider.close();
+  for (const provider of vaults.values()) provider.close();
   process.exit(0);
 });
 ```
@@ -1557,13 +1624,21 @@ cd packages/synapse-mcp && npm install && npm run build
 
 Expected: Build produces `packages/synapse-mcp/dist/index.js`.
 
-- [ ] **Step 5: Test with MCP Inspector**
+- [ ] **Step 5: Test single-vault mode with MCP Inspector**
 
 ```bash
 npx @modelcontextprotocol/inspector -- node packages/synapse-mcp/dist/index.js --vault /path/to/test-vault
 ```
 
-Expected: Inspector connects, lists 3 tools, can call `search_nodes` with a query and get results from the vault DB.
+Expected: Inspector connects, lists 4 tools (list_vaults, search_nodes, get_node_details, get_neighbors). `search_nodes` doesn't require vault param. Results are not vault-tagged (single vault).
+
+- [ ] **Step 5b: Test multi-vault mode**
+
+```bash
+npx @modelcontextprotocol/inspector -- node packages/synapse-mcp/dist/index.js --vault /path/to/vault1 --vault /path/to/vault2
+```
+
+Expected: `search_nodes` returns results tagged by vault: `[{ vault: "vault1", nodes: [...] }, { vault: "vault2", nodes: [...] }]`. `get_node_details` without vault param returns an error asking to specify vault.
 
 - [ ] **Step 6: Test with Claude Code**
 

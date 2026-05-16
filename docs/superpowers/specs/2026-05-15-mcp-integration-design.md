@@ -422,6 +422,33 @@ Each component can be removed without affecting the others:
 
 **Design rule**: No component imports from or depends on another component. They only depend on the registry interface. The in-app agent does NOT call `executeTool()` directly — it goes through `tools:execute` IPC → registry, same as any other consumer. This means swapping the in-app agent for an embedded MCP client (Option 3 from design discussion) is a UI-only change.
 
+## Multi-Vault Support (stdio CLI)
+
+The `synapse-mcp` CLI supports multiple vaults without requiring separate MCP server entries.
+
+**Invocation:**
+
+```bash
+synapse-mcp                                    # auto-discover from app's recent vaults
+synapse-mcp --vault /work --vault /personal    # explicit multi-vault
+synapse-mcp --vault /work                      # single vault (no confirmation needed)
+```
+
+**Auto-discovery:** Reads `recentVaults` from `~/Library/Application Support/kg-desktop/storage.json`. Opens all known vaults.
+
+**Vault confirmation pattern (Approach 1+2):**
+
+- `list_vaults` tool always available — returns open vaults with names and paths
+- **Read tools** search across all open vaults. Results tagged with vault name: `{ vault: "Work", node: {...} }`
+- **Write tools** have a required `vault` parameter when multiple vaults are open. If omitted, returns error: "Multiple vaults open. Call list_vaults and specify which vault to write to."
+- Tool descriptions instruct the agent: "Before any write operation on a multi-vault server, confirm the target vault with the user by calling list_vaults first."
+
+**Single-vault shortcut:** When only one vault is open (or `--vault` specifies one path), write tools don't require the `vault` parameter. No confirmation friction for single-vault users.
+
+**Future (Phase 3): MCP Elicitation.** When MCP clients widely support the `elicitation` protocol primitive, write tools will use `requestElicitation()` to prompt the user with a vault picker UI mid-tool-call — replacing the current two-step pattern with inline confirmation.
+
+**HTTP transport:** Always serves the currently-open vault from the desktop app. Multi-vault is not applicable (single vault per Electron process). Switching vaults in the app switches what `/mcp` serves.
+
 ## Dependencies
 
 - `@modelcontextprotocol/sdk` — MCP client and server SDK (TypeScript)
@@ -435,6 +462,7 @@ Each component can be removed without affecting the others:
 - McpServerBridge (server, HTTP + stdio)
 - Configuration (two-layer merge, secrets)
 - Agent loop integration
+- Multi-vault stdio CLI with vault confirmation (Approach 1+2)
 
 **Phase 2 (follow-up):**
 - Tool management UI (settings panel for servers, tools, profiles)
@@ -443,3 +471,4 @@ Each component can be removed without affecting the others:
 **Phase 3 (future):**
 - Plugin system with `PluginToolProvider` + sandboxed process isolation
 - MCP prompts
+- MCP Elicitation for vault confirmation (replaces Approach 1+2)
