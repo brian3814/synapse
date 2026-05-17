@@ -5,27 +5,16 @@
 
 import { AGENT_TOOLS, toAnthropicTools } from '../shared/agent-tools';
 import type { AgentProgressEvent, ExtractionResult, ToolCall } from '../shared/types';
-import type {
-  AnthropicMessage,
-  AnthropicContentBlock,
-  AnthropicToolsResult,
-} from '../offscreen/llm-executor';
+import type { LLMMessage, ContentBlock, LLMStreamResult, StreamFn } from './llm-protocol';
 import { getAgentSystemPrompt } from './system-prompts';
+
+export type { StreamFn } from './llm-protocol';
 
 const MAX_ITERATIONS = 15;
 
 export interface ToolExecutor {
   execute(tool: ToolCall): Promise<{ result: string; error?: string }>;
 }
-
-export type StreamFn = (
-  apiKey: string,
-  model: string,
-  systemPrompt: string,
-  messages: AnthropicMessage[],
-  tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
-  onChunk: (text: string) => void,
-) => Promise<AnthropicToolsResult>;
 
 export interface AgentLoopConfig {
   runId: string;
@@ -50,7 +39,7 @@ export async function runAgentLoop(
     ? AGENT_TOOLS.filter((t) => t.name === 'save_entities' || !config.disabledTools!.includes(t.name))
     : AGENT_TOOLS;
   const anthropicTools = toAnthropicTools(filteredTools);
-  const messages: AnthropicMessage[] = [{ role: 'user', content: config.userPrompt }];
+  const messages: LLMMessage[] = [{ role: 'user', content: config.userPrompt }];
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -58,7 +47,7 @@ export async function runAgentLoop(
   for (let i = 0; i < maxIter; i++) {
     onProgress({ type: 'llm_start' });
 
-    let result: AnthropicToolsResult;
+    let result: LLMStreamResult;
     try {
       result = await streamFn(
         config.apiKey, config.model, systemPrompt,
@@ -81,7 +70,7 @@ export async function runAgentLoop(
     }
 
     // Build the assistant message with all content blocks
-    const assistantContent: AnthropicContentBlock[] = [];
+    const assistantContent: ContentBlock[] = [];
     if (result.textContent) {
       assistantContent.push({ type: 'text', text: result.textContent });
     }
@@ -91,7 +80,7 @@ export async function runAgentLoop(
     messages.push({ role: 'assistant', content: assistantContent });
 
     // Execute each tool call and collect results
-    const toolResultBlocks: AnthropicContentBlock[] = [];
+    const toolResultBlocks: ContentBlock[] = [];
 
     for (const tc of result.toolCalls) {
       onProgress({ type: 'tool_call', toolCall: tc });

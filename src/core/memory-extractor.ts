@@ -1,12 +1,13 @@
-import { llm } from '@platform';
-import { chat } from '../db/client/db-client';
-import { LLM_MODELS } from '../shared/constants';
+import type { CommandContext } from '../commands/types';
 import { writeMemory } from '../commands/memory-commands';
-import { createUICommandContext } from '../commands/create-context';
 
-export async function summarizeSession(sessionId: string): Promise<void> {
+export async function summarizeSession(
+  sessionId: string,
+  ctx: CommandContext,
+  model: string,
+): Promise<void> {
   try {
-    const messages = await chat.getRecentMessages(sessionId, 20);
+    const messages = await ctx.db.chat.getRecentMessages(sessionId, 20);
     if (!messages || (messages as any[]).length < 4) return;
 
     const transcript = (messages as any[])
@@ -14,10 +15,10 @@ export async function summarizeSession(sessionId: string): Promise<void> {
       .join('\n\n');
 
     const requestId = crypto.randomUUID();
-    const result = await llm.streamChat(
+    const result = await ctx.llm.streamChat(
       {
         requestId,
-        model: LLM_MODELS.anthropic[LLM_MODELS.anthropic.length - 1].id,
+        model,
         systemPrompt:
           'Summarize this conversation. Return ONLY valid JSON, no other text:\n{\n  "summary": "2-3 sentence summary focusing on decisions and outcomes",\n  "tags": ["3-5 retrieval keywords"],\n  "slug": "short-kebab-case-identifier"\n}',
         messages: [{ role: 'user', content: transcript }],
@@ -39,7 +40,6 @@ export async function summarizeSession(sessionId: string): Promise<void> {
     const date = new Date().toISOString().slice(0, 10);
     const slug = parsed.slug.replace(/[^a-z0-9-]/g, '').slice(0, 40) || sessionId.slice(0, 12);
 
-    const ctx = createUICommandContext();
     await writeMemory(ctx, {
       action: 'create',
       type: 'episodic',

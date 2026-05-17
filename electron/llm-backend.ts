@@ -1,9 +1,13 @@
-import { executeLLMRequestStreaming, streamAnthropicWithTools } from '../src/offscreen/llm-executor';
+import {
+  executeLLMRequestStreaming as anthropicExtractionStream,
+  streamAnthropicWithTools,
+} from '../src/offscreen/llm-executor';
 import { AGENT_TOOLS } from '../src/shared/agent-tools';
 import { fetchAndCleanContent, isBlockedUrl } from './fetch-utils';
 import type { AgentProgressEvent } from '../src/shared/types';
 import { StorageBackend } from './storage-backend';
 import { runAgentLoop as coreRunAgentLoop, type ToolExecutor } from '../src/core/agent-loop';
+import type { StreamFn } from '../src/core/llm-protocol';
 import { recordUsage as coreRecordUsage, type UsageStore } from '../src/core/usage';
 import { withRetry } from '../src/core/retry';
 
@@ -15,12 +19,55 @@ export function setStorage(s: StorageBackend): void {
   storage = s;
 }
 
-async function getApiKey(): Promise<string> {
+// ---------------------------------------------------------------------------
+// Provider factory
+// ---------------------------------------------------------------------------
+
+type ExtractionStreamFn = typeof anthropicExtractionStream;
+
+const streamFnRegistry: Record<string, StreamFn> = {
+  anthropic: streamAnthropicWithTools,
+};
+
+const extractionFnRegistry: Record<string, ExtractionStreamFn> = {
+  anthropic: anthropicExtractionStream,
+};
+
+export function registerStreamFn(provider: string, fn: StreamFn): void {
+  streamFnRegistry[provider] = fn;
+}
+
+export function registerExtractionFn(provider: string, fn: ExtractionStreamFn): void {
+  extractionFnRegistry[provider] = fn;
+}
+
+function getStreamFn(provider: string): StreamFn {
+  const fn = streamFnRegistry[provider];
+  if (!fn) throw new Error(`No LLM stream adapter registered for provider "${provider}"`);
+  return fn;
+}
+
+function getExtractionFn(provider: string): ExtractionStreamFn {
+  const fn = extractionFnRegistry[provider];
+  if (!fn) throw new Error(`No LLM extraction adapter registered for provider "${provider}"`);
+  return fn;
+}
+
+// ---------------------------------------------------------------------------
+// Config helpers
+// ---------------------------------------------------------------------------
+
+interface LLMConfigSlice {
+  apiKey: string;
+  provider: string;
+}
+
+function getLLMConfig(): LLMConfigSlice {
   if (!storage) throw new Error('Storage not initialized');
   const data = storage.get('llmConfig');
-  const key = data.llmConfig?.apiKey;
-  if (!key) throw new Error('No API key configured. Go to Settings to add one.');
-  return key;
+  const cfg = data.llmConfig;
+  if (!cfg?.apiKey) throw new Error('No API key configured. Go to Settings to add one.');
+  return { apiKey: cfg.apiKey, provider: cfg.provider ?? 'anthropic' };
 }
 
 function getUsageStore(): UsageStore {
@@ -67,7 +114,8 @@ export async function handleRuntimeMessage(
 async function handleLLMRequest(payload: any, broadcast: BroadcastFn): Promise<void> {
   const requestId = payload.requestId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
-    const apiKey = await getApiKey();
+    const { apiKey, provider } = getLLMConfig();
+    const extractionFn = getExtractionFn(provider);
     const fullPayload = { ...payload, apiKey };
 
     let buffer = '';
@@ -83,7 +131,7 @@ async function handleLLMRequest(payload: any, broadcast: BroadcastFn): Promise<v
     };
 
     const result = await withRetry(
-      () => executeLLMRequestStreaming(fullPayload, (text, done) => {
+      () => extractionFn(fullPayload, (text, done) => {
         if (done) {
           flush();
           return;
@@ -130,10 +178,11 @@ async function handleLLMRequest(payload: any, broadcast: BroadcastFn): Promise<v
 async function handleChatRequest(payload: any, broadcast: BroadcastFn): Promise<void> {
   const requestId = payload.requestId;
   try {
-    const apiKey = await getApiKey();
+    const { apiKey, provider } = getLLMConfig();
+    const streamFn = getStreamFn(provider);
 
     const result = await withRetry(
-      () => streamAnthropicWithTools(
+      () => streamFn(
         apiKey,
         payload.model,
         payload.systemPrompt,
@@ -179,7 +228,8 @@ async function handleChatRequest(payload: any, broadcast: BroadcastFn): Promise<
 async function handleAgentRun(payload: any, broadcast: BroadcastFn): Promise<void> {
   const { runId, userPrompt, model, notesEnabled } = payload;
   try {
-    const apiKey = await getApiKey();
+    const { apiKey, provider } = getLLMConfig();
+    const streamFn = getStreamFn(provider);
 
     const toolExecutor: ToolExecutor = {
       async execute(tc) {
@@ -201,7 +251,7 @@ async function handleAgentRun(payload: any, broadcast: BroadcastFn): Promise<voi
     const usageStore = getUsageStore();
     await coreRunAgentLoop(
       { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false },
-      streamAnthropicWithTools,
+      streamFn,
       toolExecutor,
       (event: AgentProgressEvent) => {
         broadcast({ type: 'AGENT_PROGRESS', payload: { runId, event } });
@@ -222,8 +272,9 @@ type SendFn = (channel: string, ...args: any[]) => void;
 export async function handleStreamExtraction(payload: any, send: SendFn): Promise<void> {
   const { requestId, prompt, model, systemPrompt, messages } = payload;
   try {
-    const apiKey = await getApiKey();
-    const fullPayload = { apiKey, provider: 'anthropic', prompt, model, systemPrompt, messages };
+    const { apiKey, provider } = getLLMConfig();
+    const extractionFn = getExtractionFn(provider);
+    const fullPayload = { apiKey, provider, prompt, model, systemPrompt, messages };
 
     let buffer = '';
     const BUFFER_MAX_BYTES = 100;
@@ -238,7 +289,7 @@ export async function handleStreamExtraction(payload: any, send: SendFn): Promis
     };
 
     const result = await withRetry(
-      () => executeLLMRequestStreaming(fullPayload, (text: string, done: boolean) => {
+      () => extractionFn(fullPayload, (text: string, done: boolean) => {
         if (done) { flush(); return; }
         buffer += text;
         if (Buffer.byteLength(buffer) >= BUFFER_MAX_BYTES) flush();
@@ -260,7 +311,8 @@ export async function handleStreamExtraction(payload: any, send: SendFn): Promis
 export async function handleRunAgent(payload: any, send: SendFn): Promise<void> {
   const { runId, userPrompt, model, notesEnabled, customInstructions, disabledTools } = payload;
   try {
-    const apiKey = await getApiKey();
+    const { apiKey, provider } = getLLMConfig();
+    const streamFn = getStreamFn(provider);
 
     const toolExecutor: ToolExecutor = {
       async execute(tc) {
@@ -281,7 +333,7 @@ export async function handleRunAgent(payload: any, send: SendFn): Promise<void> 
 
     await coreRunAgentLoop(
       { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false, customInstructions, disabledTools },
-      streamAnthropicWithTools,
+      streamFn,
       toolExecutor,
       (event: AgentProgressEvent) => {
         send('llm:agent-progress', { runId, event });
@@ -298,10 +350,11 @@ export async function handleRunAgent(payload: any, send: SendFn): Promise<void> 
 export async function handleStreamChat(payload: any, send: SendFn): Promise<void> {
   const { requestId, model, systemPrompt, messages, tools } = payload;
   try {
-    const apiKey = await getApiKey();
+    const { apiKey, provider } = getLLMConfig();
+    const streamFn = getStreamFn(provider);
 
     const result = await withRetry(
-      () => streamAnthropicWithTools(
+      () => streamFn(
         apiKey, model, systemPrompt, messages, tools ?? [],
         (chunk: string) => send('llm:chat-chunk', { requestId, textChunk: chunk, done: false }),
       ),

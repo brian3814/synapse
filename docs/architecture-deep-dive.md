@@ -49,8 +49,8 @@ The extension runs across **7 isolated execution contexts**, each with different
 │  │  message-router.ts│    │ llm-executor.ts    │    │   tool-executor.ts   │ │
 │  │                   │    │ agent-loop.ts      │    │   page-extractor.ts  │ │
 │  │ • Routes messages │    │                    │    │                      │ │
-│  │ • Injects API keys│    │ • Anthropic API    │    │ • Executes agent     │ │
-│  │ • Usage tracking  │    │   streaming        │    │   tools on page      │ │
+│  │ • Injects API keys│    │ • LLM API stream   │    │ • Executes agent     │ │
+│  │ • Usage tracking  │    │   (via provider)   │    │   tools on page      │ │
 │  │ • Retry logic     │    │ • Agent tool-use   │    │ • DOM extraction     │ │
 │  │ • Context menus   │    │   loop             │    │   (text/markdown)    │ │
 │  │ • OAuth mgmt      │    │ • Reading list     │    │ • CSS selectors      │ │
@@ -329,8 +329,8 @@ Two extraction modes, both ending in the same review → apply flow.
    SW injects key → Offscreen API call
         │
         ▼
-4. Stream Anthropic API
-   POST /v1/messages (streaming SSE)
+4. Stream LLM API (via provider factory)
+   Provider-specific SSE stream (Anthropic default)
         │
         ▼
 5. LLM_STREAM_CHUNK broadcasts
@@ -742,4 +742,45 @@ CREATE INDEX idx_nodes_xy ON nodes(x, y);
 
 ---
 
-*Generated 2026-04-21 — source: codebase analysis of kg_extension*
+## 12. MCP Server & External Agent Integration
+
+The app exposes its graph tools to external agents (Claude Desktop, Claude Code, Cursor) via MCP. Two transports:
+
+### stdio CLI (`packages/synapse-mcp/`)
+
+Standalone Node binary — opens vault SQLite directly. No Electron needed.
+
+```
+Claude Desktop → stdio → synapse-mcp process → better-sqlite3 → graph.db
+                                              → notifyApp() POST → running Electron app → db:sync reset
+```
+
+### HTTP bridge (`/mcp` on companion server)
+
+Uses the same `ToolRegistry` as the in-app agent. Mutations go through `CommandContext` → DataStore.
+
+```
+External client → HTTP POST 127.0.0.1:19876/mcp → McpServerBridge → ToolRegistry → executeTool()
+                                                                   → onGraphMutated() → db:sync reset → graph-store.loadAll()
+```
+
+### Tool Architecture (Modular)
+
+```
+src/shared/chat-agent-tools.ts          — 16 core tool definitions (CHAT_AGENT_TOOLS)
+src/commands/tools/                     — 15 extended tools in 4 modules
+  ├── note-tools.ts                     — read_note, create_note, update_note, list_notes, search_notes
+  ├── edge-tools.ts                     — update_edge, delete_edge, get_edges_between
+  ├── graph-tools.ts                    — get_graph_overview, get_subgraph, get_nodes_by_type
+  └── entity-tools.ts                   — find_similar_entities, add_alias, get_aliases, tag_node, get_node_tags
+src/commands/chat-tool-executor.ts      — core tool execution + fallback to executeExtendedTool()
+electron/mcp/builtin-tool-provider.ts   — wraps ALL_CHAT_AGENT_TOOLS for ToolRegistry
+```
+
+### Desktop Extension
+
+`packages/synapse-mcp/manifest.json` packages the CLI as a `.mcpb` Desktop Extension for one-click install in Claude Desktop.
+
+---
+
+*Generated 2026-04-21, updated 2026-05-17 — source: codebase analysis of kg_extension*

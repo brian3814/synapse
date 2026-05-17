@@ -3,7 +3,7 @@ import { createUICommandContext } from '../../commands/create-context';
 import { executeTool as executeToolCmd } from '../../commands/chat-tool-executor';
 import { CHAT_AGENT_TOOLS, toAnthropicChatTools } from '../../shared/chat-agent-tools';
 import type { ChatAgentTurn } from '../../shared/types';
-import type { AnthropicMessage, AnthropicContentBlock } from '../../offscreen/llm-executor';
+import type { LLMMessage, ContentBlock } from '../../core/llm-protocol';
 
 export type { ChatAgentTurn };
 
@@ -73,7 +73,7 @@ export async function runChatAgent({
     ? `${attachedContext}\n\n${currentPrompt}`
     : currentPrompt;
 
-  const messages: AnthropicMessage[] = [
+  const messages: LLMMessage[] = [
     ...conversationHistory.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -121,7 +121,7 @@ export async function runChatAgent({
     }
 
     // Build assistant message with text + tool_use blocks
-    const assistantContent: AnthropicContentBlock[] = [];
+    const assistantContent: ContentBlock[] = [];
     if (textContent) {
       assistantContent.push({ type: 'text', text: textContent });
       // Emit thinking turn
@@ -138,7 +138,7 @@ export async function runChatAgent({
     messages.push({ role: 'assistant', content: assistantContent });
 
     // Execute tools and build tool_result blocks
-    const toolResultBlocks: AnthropicContentBlock[] = [];
+    const toolResultBlocks: ContentBlock[] = [];
     for (const tc of toolCalls) {
       // Emit tool_call turn
       onProgress({
@@ -207,7 +207,7 @@ async function sendChatLLMRequest(
     provider: string;
     model: string;
     systemPrompt: string;
-    messages: AnthropicMessage[];
+    messages: LLMMessage[];
     tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
   },
   onProgress: (event: ChatAgentProgress) => void,

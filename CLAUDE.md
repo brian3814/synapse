@@ -84,7 +84,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 │  Electron: Main Process (electron/main.ts)       │
 │  Both import shared logic from src/core/         │
 ├─────────────────────────────────────────────────┤
-│  External (Anthropic API, SQLite, Filesystem)    │
+│  External (LLM API, SQLite, Filesystem)          │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -106,7 +106,9 @@ Additionally, `vaultWorkspace` is exported from both platforms (`src/platform/el
 
 **Platform-specific UI**: Use `import { platformId } from '@platform'` and conditional rendering. Chrome-only features (side panel toggle, OAuth, reading list, contextual relevance) are guarded with `platformId === 'chrome'`.
 
-**Shared core** (`src/core/`): Agent loop, rate-limit retry, usage tracking, and system prompts — imported by both the Chrome offscreen document and Electron main process. Eliminates duplication.
+**Shared core** (`src/core/`): Agent loop, LLM protocol types, rate-limit retry, usage tracking, system prompts, and prompt assembly — imported by both the Chrome offscreen document and Electron main process. The core layer has zero imports from `@platform` or `src/offscreen/`; all dependencies are injected via `CommandContext` or function parameters.
+
+**LLM provider abstraction**: Provider-neutral types live in `src/core/llm-protocol.ts` (`LLMMessage`, `ContentBlock`, `LLMStreamResult`, `StreamFn`). The Electron main process routes LLM calls through a provider factory in `electron/llm-backend.ts` — registries map provider names to stream functions. Adding a new provider (e.g., OpenAI) means implementing `StreamFn` and calling `registerStreamFn('openai', fn)`. The renderer never knows which provider is active; it goes through `PlatformLLM` (IPC).
 
 ### Chrome Extension Contexts
 
@@ -429,26 +431,37 @@ User query → loadValidMemories() → retrievers → RRF fuser → annotated fo
 
 ## MCP Integration & Tool Registry
 
-Synapse is both an **MCP client** (consumes external MCP servers) and **MCP server** (exposes graph tools to external agents like Claude Code, Cursor). Built on a unified ToolRegistry in the main process.
+Synapse is both an **MCP client** (consumes external MCP servers) and **MCP server** (exposes graph tools to external agents like Claude Desktop, Claude Code, Cursor). Built on a unified ToolRegistry in the main process.
 
 **Architecture:** All tool execution (built-in + MCP) routes through `ToolRegistry` in the Electron main process. The renderer calls `tools:list` and `tools:execute` IPC channels. See `ARCHITECTURE.md` § "MCP & Tool Registry" for full details.
+
+**Real-time graph sync:** External MCP writes trigger immediate UI updates:
+- **HTTP bridge** (`/mcp`): `McpServerBridge.onGraphMutated()` broadcasts `db:sync { type: 'reset' }` to renderer windows after write tool execution.
+- **stdio CLI**: `notifyApp()` POSTs to `http://127.0.0.1:19876/api/graph-changed`. Companion server broadcasts the same reset event.
+
+**stdio CLI write tools:** Gated by `--allow-write` flag. Write tools: `create_node`, `update_node`, `delete_node`, `create_edge`, `delete_edge`, `create_note`, `merge_nodes`.
+
+**Desktop Extension:** `packages/synapse-mcp/manifest.json` defines a Claude Desktop Extension (`.mcpb`). Build via `cd packages/synapse-mcp && npm run pack`.
 
 **Key files:**
 - `electron/mcp/types.ts` — `ToolProvider`, `IToolRegistry`, `ToolFilter`, config interfaces
 - `electron/mcp/tool-registry.ts` — Singleton registry with namespace-based dispatch (`__` separator)
-- `electron/mcp/builtin-tool-provider.ts` — Wraps existing chat tools for main-process execution
+- `electron/mcp/builtin-tool-provider.ts` — Wraps `ALL_CHAT_AGENT_TOOLS` for main-process execution
 - `electron/mcp/mcp-client-manager.ts` — Outbound MCP connections (stdio transport)
-- `electron/mcp/mcp-server-bridge.ts` — Exposes graph as MCP server (HTTP on companion server `/mcp`)
+- `electron/mcp/mcp-server-bridge.ts` — HTTP MCP server with `onGraphMutated` callback
 - `electron/mcp/mcp-config.ts` — Two-layer config merge (global + vault `.kg/mcp.json`)
-- `packages/synapse-mcp/` — Standalone stdio CLI (`synapse-mcp --vault <path>`)
+- `packages/synapse-mcp/` — Standalone stdio CLI + Desktop Extension manifest
+- `src/commands/tools/` — Extended tool modules (note, edge, graph, entity)
 
-**Configuration:** Global at `~/Library/Application Support/kg-desktop/mcp-config.json`, vault-level at `.kg/mcp.json`. Vault config overrides/extends global. Secrets via `${secret:name}` placeholders.
+**Configuration:** Global at `~/Library/Application Support/kg-desktop/mcp-config.json`, vault-level at `.kg/mcp.json`. Vault overrides global. Secrets via `${secret:name}`. Access profiles via `.kg/mcp-server.json`.
 
 **Design spec:** [`docs/superpowers/specs/2026-05-15-mcp-integration-design.md`](docs/superpowers/specs/2026-05-15-mcp-integration-design.md)
 
 ## Chat Agent Tools
 
-Tools defined in `src/shared/chat-agent-tools.ts`, executed via ToolRegistry (`electron/mcp/builtin-tool-provider.ts` → `src/commands/chat-tool-executor.ts`):
+Tools defined in two layers: core tools in `src/shared/chat-agent-tools.ts` and extended tools in `src/commands/tools/` (modular architecture — each group is an independent module). Combined via `ALL_CHAT_AGENT_TOOLS`. Executed via ToolRegistry (`electron/mcp/builtin-tool-provider.ts` → `src/commands/chat-tool-executor.ts`).
+
+**Core tools:**
 
 | Tool | Category | Purpose |
 |---|---|---|
@@ -469,9 +482,18 @@ Tools defined in `src/shared/chat-agent-tools.ts`, executed via ToolRegistry (`e
 | `merge_nodes` | write | Merge duplicates: transfer edges, add alias, delete secondary |
 | `manage_memory` | execute | CRUD for agent memory with tags and supersession |
 
-The `merge_nodes` tool is the preferred way to handle entity deduplication — the LLM identifies duplicates using world knowledge, then executes the merge via the tool.
+**Extended tools** (`src/commands/tools/`):
 
-Tool execution flows: renderer → `tools:execute` IPC → ToolRegistry → BuiltinToolProvider → `executeTool()` in `chat-tool-executor.ts`. The executor uses `CommandContext` (with `ctx.embedding` for semantic search) and has no `@platform` imports — it runs in both renderer (Chrome fallback) and main process.
+| Module | Tools | Category |
+|---|---|---|
+| `note-tools.ts` | `read_note`, `create_note`, `update_note`, `list_notes`, `search_notes` | read/write |
+| `edge-tools.ts` | `update_edge`, `delete_edge`, `get_edges_between` | read/write |
+| `graph-tools.ts` | `get_graph_overview`, `get_subgraph`, `get_nodes_by_type` | read |
+| `entity-tools.ts` | `find_similar_entities`, `add_alias`, `get_aliases`, `tag_node`, `get_node_tags` | read/write |
+
+**Tool module pattern:** Each module exports `definitions` (tool schemas) + `execute(ctx, name, input)` returning `null` for unhandled tools. Combined in `src/commands/tools/index.ts`. The main executor delegates to `executeExtendedTool()` as a fallback. Adding/removing a module is a one-line import change.
+
+Tool execution flows: renderer → `tools:execute` IPC → ToolRegistry → BuiltinToolProvider → `executeTool()` in `chat-tool-executor.ts` → extended tools fallback. The executor uses `CommandContext` (with `ctx.embedding` for semantic search) and has no `@platform` imports — it runs in both renderer (Chrome fallback) and main process.
 
 ## Graph-to-Chat Context Selection
 
@@ -527,7 +549,8 @@ The graph store's `startSyncListener` subscribes to BOTH `BroadcastChannel` (Chr
 - **Memory commands**: `src/commands/memory-commands.ts` — `MemoryEntry`, file I/O, `loadValidMemories()`
 - **Memory spec**: [`docs/superpowers/specs/2026-05-13-memory-harness-v2-design.md`](docs/superpowers/specs/2026-05-13-memory-harness-v2-design.md)
 - **Agent settings spec**: [`docs/superpowers/specs/2026-05-14-agent-settings-panel-design.md`](docs/superpowers/specs/2026-05-14-agent-settings-panel-design.md)
-- **Shared core**: `src/core/` — `agent-loop.ts` (injectable ToolExecutor), `retry.ts` (withRetry), `usage.ts`, `system-prompts.ts`, `prompt-assembler.ts`, `memory-extractor.ts`
+- **Shared core**: `src/core/` — `llm-protocol.ts` (provider-neutral `LLMMessage`, `StreamFn`, `LLMStreamResult`), `agent-loop.ts` (injectable `StreamFn` + `ToolExecutor`), `memory-extractor.ts` (accepts `CommandContext` + model), `retry.ts`, `usage.ts`, `system-prompts.ts`, `prompt-assembler.ts`
+- **LLM provider factory**: `electron/llm-backend.ts` — `streamFnRegistry`/`extractionFnRegistry` dispatch by provider name; `registerStreamFn()`/`registerExtractionFn()` for adding providers
 - **Types**: `src/shared/types.ts` — `DbNode`, `DbEdge`, `GraphNode`, `GraphEdge`, `LLMConfig`, `ToolCall`, `AgentTurn`, `AgentProgressEvent`
 - **Messages**: `src/shared/messages.ts` — Chrome-internal message protocol (UI code should NOT import this — use `@platform` instead)
 - **Constants**: `src/shared/constants.ts` — Color palette, timeouts, LLM model IDs, layout options

@@ -282,7 +282,9 @@ export function useChatSession() {
     if (sessionIdRef.current) {
       const expiredId = sessionIdRef.current;
       await chat.expireSession(expiredId).catch(() => {});
-      summarizeSession(expiredId).catch(() => {});
+      fetchLLMConfigAndTypes()
+        .then(({ config }) => summarizeSession(expiredId, createUICommandContext(), config.model))
+        .catch(() => {});
     }
     sessionIdRef.current = null;
     setMessages([]);

@@ -1,0 +1,2405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synapse Architecture</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-card-hover: #1c2129;
+    --border: #30363d;
+    --border-accent: #58a6ff;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --text-bright: #f0f6fc;
+    --accent: #58a6ff;
+    --accent-dim: #1f6feb;
+    --green: #3fb950;
+    --green-dim: #238636;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #79c0ff;
+    --yellow: #e3b341;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 80px 20px 60px;
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at center, rgba(88,166,255,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--text-bright);
+    letter-spacing: -1px;
+    margin-bottom: 12px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p {
+    font-size: 1.15rem;
+    color: var(--text-dim);
+    max-width: 700px;
+    margin: 0 auto 30px;
+  }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    text-align: center;
+  }
+  .hero-stat .num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .hero-stat .label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13,17,23,0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+  }
+  .nav-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    gap: 4px;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 12px 16px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .nav a:hover, .nav a.active {
+    color: var(--text-bright);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Layout */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  section {
+    padding: 60px 0 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-child { border-bottom: none; }
+
+  h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+  h2 .badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 10px;
+    vertical-align: middle;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
+  }
+  .badge-electron { background: var(--accent-dim); color: var(--accent); }
+  .badge-shared { background: var(--green-dim); color: var(--green); }
+  .badge-chrome { background: #4a2900; color: var(--orange); }
+
+  .section-desc {
+    color: var(--text-dim);
+    font-size: 1rem;
+    margin-bottom: 30px;
+    max-width: 800px;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin: 30px 0 12px;
+  }
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--cyan);
+    margin: 20px 0 8px;
+  }
+
+  /* Diagram Boxes */
+  .diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+
+  .arch-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .arch-layer {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    text-align: center;
+    position: relative;
+    transition: all 0.2s;
+  }
+  .arch-layer:hover {
+    border-color: var(--accent);
+    background: rgba(88,166,255,0.04);
+  }
+  .arch-layer .layer-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .arch-layer .layer-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-bright);
+  }
+  .arch-layer .layer-detail {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .arch-arrow {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 4px 0;
+    user-select: none;
+  }
+
+  /* Cards Grid */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    transition: all 0.2s;
+  }
+  .card:hover {
+    border-color: var(--border-accent);
+    background: var(--bg-card-hover);
+  }
+  .card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .card-file {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: 'SF Mono', Consolas, monospace;
+    margin-bottom: 8px;
+  }
+  .card-desc {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* IPC Table */
+  .ipc-table-wrap {
+    overflow-x: auto;
+    margin: 20px 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+  thead {
+    background: var(--bg-card);
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.03); }
+  td code {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.8rem;
+    color: var(--cyan);
+    background: rgba(121,192,255,0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .dir-tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .dir-invoke { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .dir-broadcast { background: rgba(63,185,80,0.15); color: var(--green); }
+  .dir-http { background: rgba(188,140,255,0.15); color: var(--purple); }
+
+  /* Flow Diagram */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 20px 0;
+    max-width: 800px;
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 12px 0;
+  }
+  .flow-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    position: relative;
+  }
+  .flow-icon::after {
+    content: '';
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 14px;
+    background: var(--border);
+  }
+  .flow-step:last-child .flow-icon::after { display: none; }
+  .flow-content {
+    padding-top: 6px;
+  }
+  .flow-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-bright);
+  }
+  .flow-detail {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .fi-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .fi-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .fi-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .fi-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .fi-pink { background: rgba(247,120,186,0.15); color: var(--pink); }
+  .fi-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .fi-cyan { background: rgba(121,192,255,0.15); color: var(--cyan); }
+
+  /* Collapsible */
+  .collapsible {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 12px 0;
+    overflow: hidden;
+  }
+  .collapsible-header {
+    padding: 14px 18px;
+    background: var(--bg-card);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .collapsible-header:hover { background: var(--bg-card-hover); }
+  .collapsible-header h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-bright);
+  }
+  .collapsible-chevron {
+    color: var(--text-dim);
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+  }
+  .collapsible.open .collapsible-chevron { transform: rotate(90deg); }
+  .collapsible-body {
+    padding: 0 18px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .collapsible.open .collapsible-body {
+    max-height: 3000px;
+    padding: 16px 18px;
+  }
+
+  /* Inline diagrams */
+  .process-diagram {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 20px 0;
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
+  .pd-box {
+    flex: 0 0 auto;
+    min-width: 160px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-align: center;
+    position: relative;
+    transition: all 0.2s;
+  }
+  .pd-box:hover {
+    border-color: var(--accent);
+    background: rgba(88,166,255,0.04);
+  }
+  .pd-box .pd-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-bright);
+  }
+  .pd-box .pd-sub {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .pd-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .pd-arrow-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: -2px;
+  }
+
+  .pd-box.electron { border-color: var(--accent-dim); }
+  .pd-box.renderer { border-color: var(--green-dim); }
+  .pd-box.companion { border-color: var(--purple); border-style: dashed; }
+  .pd-box.external { border-color: var(--orange); border-style: dashed; }
+
+  /* Connection diagram */
+  .conn-diagram {
+    position: relative;
+    min-height: 500px;
+    margin: 30px 0;
+  }
+  .conn-node {
+    position: absolute;
+    padding: 12px 18px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-card);
+    text-align: center;
+    z-index: 2;
+    min-width: 140px;
+    transition: all 0.2s;
+  }
+  .conn-node:hover {
+    border-color: var(--accent);
+    transform: scale(1.03);
+    z-index: 3;
+  }
+  .conn-node .cn-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-bright);
+  }
+  .conn-node .cn-sub {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  /* Tag pills */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .tag-blue { background: rgba(88,166,255,0.12); color: var(--accent); }
+  .tag-green { background: rgba(63,185,80,0.12); color: var(--green); }
+  .tag-purple { background: rgba(188,140,255,0.12); color: var(--purple); }
+  .tag-orange { background: rgba(210,153,34,0.12); color: var(--orange); }
+  .tag-pink { background: rgba(247,120,186,0.12); color: var(--pink); }
+  .tag-cyan { background: rgba(121,192,255,0.12); color: var(--cyan); }
+
+  /* Multi-column layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 800px) {
+    .two-col { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2rem; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+
+  /* SVG Diagrams */
+  .svg-diagram {
+    display: block;
+    margin: 20px auto;
+    max-width: 100%;
+  }
+
+  /* Vault directory tree */
+  .tree {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 16px 0;
+    color: var(--text-dim);
+    max-width: 500px;
+  }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .file { color: var(--text); }
+  .tree .comment { color: var(--text-dim); font-style: italic; }
+
+  /* Responsive SVG container */
+  .svg-wrap {
+    overflow-x: auto;
+    margin: 20px 0;
+    padding: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .svg-wrap svg {
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* TL;DR */
+  .tldr {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 20px 30px;
+  }
+  .tldr-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 16px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .tldr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .tldr-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+  .tldr-item:hover { border-color: var(--accent); }
+  .tldr-num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--bg);
+    background: var(--accent);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .tldr-text {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .tldr-text strong { color: var(--text-bright); }
+
+  /* Separator */
+  .sep {
+    height: 1px;
+    background: var(--border);
+    margin: 30px 0;
+  }
+
+  /* Feature list */
+  .feature-list {
+    list-style: none;
+    padding: 0;
+  }
+  .feature-list li {
+    padding: 8px 0;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 0.9rem;
+  }
+  .feature-list li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    margin-top: 8px;
+  }
+
+  /* Wide diagram */
+  .wide-diagram {
+    overflow-x: auto;
+    padding: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <h1><span>Synapse</span> Architecture</h1>
+  <p>Local-first knowledge graph with SQLite persistence, 2D graph visualization, LLM-powered entity extraction, and vault-based workspace management.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">45+</div><div class="label">IPC Channels</div></div>
+    <div class="hero-stat"><div class="num">10</div><div class="label">Zustand Stores</div></div>
+    <div class="hero-stat"><div class="num">16</div><div class="label">Chat Agent Tools</div></div>
+    <div class="hero-stat"><div class="num">16</div><div class="label">DB Repositories</div></div>
+    <div class="hero-stat"><div class="num">7</div><div class="label">Platform Interfaces</div></div>
+  </div>
+</div>
+
+<!-- TL;DR -->
+<div class="tldr">
+  <div class="tldr-title">TL;DR &mdash; How Synapse Works</div>
+  <div class="tldr-grid">
+    <div class="tldr-item">
+      <div class="tldr-num">1</div>
+      <div class="tldr-text"><strong>Two processes, one bridge.</strong> Electron main process owns SQLite, LLM calls, filesystem, and embeddings. Renderer is a React SPA. They communicate through 45+ IPC channels via a preload <code>contextBridge</code>.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">2</div>
+      <div class="tldr-text"><strong>Vault = everything in one folder.</strong> A vault directory holds graph.db, notes/, embeddings, and user files. One vault per process. Switching vaults spawns a new OS process.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">3</div>
+      <div class="tldr-text"><strong>Platform abstraction via build alias.</strong> UI imports <code>@platform</code> &mdash; resolved at build time to Chrome or Electron implementations. 7 interfaces (Storage, DB, Notes, LLM, Browser, Embedding, Vault) make UI code platform-agnostic.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">4</div>
+      <div class="tldr-text"><strong>Event-driven vault sync.</strong> FileWatcher &rarr; EventBus &rarr; handlers (NoteFile, ResourceDetection, SyncBroadcast). Handlers subscribe independently; SyncBroadcastHandler bridges vault events to IPC for the renderer.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">5</div>
+      <div class="tldr-text"><strong>DB is engine-swappable.</strong> UI calls <code>db.request(action, params)</code>. ActionHandler (96 cases) dispatches to DataStore (16 repo sub-interfaces). Swap SQLite for Postgres by implementing one interface.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">6</div>
+      <div class="tldr-text"><strong>LLM calls are provider-neutral.</strong> Core <code>llm-protocol.ts</code> defines <code>StreamFn</code> + <code>LLMMessage</code>. <code>electron/llm-backend.ts</code> routes via provider factory (<code>getStreamFn(provider)</code>). Anthropic registered; OpenAI/others plug in via <code>registerStreamFn()</code>. Two tool systems: 9 extraction tools and 17 chat tools.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">7</div>
+      <div class="tldr-text"><strong>Three-layer graph rendering.</strong> Three.js InstancedMesh (WebGL) for nodes/edges, Canvas2D overlay for labels, React DOM for panels. Layout runs in a Web Worker (Barnes-Hut force-directed). 10 Zustand stores, no cross-store mutations.</div>
+    </div>
+    <div class="tldr-item">
+      <div class="tldr-num">8</div>
+      <div class="tldr-text"><strong>Companion extension for page capture.</strong> Separate Chrome extension POSTs rendered DOM to <code>localhost:19876</code>. Main process broadcasts via IPC. Unidirectional: browser &rarr; desktop only.</div>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="#overview">Overview</a>
+    <a href="#dataflows">Dataflows</a>
+    <a href="#processes">Process Model</a>
+    <a href="#ipc">IPC Channels</a>
+    <a href="#platform">Platform Layer</a>
+    <a href="#vault">Vault System</a>
+    <a href="#db">Database</a>
+    <a href="#state">State Management</a>
+    <a href="#renderer">Graph Renderer</a>
+    <a href="#llm">LLM &amp; Agents</a>
+    <a href="#tools">Agent Tools</a>
+    <a href="#embeddings">Embeddings</a>
+    <a href="#companion">Companion</a>
+    <a href="#mcp">MCP & Tools</a>
+    <a href="#startup">Startup Sequence</a>
+  </div>
+</nav>
+
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- OVERVIEW -->
+<!-- ============================================================ -->
+<section id="overview">
+  <h2>High-Level Architecture</h2>
+  <p class="section-desc">Synapse is an Electron desktop app (with a deprecated Chrome extension) running from a single codebase via a platform abstraction layer. The renderer is a React SPA; the main process handles SQLite, LLM calls, vault I/O, embeddings, and a companion HTTP server.</p>
+
+  <div class="diagram">
+    <div class="arch-stack">
+      <div class="arch-layer" style="border-color: var(--green-dim);">
+        <div class="layer-label">Presentation</div>
+        <div class="layer-title">React 19 SPA (Renderer Process)</div>
+        <div class="layer-detail">10 Zustand stores &bull; Three.js graph renderer &bull; Tailwind CSS &bull; Platform-agnostic UI</div>
+      </div>
+      <div class="arch-arrow">&darr; <span style="font-size:0.7rem; color:var(--text-dim);">window.electronIPC (contextBridge)</span> &darr;</div>
+      <div class="arch-layer" style="border-color: var(--purple);">
+        <div class="layer-label">Platform Abstraction</div>
+        <div class="layer-title">@platform (Build-time Alias)</div>
+        <div class="layer-detail">7 interfaces: Storage, DB, Notes, LLM, Browser, Embedding, Vault &bull; Electron impl uses IPC, Chrome impl uses message passing</div>
+      </div>
+      <div class="arch-arrow">&darr; <span style="font-size:0.7rem; color:var(--text-dim);">ipcMain.handle / ipcRenderer.invoke</span> &darr;</div>
+      <div class="arch-layer" style="border-color: var(--accent-dim);">
+        <div class="layer-label">Main Process</div>
+        <div class="layer-title">Electron Main (Node.js)</div>
+        <div class="layer-detail">better-sqlite3 &bull; Vault Manager &bull; LLM Backend (provider factory) &bull; Embedding Service &bull; Companion Server</div>
+      </div>
+      <div class="arch-arrow">&darr; &darr; &darr;</div>
+      <div class="arch-layer" style="border-color: var(--orange); border-style: dashed;">
+        <div class="layer-label">External</div>
+        <div class="layer-title">SQLite (vault/.kg/graph.db) &bull; LLM API (Anthropic, extensible) &bull; Filesystem &bull; sqlite-vec</div>
+        <div class="layer-detail">Vault directory stores graph DB, notes, embeddings, agent artifacts &bull; API keys in app settings</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- CRITICAL DATAFLOWS -->
+<!-- ============================================================ -->
+<section id="dataflows">
+  <h2>Critical Dataflows</h2>
+  <p class="section-desc">The five fundamental data paths through the system. Every user-facing feature maps to one or more of these flows. The diagram below shows all five simultaneously &mdash; scroll horizontally on smaller screens.</p>
+
+  <!-- MASTER ARCHITECTURE + DATAFLOW SVG (v3) -->
+  <div class="svg-wrap" style="padding:30px 20px;">
+    <svg width="1160" height="960" viewBox="0 0 1160 960" fill="none" xmlns="http://www.w3.org/2000/svg" style="min-width:1160px;">
+      <defs>
+        <marker id="a-blue" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0 0 L7 2.5 L0 5Z" fill="#58a6ff"/></marker>
+        <marker id="a-green" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0 0 L7 2.5 L0 5Z" fill="#3fb950"/></marker>
+        <marker id="a-orange" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0 0 L7 2.5 L0 5Z" fill="#d29922"/></marker>
+        <marker id="a-pink" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0 0 L7 2.5 L0 5Z" fill="#f778ba"/></marker>
+        <marker id="a-cyan" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0 0 L7 2.5 L0 5Z" fill="#79c0ff"/></marker>
+      </defs>
+
+      <!-- ===== COMPANION (top-left) y=10..90 ===== -->
+      <rect x="20" y="10" width="240" height="80" rx="8" stroke="#bc8cff" stroke-dasharray="5" stroke-width="1.5" fill="rgba(188,140,255,0.03)"/>
+      <text x="34" y="32" fill="#bc8cff" font-size="11" font-weight="700" font-family="system-ui">COMPANION EXTENSION</text>
+      <text x="34" y="48" fill="#8b949e" font-size="9" font-family="system-ui">Chrome browser &bull; DOM capture</text>
+      <text x="34" y="64" fill="#8b949e" font-size="9" font-family="monospace">POST 127.0.0.1:19876/api/capture</text>
+
+      <!-- ===== LEGEND (top-right) ===== -->
+      <rect x="940" y="10" width="200" height="138" rx="8" stroke="#30363d" fill="#161b22"/>
+      <text x="955" y="30" fill="#8b949e" font-size="10" font-weight="700" font-family="system-ui">DATAFLOW LEGEND</text>
+      <line x1="955" y1="44" x2="985" y2="44" stroke="#f778ba" stroke-width="2"/><text x="992" y="48" fill="#f778ba" font-size="9" font-family="system-ui">1. Page Capture</text>
+      <line x1="955" y1="62" x2="985" y2="62" stroke="#58a6ff" stroke-width="2"/><text x="992" y="66" fill="#58a6ff" font-size="9" font-family="system-ui">2. LLM Extraction</text>
+      <line x1="955" y1="80" x2="985" y2="80" stroke="#3fb950" stroke-width="2"/><text x="992" y="84" fill="#3fb950" font-size="9" font-family="system-ui">3. DB + Graph Sync</text>
+      <line x1="955" y1="98" x2="985" y2="98" stroke="#d29922" stroke-width="2"/><text x="992" y="102" fill="#d29922" font-size="9" font-family="system-ui">4. File Detection</text>
+      <line x1="955" y1="116" x2="985" y2="116" stroke="#79c0ff" stroke-width="2"/><text x="992" y="120" fill="#79c0ff" font-size="9" font-family="system-ui">5. Auto-Embedding</text>
+      <line x1="955" y1="134" x2="985" y2="134" stroke="#8b949e" stroke-width="2" stroke-dasharray="4"/><text x="992" y="138" fill="#8b949e" font-size="9" font-family="system-ui">Broadcast / event</text>
+
+      <!-- ===== RENDERER y=130..420 (290px) ===== -->
+      <rect x="20" y="130" width="1120" height="290" rx="10" stroke="#238636" stroke-width="2" fill="rgba(35,134,54,0.03)"/>
+      <text x="36" y="154" fill="#3fb950" font-size="12" font-weight="700" font-family="system-ui">RENDERER PROCESS</text>
+
+      <!-- Row 1: major blocks (y=168) -->
+      <rect x="40" y="168" width="252" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="56" y="188" fill="#bc8cff" font-size="10.5" font-weight="600" font-family="system-ui">@platform Abstraction Layer</text>
+      <text x="56" y="203" fill="#8b949e" font-size="8.5" font-family="system-ui">Storage DB Notes LLM Browser Embedding</text>
+
+      <rect x="310" y="168" width="300" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="326" y="188" fill="#3fb950" font-size="10.5" font-weight="600" font-family="system-ui">Zustand Stores (10)</text>
+      <text x="326" y="203" fill="#8b949e" font-size="8.5" font-family="system-ui">graph  ui  llm  review  chat-ctx  viewport  tag  auth</text>
+
+      <rect x="628" y="168" width="200" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="644" y="188" fill="#d29922" font-size="10.5" font-weight="600" font-family="system-ui">Three.js Graph Renderer</text>
+      <text x="644" y="203" fill="#8b949e" font-size="8.5" font-family="system-ui">NodeMesh EdgeMesh LabelLayer</text>
+
+      <rect x="846" y="168" width="120" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="862" y="196" fill="#c9d1d9" font-size="10.5" font-weight="600" font-family="system-ui">db-client.ts</text>
+
+      <rect x="984" y="168" width="140" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="998" y="196" fill="#c9d1d9" font-size="10" font-family="system-ui">VaultSetupScreen</text>
+
+      <!-- Row 2: hooks (y=230) -->
+      <rect x="40" y="230" width="140" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="52" y="253" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">useLLMExtraction</text>
+
+      <rect x="198" y="230" width="130" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="212" y="253" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">chatAgentLoop</text>
+
+      <rect x="346" y="230" width="155" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="356" y="253" fill="#c9d1d9" font-size="10" font-family="system-ui">useCompanionCapture</text>
+
+      <rect x="519" y="230" width="120" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="535" y="253" fill="#c9d1d9" font-size="10" font-family="system-ui">useGraphData</text>
+
+      <rect x="657" y="230" width="120" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="673" y="253" fill="#c9d1d9" font-size="10" font-family="system-ui">Layout Worker</text>
+
+      <!-- Row 3: panels (y=286) -->
+      <rect x="40" y="286" width="170" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="52" y="310" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">ExtractionReviewTab</text>
+
+      <rect x="228" y="286" width="178" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="242" y="310" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">ChatPanel + ToolResults</text>
+
+      <rect x="424" y="286" width="140" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="440" y="310" fill="#c9d1d9" font-size="10" font-family="system-ui">Settings (Agent)</text>
+
+      <rect x="582" y="286" width="240" height="36" rx="5" stroke="#d29922" stroke-width="1.5" fill="rgba(210,153,34,0.04)"/>
+      <text x="598" y="310" fill="#d29922" font-size="10" font-weight="600" font-family="system-ui">Graph Canvas (WebGL + Canvas2D)</text>
+
+      <rect x="840" y="286" width="180" height="36" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="856" y="310" fill="#c9d1d9" font-size="10" font-family="system-ui">Chat ToolExecutor (UI)</text>
+
+      <!-- Row 4: open routing lane y=338..400 (labels only, no boxes) -->
+
+      <!-- ===== IPC BRIDGE y=460..490 ===== -->
+      <rect x="20" y="460" width="1120" height="30" rx="5" stroke="#bc8cff" stroke-width="2" fill="rgba(188,140,255,0.06)"/>
+      <text x="380" y="480" fill="#bc8cff" font-size="10" font-weight="700" font-family="system-ui">PRELOAD BRIDGE &mdash; window.electronIPC.invoke() / .on()</text>
+
+      <!-- ===== MAIN PROCESS y=530..830 (300px) ===== -->
+      <rect x="20" y="530" width="1120" height="300" rx="10" stroke="#1f6feb" stroke-width="2" fill="rgba(31,111,235,0.03)"/>
+      <text x="36" y="554" fill="#58a6ff" font-size="12" font-weight="700" font-family="system-ui">ELECTRON MAIN PROCESS</text>
+
+      <!-- Services row (y=568) -->
+      <rect x="40" y="568" width="140" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="52" y="590" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">CompanionServer</text>
+      <text x="52" y="604" fill="#8b949e" font-size="8" font-family="monospace">:19876</text>
+
+      <rect x="198" y="568" width="130" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="216" y="596" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">StorageBackend</text>
+
+      <rect x="346" y="568" width="130" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="370" y="596" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">LLM Backend</text>
+
+      <rect x="494" y="568" width="152" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="510" y="596" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">EmbeddingService</text>
+
+      <rect x="664" y="568" width="140" height="44" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="676" y="596" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">DB (better-sqlite3)</text>
+
+      <!-- IPC Handlers block (y=568) -->
+      <rect x="822" y="568" width="155" height="92" rx="6" stroke="#30363d" fill="rgba(22,27,34,0.5)"/>
+      <text x="838" y="588" fill="#8b949e" font-size="9" font-weight="600" font-family="system-ui">IPC HANDLERS (45+)</text>
+      <text x="838" y="604" fill="#79c0ff" font-size="8" font-family="monospace">db:request (96 actions)</text>
+      <text x="838" y="618" fill="#79c0ff" font-size="8" font-family="monospace">llm:stream-*/run-agent</text>
+      <text x="838" y="632" fill="#79c0ff" font-size="8" font-family="monospace">vault-workspace:*</text>
+      <text x="838" y="646" fill="#79c0ff" font-size="8" font-family="monospace">embedding:search/config</text>
+
+      <!-- Vault Context (y=636) -->
+      <rect x="40" y="636" width="434" height="84" rx="6" stroke="#30363d" fill="rgba(22,27,34,0.5)"/>
+      <text x="56" y="656" fill="#8b949e" font-size="9" font-weight="600" font-family="system-ui">VAULT CONTEXT</text>
+      <rect x="56" y="666" width="88" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="62" y="684" fill="#c9d1d9" font-size="9" font-family="system-ui">VaultManager</text>
+      <rect x="154" y="666" width="74" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="164" y="684" fill="#c9d1d9" font-size="9" font-family="system-ui">EventBus</text>
+      <rect x="238" y="666" width="78" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="248" y="684" fill="#c9d1d9" font-size="9" font-family="system-ui">FileWatcher</text>
+      <rect x="326" y="666" width="84" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="332" y="684" fill="#c9d1d9" font-size="8.5" font-family="system-ui">Reconciliation</text>
+      <!-- Handlers row (y=700) -->
+      <rect x="56" y="700" width="98" height="14" rx="3" stroke="#30363d" fill="#161b22"/>
+      <text x="58" y="711" fill="#c9d1d9" font-size="7.5" font-family="system-ui">NoteFileHandler</text>
+      <rect x="164" y="700" width="100" height="14" rx="3" stroke="#30363d" fill="#161b22"/>
+      <text x="166" y="711" fill="#c9d1d9" font-size="7.5" font-family="system-ui">ResourceHandler</text>
+      <rect x="274" y="700" width="96" height="14" rx="3" stroke="#30363d" fill="#161b22"/>
+      <text x="276" y="711" fill="#c9d1d9" font-size="7.5" font-family="system-ui">SyncBroadcast</text>
+
+      <!-- Database Layer (y=636) -->
+      <rect x="494" y="636" width="310" height="84" rx="6" stroke="#30363d" fill="rgba(22,27,34,0.5)"/>
+      <text x="510" y="656" fill="#8b949e" font-size="9" font-weight="600" font-family="system-ui">DATABASE LAYER</text>
+      <rect x="510" y="666" width="130" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="518" y="684" fill="#c9d1d9" font-size="9" font-family="system-ui">ActionHandler (96)</text>
+      <rect x="656" y="666" width="130" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="664" y="684" fill="#c9d1d9" font-size="9" font-family="system-ui">DataStore (16 repos)</text>
+      <rect x="510" y="700" width="130" height="14" rx="3" stroke="#30363d" fill="#161b22"/>
+      <text x="516" y="711" fill="#c9d1d9" font-size="7.5" font-family="system-ui">SyncEvent emitter</text>
+      <rect x="656" y="700" width="130" height="14" rx="3" stroke="#30363d" fill="#161b22"/>
+      <text x="664" y="711" fill="#c9d1d9" font-size="7.5" font-family="system-ui">SqliteDataStore</text>
+
+      <!-- Open routing lane: y=730..830 inside Main Process, below all boxes -->
+
+      <!-- ===== EXTERNAL y=870..950 ===== -->
+      <rect x="20" y="870" width="1120" height="82" rx="10" stroke="#d29922" stroke-dasharray="5" stroke-width="1.5" fill="rgba(210,153,34,0.03)"/>
+      <text x="36" y="894" fill="#d29922" font-size="11" font-weight="700" font-family="system-ui">EXTERNAL</text>
+      <rect x="40" y="906" width="152" height="34" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="56" y="928" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">LLM API (provider factory)</text>
+      <rect x="212" y="906" width="152" height="34" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="226" y="928" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">Filesystem (Vault Dir)</text>
+      <rect x="384" y="906" width="130" height="34" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="400" y="928" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">SQLite (graph.db)</text>
+      <rect x="534" y="906" width="130" height="34" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="554" y="928" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">sqlite-vec (KNN)</text>
+      <rect x="684" y="906" width="152" height="34" rx="5" stroke="#30363d" fill="#161b22"/>
+      <text x="700" y="928" fill="#c9d1d9" font-size="10" font-weight="600" font-family="system-ui">OS Keychain (Storage)</text>
+
+      <!-- ========== DATAFLOW ARROWS ========== -->
+      <!-- Routing corridors (no boxes in these bands):                  -->
+      <!--   Renderer lane:     y=335..420  (below panels row)          -->
+      <!--   Renderer-IPC gap:  y=420..460                              -->
+      <!--   IPC-Main gap:      y=490..530                              -->
+      <!--   Main bottom lane, 5 dedicated y-levels:                    -->
+      <!--     y=730  orange (INSERT)                                   -->
+      <!--     y=748  green dashed (vault events)                       -->
+      <!--     y=766  blue solid (LLM→Provider API)                      -->
+      <!--     y=784  cyan (embedding)                                  -->
+      <!--     y=802  green dashed (db:sync broadcast)                  -->
+      <!--   Main-External gap: y=830..870                              -->
+
+      <!-- ===== FLOW 1: Page Capture (pink) ===== -->
+      <!-- Companion -> left margin (x=14) -> CompanionServer -->
+      <path d="M 140 90 L 140 102 L 14 102 L 14 589 L 40 589" stroke="#f778ba" stroke-width="1.5" fill="none" marker-end="url(#a-pink)"/>
+      <text x="18" y="340" fill="#f778ba" font-size="8" font-weight="600" font-family="monospace" writing-mode="tb">HTTP POST :19876</text>
+      <!-- CompanionServer broadcast -> left margin (x=8) -> up -> IPC gap -> useCompanionCapture -->
+      <path d="M 80 612 L 80 730 L 8 730 L 8 440 L 423 440 L 423 420" stroke="#f778ba" stroke-width="1.5" stroke-dasharray="4" fill="none"/>
+      <path d="M 423 420 L 423 266" stroke="#f778ba" stroke-width="1.5" fill="none" marker-end="url(#a-pink)"/>
+      <text x="96" y="726" fill="#f778ba" font-size="8" font-family="monospace">companion:capture broadcast</text>
+
+      <!-- ===== FLOW 2: LLM Extraction (blue) ===== -->
+      <!-- useLLMExtraction -> routing lane (x=100) -> IPC bridge -> gap -> LLM Backend -->
+      <path d="M 100 266 L 100 460" stroke="#58a6ff" stroke-width="1.5" fill="none" marker-end="url(#a-blue)"/>
+      <text x="108" y="390" fill="#58a6ff" font-size="8" font-family="monospace">llm:stream-extraction</text>
+      <path d="M 100 490 L 100 515 L 395 515 L 395 568" stroke="#58a6ff" stroke-width="1.5" fill="none" marker-end="url(#a-blue)"/>
+      <!-- LLM Backend -> Provider API (y=766, dedicated level) -->
+      <path d="M 395 612 L 395 766 L 116 766 L 116 906" stroke="#58a6ff" stroke-width="1.5" fill="none" marker-end="url(#a-blue)"/>
+      <text x="160" y="760" fill="#58a6ff" font-size="8" font-family="monospace">HTTPS SSE stream</text>
+      <!-- LLM extraction-chunk broadcast back (dashed, offset x=450 vs solid x=395) -->
+      <path d="M 450 568 L 450 505 L 450 490" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4" fill="none" marker-end="url(#a-blue)"/>
+      <text x="458" y="520" fill="#58a6ff" font-size="8" font-family="monospace">llm:extraction-chunk</text>
+      <path d="M 450 460 L 450 345 L 263 345 L 263 322" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4" fill="none" marker-end="url(#a-blue)"/>
+      <!-- useLLMExtraction -> Review panel -->
+      <path d="M 100 266 L 100 286" stroke="#58a6ff" stroke-width="1.5" fill="none" marker-end="url(#a-blue)"/>
+
+      <!-- ===== FLOW 3: DB + Graph Sync (green) ===== -->
+      <!-- db-client -> routing lane (x=910) -> IPC bridge -> gap -> DB Layer -->
+      <path d="M 910 212 L 910 460" stroke="#3fb950" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+      <text x="918" y="370" fill="#3fb950" font-size="8" font-family="monospace">db:request</text>
+      <path d="M 910 490 L 910 505 L 680 505 L 680 636" stroke="#3fb950" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+      <!-- DB Layer -> SQLite (y=754, separated from blue y=766) -->
+      <path d="M 660 714 L 660 754 L 449 754 L 449 906" stroke="#3fb950" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+      <text x="467" y="750" fill="#3fb950" font-size="8" font-family="monospace">SQL queries</text>
+      <!-- SyncEvent broadcast -> right margin (x=1146) -> y=802 -> up to renderer -->
+      <path d="M 640 707 L 640 802 L 1146 802 L 1146 435 L 840 435" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4" fill="none"/>
+      <text x="850" y="816" fill="#3fb950" font-size="8" font-family="monospace">db:sync broadcast</text>
+      <path d="M 840 435 L 840 360 L 828 360 L 828 212" stroke="#3fb950" stroke-width="1.5" fill="none" marker-end="url(#a-green)"/>
+      <text x="834" y="340" fill="#3fb950" font-size="8" font-family="monospace">graph-store</text>
+      <!-- SyncEvent -> vault EventBus (y=748, dedicated level) -->
+      <path d="M 510 714 L 510 748 L 191 748 L 191 692" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4" fill="none" marker-end="url(#a-green)"/>
+      <text x="270" y="744" fill="#3fb950" font-size="8" font-family="monospace">vault events &rarr; EventBus</text>
+
+      <!-- ===== FLOW 4: File Detection (orange) ===== -->
+      <!-- Filesystem -> up through Main-External gap -> FileWatcher -->
+      <path d="M 288 906 L 288 850 L 277 850 L 277 692" stroke="#d29922" stroke-width="1.5" fill="none" marker-end="url(#a-orange)"/>
+      <text x="294" y="850" fill="#d29922" font-size="8" font-family="monospace">fs.watch event</text>
+      <!-- FileWatcher -> EventBus -->
+      <path d="M 238 679 L 228 679" stroke="#d29922" stroke-width="1.5" fill="none" marker-end="url(#a-orange)"/>
+      <!-- EventBus -> ResourceHandler -->
+      <path d="M 191 692 L 191 700" stroke="#d29922" stroke-width="1.5" fill="none" marker-end="url(#a-orange)"/>
+      <!-- ResourceHandler -> DB Layer (y=730, dedicated level — topmost in bottom lane) -->
+      <path d="M 214 714 L 214 730 L 490 730 L 490 714 L 510 707" stroke="#d29922" stroke-width="1.5" stroke-dasharray="4" fill="none" marker-end="url(#a-orange)"/>
+      <text x="270" y="726" fill="#d29922" font-size="7.5" font-family="monospace">INSERT node (type='resource')</text>
+
+      <!-- ===== FLOW 5: Auto-Embedding (cyan) ===== -->
+      <!-- SyncEvent -> down (y=784, dedicated level) -> EmbeddingService -->
+      <path d="M 575 714 L 575 784 L 560 784 L 560 612" stroke="#79c0ff" stroke-width="1.5" fill="none" marker-end="url(#a-cyan)"/>
+      <text x="582" y="780" fill="#79c0ff" font-size="8" font-family="monospace">node_created event</text>
+      <!-- EmbeddingService -> sqlite-vec (y=784 same level, offset x to 540 vs 560) -->
+      <path d="M 540 612 L 540 784 L 599 784 L 599 906" stroke="#79c0ff" stroke-width="1.5" fill="none" marker-end="url(#a-cyan)"/>
+      <text x="605" y="850" fill="#79c0ff" font-size="8" font-family="monospace">KNN insert</text>
+    </svg>
+  </div>
+
+  <h3>Flow Summaries</h3>
+  <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));">
+    <div class="card" style="border-left: 3px solid var(--pink);">
+      <div class="card-title" style="color:var(--pink);">1. Page Capture</div>
+      <div class="card-desc">Companion extension captures rendered DOM as markdown &rarr; HTTP POST to <code>localhost:19876</code> &rarr; CompanionServer broadcasts <code>companion:capture</code> via IPC &rarr; <code>useCompanionCapture</code> hook sets pending capture in LLM store &rarr; opens extraction modal.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--accent);">
+      <div class="card-title" style="color:var(--accent);">2. LLM Extraction</div>
+      <div class="card-desc"><code>useLLMExtraction</code> invokes <code>llm:stream-extraction</code> (fire-and-forget) &rarr; Main process routes to provider via <code>getStreamFn(provider)</code> factory &rarr; SSE stream &rarr; chunks broadcast back via <code>llm:extraction-chunk</code> matched by requestId &rarr; Zod parse &rarr; entity resolution &rarr; ExtractionReviewTab with undo/redo &rarr; <code>applyReview()</code> commits to DB.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--green);">
+      <div class="card-title" style="color:var(--green);">3. DB + Graph Sync</div>
+      <div class="card-desc"><code>db-client</code> invokes <code>db:request</code> &rarr; ActionHandler dispatches to DataStore (16 repos) &rarr; SQLite mutation &rarr; SyncEvent emitted &rarr; broadcast <code>db:sync</code> to all windows &rarr; <code>graph-store.startSyncListener()</code> updates nodes/edges/adjacency &rarr; GraphRenderer re-renders. Also triggers vault EventBus for file-level handlers.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--orange);">
+      <div class="card-title" style="color:var(--orange);">4. File Detection</div>
+      <div class="card-desc">User drops file into vault directory &rarr; <code>fs.watch</code> fires (debounced 500ms) &rarr; FileWatcher emits <code>file:added</code> on EventBus &rarr; ResourceDetectionHandler checks sandbox rules &rarr; creates resource node in DB &rarr; emits <code>node:created</code> &rarr; cascades into Flow 3 (DB sync) and Flow 5 (embedding).</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--cyan);">
+      <div class="card-title" style="color:var(--cyan);">5. Auto-Embedding</div>
+      <div class="card-desc">DB mutation emits <code>node_created</code>/<code>node_updated</code> &rarr; EmbeddingService.handleNodeMutation() &rarr; builds embedding text (strategy per node type) &rarr; computes hash (skips if unchanged) &rarr; enqueues to EmbeddingQueue &rarr; provider embeds (ONNX local or OpenAI API) &rarr; stores vector in sqlite-vec <code>vec_nodes</code> table.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- PROCESS MODEL -->
+<!-- ============================================================ -->
+<section id="processes">
+  <h2>Process Model <span class="badge badge-electron">ELECTRON</span></h2>
+  <p class="section-desc">The Electron app runs in two processes. A preload script bridges them securely via <code>contextBridge</code>. The companion browser extension communicates over HTTP on localhost.</p>
+
+  <div class="svg-wrap">
+    <svg width="900" height="520" viewBox="0 0 900 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Main Process Box -->
+      <rect x="20" y="20" width="400" height="480" rx="12" stroke="#1f6feb" stroke-width="2" fill="rgba(31,111,235,0.04)"/>
+      <text x="40" y="50" fill="#58a6ff" font-size="14" font-weight="700" font-family="system-ui">MAIN PROCESS (Node.js)</text>
+
+      <!-- Main Process Services -->
+      <rect x="40" y="70" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="55" y="98" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">VaultManager</text>
+
+      <rect x="230" y="70" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="248" y="98" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">StorageBackend</text>
+
+      <rect x="40" y="130" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="65" y="158" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">LLM Backend</text>
+
+      <rect x="230" y="130" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="240" y="158" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">EmbeddingService</text>
+
+      <rect x="40" y="190" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="48" y="218" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">CompanionServer</text>
+      <text x="48" y="230" fill="#8b949e" font-size="9" font-family="monospace">:19876</text>
+
+      <rect x="230" y="190" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="248" y="218" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">better-sqlite3</text>
+
+      <!-- Vault subsystem -->
+      <rect x="40" y="260" width="360" height="110" rx="8" stroke="#30363d" fill="rgba(22,27,34,0.6)"/>
+      <text x="55" y="283" fill="#8b949e" font-size="10" font-weight="600" font-family="system-ui" text-transform="uppercase">VAULT CONTEXT</text>
+
+      <rect x="55" y="294" width="100" height="32" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="65" y="315" fill="#c9d1d9" font-size="10" font-family="system-ui">EventBus</text>
+
+      <rect x="170" y="294" width="100" height="32" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="178" y="315" fill="#c9d1d9" font-size="10" font-family="system-ui">FileWatcher</text>
+
+      <rect x="285" y="294" width="100" height="32" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="290" y="315" fill="#c9d1d9" font-size="10" font-family="system-ui">Reconciliation</text>
+
+      <rect x="55" y="335" width="100" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="58" y="353" fill="#c9d1d9" font-size="9" font-family="system-ui">NoteFileHandler</text>
+
+      <rect x="170" y="335" width="100" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="173" y="353" fill="#c9d1d9" font-size="9" font-family="system-ui">ResourceHandler</text>
+
+      <rect x="285" y="335" width="100" height="26" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="291" y="353" fill="#c9d1d9" font-size="9" font-family="system-ui">SyncBroadcast</text>
+
+      <!-- DB on filesystem -->
+      <rect x="40" y="395" width="360" height="50" rx="8" stroke="#d29922" stroke-dasharray="4" fill="rgba(210,153,34,0.04)"/>
+      <text x="55" y="415" fill="#d29922" font-size="11" font-weight="600" font-family="system-ui">FILESYSTEM</text>
+      <text x="55" y="432" fill="#8b949e" font-size="10" font-family="monospace">.kg/graph.db  .kg/embeddings/  notes/  user files</text>
+
+      <!-- Preload Bridge -->
+      <rect x="428" y="200" width="44" height="140" rx="6" stroke="#bc8cff" stroke-width="2" fill="rgba(188,140,255,0.06)"/>
+      <text x="434" y="250" fill="#bc8cff" font-size="9" font-weight="600" font-family="system-ui" writing-mode="tb">PRELOAD</text>
+      <text x="456" y="250" fill="#8b949e" font-size="8" font-family="system-ui" writing-mode="tb">contextBridge</text>
+
+      <!-- Renderer Process Box -->
+      <rect x="480" y="20" width="400" height="370" rx="12" stroke="#238636" stroke-width="2" fill="rgba(35,134,54,0.04)"/>
+      <text x="500" y="50" fill="#3fb950" font-size="14" font-weight="700" font-family="system-ui">RENDERER PROCESS (Chromium)</text>
+
+      <rect x="500" y="70" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="520" y="98" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">React 19 SPA</text>
+
+      <rect x="690" y="70" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="700" y="98" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">Zustand Stores (10)</text>
+
+      <rect x="500" y="130" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="510" y="158" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">Three.js Renderer</text>
+
+      <rect x="690" y="130" width="170" height="45" rx="6" stroke="#30363d" fill="#161b22"/>
+      <text x="700" y="158" fill="#c9d1d9" font-size="12" font-weight="600" font-family="system-ui">@platform Layer</text>
+
+      <rect x="500" y="195" width="360" height="80" rx="8" stroke="#30363d" fill="rgba(22,27,34,0.6)"/>
+      <text x="515" y="218" fill="#8b949e" font-size="10" font-weight="600" font-family="system-ui">WEB WORKERS</text>
+      <rect x="515" y="228" width="100" height="30" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="525" y="248" fill="#c9d1d9" font-size="10" font-family="system-ui">Layout Worker</text>
+      <rect x="630" y="228" width="110" height="30" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="636" y="248" fill="#c9d1d9" font-size="10" font-family="system-ui">DB SharedWorker</text>
+
+      <rect x="500" y="290" width="360" height="80" rx="8" stroke="#30363d" fill="rgba(22,27,34,0.6)"/>
+      <text x="515" y="313" fill="#8b949e" font-size="10" font-weight="600" font-family="system-ui">HOOKS & ORCHESTRATORS</text>
+      <rect x="515" y="323" width="100" height="30" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="519" y="343" fill="#c9d1d9" font-size="9.5" font-family="system-ui">useLLMExtraction</text>
+      <rect x="630" y="323" width="100" height="30" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="640" y="343" fill="#c9d1d9" font-size="9.5" font-family="system-ui">chatAgentLoop</text>
+      <rect x="745" y="323" width="100" height="30" rx="4" stroke="#30363d" fill="#161b22"/>
+      <text x="748" y="343" fill="#c9d1d9" font-size="9.5" font-family="system-ui">useGraphData</text>
+
+      <!-- Companion Extension -->
+      <rect x="580" y="420" width="300" height="80" rx="12" stroke="#bc8cff" stroke-dasharray="4" stroke-width="2" fill="rgba(188,140,255,0.04)"/>
+      <text x="600" y="448" fill="#bc8cff" font-size="14" font-weight="700" font-family="system-ui">COMPANION EXTENSION</text>
+      <text x="600" y="468" fill="#8b949e" font-size="11" font-family="system-ui">Chrome browser &bull; Captures DOM &bull; Context menus</text>
+      <text x="600" y="485" fill="#8b949e" font-size="10" font-family="monospace">POST http://127.0.0.1:19876/api/capture</text>
+
+      <!-- Arrows -->
+      <!-- IPC: Main <-> Renderer -->
+      <line x1="420" y1="270" x2="480" y2="270" stroke="#bc8cff" stroke-width="1.5" stroke-dasharray="4"/>
+
+      <!-- Companion -> Main -->
+      <path d="M 580 460 L 210 460 L 210 235" stroke="#bc8cff" stroke-width="1.5" stroke-dasharray="4" fill="none" marker-end="url(#arrowPurple)"/>
+      <text x="300" y="454" fill="#8b949e" font-size="9" font-family="monospace">HTTP localhost:19876</text>
+
+      <defs>
+        <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <path d="M 0 0 L 8 3 L 0 6 Z" fill="#bc8cff"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- IPC CHANNELS -->
+<!-- ============================================================ -->
+<section id="ipc">
+  <h2>IPC Channel Map <span class="badge badge-electron">45+ CHANNELS</span></h2>
+  <p class="section-desc">Every communication channel between the renderer process and the Electron main process. Channels are grouped by domain. <code>invoke</code> = request/response (RPC). <code>broadcast</code> = one-way push to all windows.</p>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Storage (3 invoke + 1 broadcast)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Payload</th><th>Response</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>storage:get</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>keys?</td><td>Record&lt;string, any&gt;</td><td>Read decrypted storage values</td></tr>
+            <tr><td><code>storage:set</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>items: Record</td><td>void</td><td>Write encrypted storage</td></tr>
+            <tr><td><code>storage:remove</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>keys</td><td>void</td><td>Delete storage keys</td></tr>
+            <tr><td><code>storage:changed</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>changes, origin</td><td>&mdash;</td><td>Notifies all windows of changes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Database (1 invoke + 1 broadcast)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Payload</th><th>Response</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>db:request</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>action: string, params</td><td>{ success, data }</td><td>Core DB dispatcher (96 action types)</td></tr>
+            <tr><td><code>db:sync</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>SyncEvent</td><td>&mdash;</td><td>Node/edge mutations to all windows</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Notes (9 invoke)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>notes:init</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Initialize notes directory</td></tr>
+            <tr><td><code>notes:read</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Read note by nodeId (vault-aware)</td></tr>
+            <tr><td><code>notes:write</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Write note markdown</td></tr>
+            <tr><td><code>notes:remove</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Delete note file</td></tr>
+            <tr><td><code>notes:list</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>List all note IDs</td></tr>
+            <tr><td><code>notes:exists</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Check note existence</td></tr>
+            <tr><td><code>notes:getPath</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Get notes directory path</td></tr>
+            <tr><td><code>notes:pickFolder</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Show folder picker dialog</td></tr>
+            <tr><td><code>notes:move</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Move all notes to new directory</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>LLM Streaming (3 invoke + 3 broadcast)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>llm:stream-extraction</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Start streaming extraction (fire-and-forget)</td></tr>
+            <tr><td><code>llm:extraction-chunk</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Extraction text chunks (matched by requestId)</td></tr>
+            <tr><td><code>llm:run-agent</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Start agent loop (fire-and-forget)</td></tr>
+            <tr><td><code>llm:agent-progress</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Agent events: llm_start, tool_call, tool_result, done</td></tr>
+            <tr><td><code>llm:stream-chat</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Start chat streaming (fire-and-forget)</td></tr>
+            <tr><td><code>llm:chat-chunk</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Chat text chunks + tool calls</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Vault Workspace (12 invoke)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>vault-workspace:get-status</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Current vault open/path/name/id</td></tr>
+            <tr><td><code>vault-workspace:get-recent</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>List recent vaults (up to 10)</td></tr>
+            <tr><td><code>vault-workspace:create</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Create new vault</td></tr>
+            <tr><td><code>vault-workspace:open</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Open existing vault</td></tr>
+            <tr><td><code>vault-workspace:pick-create</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Folder picker + create</td></tr>
+            <tr><td><code>vault-workspace:pick-open</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Folder picker + open</td></tr>
+            <tr><td><code>vault-workspace:close</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Close current vault</td></tr>
+            <tr><td><code>vault-workspace:get-sandbox-config</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Agent sandbox settings</td></tr>
+            <tr><td><code>vault-workspace:set-sandbox-config</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Update sandbox config</td></tr>
+            <tr><td><code>vault-workspace:open-new-window</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Spawn new Electron process for vault</td></tr>
+            <tr><td><code>vault-workspace:pick-create-new-window</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Picker + scaffold + spawn</td></tr>
+            <tr><td><code>vault-workspace:pick-open-new-window</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Picker + spawn</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Embeddings (5 invoke + 1 broadcast)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>embedding:is-available</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Check if embedding service is ready</td></tr>
+            <tr><td><code>embedding:get-status</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Enabled, provider, node counts</td></tr>
+            <tr><td><code>embedding:configure</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Update provider/config</td></tr>
+            <tr><td><code>embedding:search-similar</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>KNN search by text query</td></tr>
+            <tr><td><code>embedding:search-similar-by-node</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>KNN search by node ID</td></tr>
+            <tr><td><code>embedding:progress</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Batch embedding progress {done, total}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Other (vault binary, files, companion, runtime)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Channel</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>vault:init</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Create legacy vault directory</td></tr>
+            <tr><td><code>vault:store</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Store binary file</td></tr>
+            <tr><td><code>vault:read</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Read binary file</td></tr>
+            <tr><td><code>vault:remove</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Delete binary file</td></tr>
+            <tr><td><code>vault:usage</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Calculate storage usage</td></tr>
+            <tr><td><code>vault:sync</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Vault file events to renderer</td></tr>
+            <tr><td><code>files:read/write/remove/list</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Generic file I/O (4 channels)</td></tr>
+            <tr><td><code>runtime:sendMessage</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Legacy LLM message routing</td></tr>
+            <tr><td><code>runtime:broadcast</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>LLM streaming results to all windows</td></tr>
+            <tr><td><code>fetch-url-content</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Fetch URL with browser-like UA</td></tr>
+            <tr><td><code>shell:open-external</code></td><td><span class="dir-tag dir-invoke">invoke</span></td><td>Open URL in default browser</td></tr>
+            <tr><td><code>companion:capture</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>Captured page from companion ext</td></tr>
+            <tr><td><code>companion:reading-queue</code></td><td><span class="dir-tag dir-broadcast">broadcast</span></td><td>URL queued from companion ext</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- PLATFORM ABSTRACTION -->
+<!-- ============================================================ -->
+<section id="platform">
+  <h2>Platform Abstraction Layer <span class="badge badge-shared">SHARED</span></h2>
+  <p class="section-desc">UI code imports <code>@platform</code> (build-time alias) and never touches <code>chrome.*</code> or <code>ipcRenderer</code> directly. Seven interfaces cover all platform-specific operations.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>PlatformStorage</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Key-value store with change listeners. Electron: encrypted JSON file via OS keychain. Chrome: chrome.storage.local.</div>
+      <div class="tag-row">
+        <span class="tag tag-blue">get()</span>
+        <span class="tag tag-blue">set()</span>
+        <span class="tag tag-blue">remove()</span>
+        <span class="tag tag-blue">onChange()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>PlatformDB</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Database operations via action string dispatch. Electron: IPC to better-sqlite3. Chrome: SharedWorker/DedicatedWorker + wa-sqlite.</div>
+      <div class="tag-row">
+        <span class="tag tag-green">init()</span>
+        <span class="tag tag-green">request(action, params)</span>
+        <span class="tag tag-green">onSync()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>PlatformNotes</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Markdown file storage. Electron: vault notes/ directory. Chrome: OPFS async API.</div>
+      <div class="tag-row">
+        <span class="tag tag-purple">read()</span>
+        <span class="tag tag-purple">write()</span>
+        <span class="tag tag-purple">remove()</span>
+        <span class="tag tag-purple">list()</span>
+        <span class="tag tag-purple">exists()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--orange)"></span>PlatformLLM</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Streaming LLM operations. Electron: dedicated IPC channels. Chrome: message-based via service worker.</div>
+      <div class="tag-row">
+        <span class="tag tag-orange">streamExtraction()</span>
+        <span class="tag tag-orange">runAgent()</span>
+        <span class="tag tag-orange">streamChat()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--pink)"></span>PlatformBrowser</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Web page interaction. Electron: companion extension dispatch. Chrome: chrome.tabs + content scripts.</div>
+      <div class="tag-row">
+        <span class="tag tag-pink">getActiveTab()</span>
+        <span class="tag tag-pink">getPageContent()</span>
+        <span class="tag tag-pink">executeTool()</span>
+        <span class="tag tag-pink">onPageCapture()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>PlatformEmbedding</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Semantic search. Electron: IPC to EmbeddingService + sqlite-vec. Chrome: frozen no-op stub.</div>
+      <div class="tag-row">
+        <span class="tag tag-cyan">searchSimilar()</span>
+        <span class="tag tag-cyan">searchSimilarByNodeId()</span>
+        <span class="tag tag-cyan">configure()</span>
+        <span class="tag tag-cyan">onProgress()</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>PlatformVault</div>
+      <div class="card-file">src/platform/types.ts</div>
+      <div class="card-desc">Binary file storage (legacy). Being migrated into vault directory structure.</div>
+      <div class="tag-row">
+        <span class="tag tag-orange">store()</span>
+        <span class="tag tag-orange">read()</span>
+        <span class="tag tag-orange">remove()</span>
+        <span class="tag tag-orange">getStorageUsage()</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Build-Time Resolution</h3>
+  <div class="process-diagram">
+    <div class="pd-box"><div class="pd-title">import { db } from '@platform'</div><div class="pd-sub">UI Code (platform-agnostic)</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box"><div class="pd-title">Vite Alias Resolution</div><div class="pd-sub">vite.config.electron.ts / vite.config.chrome.ts</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box electron"><div class="pd-title">src/platform/electron/</div><div class="pd-sub">IPC-based implementation</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VAULT SYSTEM -->
+<!-- ============================================================ -->
+<section id="vault">
+  <h2>Vault System <span class="badge badge-electron">ELECTRON</span></h2>
+  <p class="section-desc">A vault is a user-chosen directory that contains everything: graph DB, notes, embeddings, and agent artifacts. Single vault per process; switching vaults spawns a new Electron process.</p>
+
+  <div class="two-col">
+    <div>
+      <h3>Directory Structure</h3>
+      <div class="tree">
+        <span class="dir">&lt;vault-root&gt;/</span><br>
+        &nbsp;&nbsp;<span class="dir">.kg/</span> <span class="comment">&larr; app internals (hidden)</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">config.json</span> <span class="comment">&larr; vault identity &amp; schema</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">graph.db</span> <span class="comment">&larr; SQLite (source of truth)</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">agent-config.json</span> <span class="comment">&larr; sandbox rules</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">embeddings/</span> <span class="comment">&larr; sqlite-vec vectors</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">agent/artifacts/</span><br>
+        &nbsp;&nbsp;<span class="dir">notes/</span> <span class="comment">&larr; human-readable .md files</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">Machine Learning.md</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">Meeting Notes.md</span><br>
+        &nbsp;&nbsp;<span class="comment">(user files anywhere)</span> <span class="comment">&larr; auto-detected</span>
+      </div>
+    </div>
+    <div>
+      <h3>Event Bus Types</h3>
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Emitted By</th></tr></thead>
+          <tbody>
+            <tr><td><code>node:created</code></td><td>DB handler, ResourceDetection</td></tr>
+            <tr><td><code>node:updated</code></td><td>DB handler</td></tr>
+            <tr><td><code>node:deleted</code></td><td>DB handler</td></tr>
+            <tr><td><code>edge:created</code></td><td>DB handler</td></tr>
+            <tr><td><code>edge:deleted</code></td><td>DB handler</td></tr>
+            <tr><td><code>file:added</code></td><td>FileWatcher</td></tr>
+            <tr><td><code>file:removed</code></td><td>FileWatcher</td></tr>
+            <tr><td><code>vault:opened</code></td><td>VaultManager</td></tr>
+            <tr><td><code>vault:closing</code></td><td>VaultManager</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h3>Event Handler Chain</h3>
+  <p style="color:var(--text-dim); font-size:0.9rem; margin-bottom:16px;">Three handlers subscribe to the event bus. Each handles different events independently.</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>NoteFileHandler</div>
+      <div class="card-file">electron/vault/handlers/note-file-handler.ts</div>
+      <div class="card-desc">Syncs note database nodes with .md files on disk. On <code>node:created</code> (type=note): creates .md file. On <code>node:updated</code> (name changed): renames file. On <code>node:deleted</code>: deletes file. Sanitizes filenames, handles collisions with (2) suffix.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>ResourceDetectionHandler</div>
+      <div class="card-file">electron/vault/handlers/resource-detection-handler.ts</div>
+      <div class="card-desc">Auto-creates resource nodes for detected files. On <code>file:added</code>: checks sandbox rules, creates DB node (type=resource), emits <code>node:created</code>. On <code>file:removed</code>: nulls file metadata (preserves node). Maps 15+ MIME types.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>SyncBroadcastHandler</div>
+      <div class="card-file">electron/vault/handlers/sync-broadcast-handler.ts</div>
+      <div class="card-desc">Bridges internal vault events to renderer via IPC. Subscribes to all node:* and edge:* events, broadcasts on <code>vault:sync</code> channel to all BrowserWindow instances.</div>
+    </div>
+  </div>
+
+  <h3>File Change Data Flow</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-icon fi-orange">1</div>
+      <div class="flow-content"><div class="flow-title">User drops file into vault directory</div><div class="flow-detail">OS filesystem event fires</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">2</div>
+      <div class="flow-content"><div class="flow-title">VaultFileWatcher detects change</div><div class="flow-detail">Debounces 500ms, ignores .kg/, .git/, node_modules/, checks sandbox rules</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">3</div>
+      <div class="flow-content"><div class="flow-title">EventBus emits <code>file:added</code></div><div class="flow-detail">Typed event with relativePath</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">4</div>
+      <div class="flow-content"><div class="flow-title">ResourceDetectionHandler creates DB node</div><div class="flow-detail">INSERT INTO nodes (type='resource', content_type, vault_path, ...)</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-cyan">5</div>
+      <div class="flow-content"><div class="flow-title">Cascading events</div><div class="flow-detail">SyncBroadcastHandler &rarr; IPC to renderer | EmbeddingService &rarr; queues for embedding</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">6</div>
+      <div class="flow-content"><div class="flow-title">Renderer receives <code>vault:sync</code></div><div class="flow-detail">Graph store updates nodes/edges, graph re-renders</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- DATABASE -->
+<!-- ============================================================ -->
+<section id="db">
+  <h2>Database Layer <span class="badge badge-shared">16 REPOSITORIES</span></h2>
+  <p class="section-desc">Three abstraction levels separate UI code from the storage engine. The <code>DataStore</code> interface allows swapping SQLite for any other engine without changing UI or transport code.</p>
+
+  <div class="diagram">
+    <div class="arch-stack">
+      <div class="arch-layer" style="border-color: var(--green-dim);">
+        <div class="layer-label">UI Layer</div>
+        <div class="layer-title">db-client.ts (Typed API)</div>
+        <div class="layer-detail">nodes.create() &bull; edges.getAll() &bull; chat.getHistory() &bull; Platform-agnostic namespaced methods</div>
+      </div>
+      <div class="arch-arrow">&darr; <span style="font-size:0.7rem;">db.request(action, params)</span> &darr;</div>
+      <div class="arch-layer" style="border-color: var(--purple);">
+        <div class="layer-label">Transport</div>
+        <div class="layer-title">PlatformDB (Electron IPC or Chrome SharedWorker)</div>
+        <div class="layer-detail">ElectronDB &rarr; ipcRenderer.invoke('db:request') | ChromeDB &rarr; MessagePort to SharedWorker</div>
+      </div>
+      <div class="arch-arrow">&darr; <span style="font-size:0.7rem;">action-handler dispatch</span> &darr;</div>
+      <div class="arch-layer" style="border-color: var(--accent-dim);">
+        <div class="layer-label">Dispatch</div>
+        <div class="layer-title">action-handler.ts (96 cases)</div>
+        <div class="layer-detail">Routes action strings to DataStore repository methods + generates SyncEvents</div>
+      </div>
+      <div class="arch-arrow">&darr; &darr;</div>
+      <div class="arch-layer" style="border-color: var(--orange);">
+        <div class="layer-label">Engine</div>
+        <div class="layer-title">SqliteDataStore &rarr; 16 query modules</div>
+        <div class="layer-detail">better-sqlite3 (Electron) or wa-sqlite + OPFS (Chrome) &bull; WAL mode &bull; FTS5 &bull; Migrations</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Repository Sub-Interfaces</h3>
+  <div class="card-grid">
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--accent)"></span>NodeRepository</div><div class="card-desc">CRUD + search + types + neighborhood queries</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--green)"></span>EdgeRepository</div><div class="card-desc">CRUD + getBetween + search</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--purple)"></span>NodeTypeRepository</div><div class="card-desc">Entity label management</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--orange)"></span>SourceContentRepository</div><div class="card-desc">Webpage content storage</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--pink)"></span>EntityResolutionRepository</div><div class="card-desc">Alias matching for dedup</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--cyan)"></span>TagRepository</div><div class="card-desc">Tag assignment per node</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--yellow)"></span>EdgeSourceRepository</div><div class="card-desc">Edge provenance tracking</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--accent)"></span>EntitySourceRepository</div><div class="card-desc">Entity-to-resource provenance</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--green)"></span>SpatialRepository</div><div class="card-desc">Cluster &amp; viewport windowing</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--purple)"></span>ChatRepository</div><div class="card-desc">Conversation history</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--orange)"></span>NoteSearchRepository</div><div class="card-desc">FTS5 full-text index</div></div>
+    <div class="card"><div class="card-title"><span class="dot" style="background:var(--pink)"></span>MemoryRepository</div><div class="card-desc">Episodic agent memories</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- STATE MANAGEMENT -->
+<!-- ============================================================ -->
+<section id="state">
+  <h2>State Management <span class="badge badge-shared">10 ZUSTAND STORES</span></h2>
+  <p class="section-desc">Independent Zustand stores with no direct cross-dependencies. Stores are synchronized via BroadcastChannel (Chrome) and IPC (Electron). Hooks orchestrate multi-store updates.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>graph-store</div>
+      <div class="card-file">src/graph/store/graph-store.ts</div>
+      <div class="card-desc">Core graph data: nodes, edges, adjacency map, selection. CRUD with DB sync. startSyncListener() subscribes to BroadcastChannel + IPC.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>ui-store</div>
+      <div class="card-file">src/graph/store/ui-store.ts</div>
+      <div class="card-desc">Layout, panels, display mode, chat state, content columns, layer visibility, focus callbacks. 18+ methods for UI orchestration.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--orange)"></span>llm-store</div>
+      <div class="card-file">src/graph/store/llm-store.ts</div>
+      <div class="card-desc">Extraction pipeline state machine: idle &rarr; extracting &rarr; extracted &rarr; reviewing &rarr; merging. Agent runs, cost tracking, privacy modal.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>extraction-review-store</div>
+      <div class="card-file">src/graph/store/extraction-review-store.ts</div>
+      <div class="card-desc">Pre-merge review with undo/redo (12 command types). ReviewNode/ReviewEdge/ReviewNote with temp IDs. Merge recommendations, convert-to-property flow.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--pink)"></span>chat-context-store</div>
+      <div class="card-file">src/graph/store/chat-context-store.ts</div>
+      <div class="card-desc">Graph nodes attached as context to chat messages. addNodes(), removeNode(), clear(). Bridges graph selection and chat input.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>node-type-store</div>
+      <div class="card-file">src/graph/store/node-type-store.ts</div>
+      <div class="card-desc">Entity labels &amp; structural types. Color resolution from TYPE_COLOR_PALETTE (10 colors, cycles). Categories: structural vs entity_label.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>viewport-store</div>
+      <div class="card-file">src/graph/store/viewport-store.ts</div>
+      <div class="card-desc">Frustum bounds, zoom level (far/medium/close), visible nodes/edges for windowed rendering. Cluster cache for large graphs.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>tag-store</div>
+      <div class="card-file">src/graph/store/tag-store.ts</div>
+      <div class="card-desc">Tag management with lazy per-node caching. Batch updates refresh global tag list.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>auth-store</div>
+      <div class="card-file">src/graph/store/auth-store.ts</div>
+      <div class="card-desc">OAuth state: checkAuth(), signIn(), signOut(). Listens to runtime messages + storage changes.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--red)"></span>reading-list-store</div>
+      <div class="card-file">src/graph/store/reading-list-store.ts</div>
+      <div class="card-desc">Extraction queue with per-URL status (pending/processing/ready/complete/failed). Batch extraction with parallel cap.</div>
+    </div>
+  </div>
+
+  <h3>Store Synchronization</h3>
+  <div class="process-diagram">
+    <div class="pd-box electron"><div class="pd-title">DB Mutation</div><div class="pd-sub">action-handler.ts</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box"><div class="pd-title">SyncEvent</div><div class="pd-sub">node_created | edge_deleted ...</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box"><div class="pd-title">BroadcastChannel + IPC</div><div class="pd-sub">SYNC_CHANNEL + db:sync</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box renderer"><div class="pd-title">graph-store listener</div><div class="pd-sub">Updates nodes[], edges[], adjacency</div></div>
+    <div class="pd-arrow">&rarr;</div>
+    <div class="pd-box renderer"><div class="pd-title">GraphRenderer</div><div class="pd-sub">Re-renders canvas</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- GRAPH RENDERER -->
+<!-- ============================================================ -->
+<section id="renderer">
+  <h2>Graph Renderer <span class="badge badge-shared">THREE.JS</span></h2>
+  <p class="section-desc">Custom Three.js renderer using InstancedMesh for nodes/edges (1-2 draw calls). Layout runs off-main-thread in a Web Worker. No React dependency in render loop.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>GraphRenderer</div>
+      <div class="card-file">src/graph/renderer/graph-renderer.ts</div>
+      <div class="card-desc">Core orchestrator: Scene, Camera, WebGLRenderer, animation loop, event emitter. Manages NodeMesh, EdgeMesh, LabelLayer, CameraController. Zustand .subscribe() pushes data imperatively.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>NodeMesh</div>
+      <div class="card-file">src/graph/renderer/node-mesh.ts</div>
+      <div class="card-desc">InstancedMesh with CircleGeometry. Per-instance: position (Matrix4), color (RGB), opacity (Float via onBeforeCompile shader injection). Selection ring as separate InstancedMesh overlay. Dynamic capacity growth.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--orange)"></span>EdgeMesh</div>
+      <div class="card-file">src/graph/renderer/edge-mesh.ts</div>
+      <div class="card-desc">LineSegments (2 vertices per edge) + InstancedMesh ConeGeometry for directed arrows. Reusable temporaries to avoid allocations. Per-vertex coloring.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>LabelLayer</div>
+      <div class="card-file">src/graph/renderer/label-layer.ts</div>
+      <div class="card-desc">Canvas2D overlay (pointer-events: none). Dirty tracking skips redraws. Zoom-level gating: far = no labels, close = all. 11px system sans-serif with frustum culling.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>CameraController</div>
+      <div class="card-file">src/graph/renderer/camera-controller.ts</div>
+      <div class="card-desc">OrthographicCamera pan/zoom/fit. Mouse wheel zoom (1.2x factor). Right-click pan. Shift+drag lasso selection. Updates frustum bounds on every change.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--pink)"></span>SpatialHash + Hit Testing</div>
+      <div class="card-file">src/graph/renderer/hit-test.ts</div>
+      <div class="card-desc">CPU distance-based node picking via spatial hash. Linear scan sufficient for 10k+ nodes. Must be rebuilt after position mutations outside updatePositions().</div>
+    </div>
+  </div>
+
+  <h3>Layout Worker</h3>
+  <div class="process-diagram">
+    <div class="pd-box renderer"><div class="pd-title">LayoutRunner</div><div class="pd-sub">Main thread API</div></div>
+    <div class="pd-arrow"><div>postMessage</div><div class="pd-arrow-label">{nodes, edges, options}</div></div>
+    <div class="pd-box"><div class="pd-title">Layout Worker</div><div class="pd-sub">Off-main-thread</div></div>
+    <div class="pd-arrow"><div>Transferable</div><div class="pd-arrow-label">Float32Array positions</div></div>
+    <div class="pd-box"><div class="pd-title">ForceLayout</div><div class="pd-sub">Velocity Verlet + Barnes-Hut</div></div>
+  </div>
+  <p style="color:var(--text-dim); font-size:0.85rem;">The layout worker uses Barnes-Hut quadtree O(n log n) repulsion with Velocity Verlet integration. Positions transferred as Float32Array via Transferable objects to avoid copy overhead. Supports pin/unpin for node dragging during live simulation.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- LLM & AGENTS -->
+<!-- ============================================================ -->
+<section id="llm">
+  <h2>LLM &amp; Agent System <span class="badge badge-shared">SHARED CORE</span></h2>
+  <p class="section-desc">Three extraction modes share a common agent loop and review pipeline. The core agent loop in <code>src/core/agent-loop.ts</code> is platform-agnostic &mdash; platform-specific <code>ToolExecutor</code> implementations and <code>StreamFn</code> functions are injected at call time.</p>
+
+  <h3>Three Extraction Pipelines</h3>
+  <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card" style="border-top: 3px solid var(--accent);">
+      <div class="card-title">Simple Text Extraction</div>
+      <div class="card-desc">Raw text &rarr; <code>llm.streamExtraction()</code> &rarr; streaming JSON &rarr; Zod validation &rarr; diff with existing graph &rarr; review UI.</div>
+      <div class="tag-row"><span class="tag tag-blue">No tools</span><span class="tag tag-blue">Single LLM call</span></div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--purple);">
+      <div class="card-title">Agent Page Extraction</div>
+      <div class="card-desc"><code>llm.runAgent()</code> &rarr; multi-turn agent loop (max 15 iterations) &rarr; tool executor &rarr; terminal <code>save_entities</code> &rarr; review UI.</div>
+      <div class="tag-row"><span class="tag tag-purple">9 tools</span><span class="tag tag-purple">Multi-turn</span></div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--green);">
+      <div class="card-title">File Ingestion</div>
+      <div class="card-desc">File &rarr; <code>ContentProcessor.preprocess()</code> &rarr; text/chunks &rarr; <code>llm.streamExtraction()</code> with entity carry-forward &rarr; review UI.</div>
+      <div class="tag-row"><span class="tag tag-green">Chunked</span><span class="tag tag-green">Carry-forward</span></div>
+    </div>
+  </div>
+
+  <h3>Agent Loop (src/core/agent-loop.ts)</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">The loop accepts three injectable dependencies: <code>streamFn</code> (LLM streaming impl), <code>toolExecutor</code> (platform-specific tool dispatch), and <code>onProgress</code> (event callback). This keeps the core loop platform-agnostic.</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">1</div>
+      <div class="flow-content"><div class="flow-title">Filter Tools &amp; Build Prompt</div><div class="flow-detail">Remove disabled tools (from AgentToolConfig), but always keep <code>save_entities</code>. Build system prompt with optional custom instructions. Init messages: [user prompt].</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-cyan">2</div>
+      <div class="flow-content"><div class="flow-title">LLM Call</div><div class="flow-detail"><code>streamFn()</code> &rarr; <code>streamAnthropicWithTools()</code> &rarr; SSE streaming &rarr; parse text content + tool_use blocks. Emit llm_start, llm_chunk, llm_end events.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-orange">3</div>
+      <div class="flow-content"><div class="flow-title">Check Terminal Tool</div><div class="flow-detail">If any tool call is <code>save_entities</code> &rarr; parse input as ExtractionResult, emit <code>extraction_complete</code>, exit loop immediately. The tool is never executed &mdash; its input IS the extraction output.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">4</div>
+      <div class="flow-content"><div class="flow-title">Execute Tools Sequentially</div><div class="flow-detail">For each ToolCall: <code>toolExecutor.execute(tc)</code> &rarr; returns <code>{result, error?}</code>. Emit tool_call and tool_result events. Error results get <code>is_error: true</code> flag.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">5</div>
+      <div class="flow-content"><div class="flow-title">Build Anthropic Messages</div><div class="flow-detail">Push assistant message (text + tool_use blocks), then user message (all tool_result blocks in a single message). This is the Anthropic API multi-turn tool-use format.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">6</div>
+      <div class="flow-content"><div class="flow-title">Loop</div><div class="flow-detail">Back to step 2 unless <code>maxIterations</code> (default 15) reached or terminal tool was called.</div></div>
+    </div>
+  </div>
+
+  <h3>LLM Streaming Pattern</h3>
+  <div class="process-diagram">
+    <div class="pd-box renderer"><div class="pd-title">Renderer</div><div class="pd-sub">llm.streamChat()</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">invoke (fire &amp; forget)</div></div>
+    <div class="pd-box"><div class="pd-title">IPC Layer</div><div class="pd-sub">requestId matching</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">llm:stream-chat</div></div>
+    <div class="pd-box electron"><div class="pd-title">Main Process</div><div class="pd-sub">handleStreamChat()</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">HTTPS SSE</div></div>
+    <div class="pd-box external"><div class="pd-title">Anthropic API</div><div class="pd-sub">/v1/messages stream</div></div>
+  </div>
+
+  <h4>SSE Stream Parsing</h4>
+  <div class="ipc-table-wrap">
+    <table>
+      <thead><tr><th>SSE Event</th><th>Processing</th><th>Emitted As</th></tr></thead>
+      <tbody>
+        <tr><td><code>message_start</code></td><td>Extract <code>inputTokens</code></td><td>Token accounting</td></tr>
+        <tr><td><code>content_block_start</code></td><td>If <code>type='tool_use'</code>: init tool buffer (id, name)</td><td>&mdash;</td></tr>
+        <tr><td><code>content_block_delta</code></td><td>Accumulate <code>text_delta</code> or <code>input_json_delta</code></td><td><code>llm_chunk</code> (text) or buffer (tool JSON)</td></tr>
+        <tr><td><code>content_block_stop</code></td><td>Finalize tool call: <code>JSON.parse(inputJson)</code>, push to <code>toolCalls[]</code></td><td>&mdash;</td></tr>
+        <tr><td><code>message_delta</code></td><td>Extract <code>stopReason</code> and <code>outputTokens</code></td><td>End-of-message metadata</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-top:10px;">LLM invokes are fire-and-forget; responses stream back via broadcast channels matched by <code>requestId</code>. Rate-limit retries (429, 529) use exponential backoff via <code>withRetry()</code>.</p>
+
+  <h3>Anthropic Message Format</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">Both extraction and chat loops build message arrays using Anthropic's multi-turn tool-use protocol. The content block union type carries text, tool invocations, and tool results in a single conversation thread.</p>
+  <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>text</div>
+      <div class="card-desc"><code>{ type: 'text', text: string }</code><br>LLM's natural language reasoning. Appears in assistant messages.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--purple)"></span>tool_use</div>
+      <div class="card-desc"><code>{ type: 'tool_use', id, name, input }</code><br>LLM requesting tool execution. ID generated by API for correlation.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>tool_result</div>
+      <div class="card-desc"><code>{ type: 'tool_result', tool_use_id, content, is_error? }</code><br>Tool output sent back in next user message. Multiple results bundled in one message.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- AGENT TOOLS -->
+<!-- ============================================================ -->
+<section id="tools">
+  <h2>Agent Tools Design <span class="badge badge-shared">26 TOOLS</span></h2>
+  <p class="section-desc">Two independent tool systems &mdash; <strong>extraction tools</strong> (page reading + terminal) and <strong>chat tools</strong> (graph CRUD + search) &mdash; share a common <code>ToolExecutor</code> interface but have different execution contexts, filtering rules, and platform dispatch strategies.</p>
+
+  <!-- TOOL EXECUTOR INTERFACE -->
+  <h3>ToolExecutor Interface</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">The core abstraction that makes the agent loop platform-agnostic. Each platform provides its own implementation.</p>
+  <div class="diagram" style="max-width:900px;">
+    <div class="arch-stack">
+      <div class="arch-layer" style="border-color: var(--purple);">
+        <div class="layer-label">Interface (src/core/agent-loop.ts)</div>
+        <div class="layer-title" style="font-family:'SF Mono',Consolas,monospace; font-size:0.9rem;">ToolExecutor { execute(tool: ToolCall): Promise&lt;{ result: string; error?: string }&gt; }</div>
+        <div class="layer-detail"><code>ToolCall</code> = <code>{ id: string, name: string, input: Record&lt;string, unknown&gt; }</code></div>
+      </div>
+      <div class="arch-arrow">&darr; Three implementations &darr;</div>
+      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+        <div class="arch-layer" style="border-color: var(--orange); flex: 1; min-width: 240px;">
+          <div class="layer-label">Chrome Offscreen</div>
+          <div class="layer-title" style="font-size:0.85rem;">ContentScriptToolExecutor</div>
+          <div class="layer-detail">Routes content-script tools via IPC to tab's DOM. Runs fetch_url locally. 30s timeout.</div>
+        </div>
+        <div class="arch-layer" style="border-color: var(--accent-dim); flex: 1; min-width: 240px;">
+          <div class="layer-label">Electron Main</div>
+          <div class="layer-title" style="font-size:0.85rem;">Inline ToolExecutor object</div>
+          <div class="layer-detail">Only supports fetch_url. Blocks all content-script tools. Desktop fallback.</div>
+        </div>
+        <div class="arch-layer" style="border-color: var(--green-dim); flex: 1; min-width: 240px;">
+          <div class="layer-label">UI Renderer (Chat)</div>
+          <div class="layer-title" style="font-size:0.85rem;">executeTool(ctx, name, input)</div>
+          <div class="layer-detail">Direct DB access via CommandContext. Returns collectedNodeIds/EdgeIds for subgraph viz.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOL DEFINITION TYPES -->
+  <h3>Tool Definition Schema</h3>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--orange)"></span>Extraction ToolDefinition</div>
+      <div class="card-file">src/shared/agent-tools.ts</div>
+      <div class="card-desc" style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem; line-height:1.6;">
+        name: string<br>
+        description: string<br>
+        parameters: Record (JSON Schema)<br>
+        executionContext: 'content-script' | 'offscreen'
+      </div>
+      <p style="color:var(--text-dim); font-size:0.8rem; margin-top:8px;">The <code>executionContext</code> tag determines which ToolExecutor implementation handles the call. Converted to Anthropic format via <code>toAnthropicTools()</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot" style="background:var(--green)"></span>Chat ChatToolDefinition</div>
+      <div class="card-file">src/shared/chat-agent-tools.ts</div>
+      <div class="card-desc" style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem; line-height:1.6;">
+        name: string<br>
+        description: string<br>
+        parameters: Record (JSON Schema)<br>
+        executionContext: 'ui'
+      </div>
+      <p style="color:var(--text-dim); font-size:0.8rem; margin-top:8px;">All chat tools execute in the renderer process against the local DB. The <code>semantic_search</code> tool is defined separately and appended dynamically on Electron only.</p>
+    </div>
+  </div>
+
+  <!-- EXTRACTION TOOLS CATALOG -->
+  <h3>Extraction Tools (9)</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">Used by the page extraction agent to read web pages and save extracted entities. Two execution contexts: <strong>content-script</strong> (runs in the page DOM) and <strong>offscreen</strong> (runs in the offscreen doc or main process).</p>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Content-Script Tools (7) &mdash; DOM Access</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Parameters</th><th>Returns</th><th>Limits</th></tr></thead>
+          <tbody>
+            <tr><td><code>get_page_metadata</code></td><td>(none)</td><td>Title, URL, meta description, OG tags, JSON-LD, h1-h3 outline</td><td>&mdash;</td></tr>
+            <tr><td><code>get_page_content</code></td><td><code>format?: 'markdown' | 'text'</code></td><td>Cleaned page content with noise removed (scripts, nav, ads)</td><td>50KB max</td></tr>
+            <tr><td><code>query_selector</code></td><td><code>selector: string</code> (required)</td><td>Text content of first matching element</td><td>&mdash;</td></tr>
+            <tr><td><code>query_selector_all</code></td><td><code>selector: string</code>, <code>limit?: number</code></td><td>Text content of all matching elements</td><td>50 results max</td></tr>
+            <tr><td><code>get_links</code></td><td><code>scope?: string</code> (CSS selector)</td><td>All links with href and text within scope</td><td>200 links max</td></tr>
+            <tr><td><code>get_tables</code></td><td><code>selector?: string</code></td><td>HTML tables as arrays of header-keyed row objects</td><td>5 tables, 100 rows each</td></tr>
+            <tr><td><code>get_structured_data</code></td><td>(none)</td><td>JSON-LD and microdata extraction</td><td>&mdash;</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--text-dim); font-size:0.82rem; margin-top:10px;">
+        <strong>Chrome:</strong> Executed in page context via <code>chrome.scripting.executeScript</code>. IPC path: Offscreen &rarr; <code>TOOL_EXECUTE</code> msg &rarr; Service Worker &rarr; Content Script &rarr; DOM &rarr; response. 30-second timeout per tool call.<br>
+        <strong>Electron:</strong> Blocked with error: <em>"Content script tools are not available in desktop mode. Use fetch_url instead."</em>
+      </p>
+    </div>
+  </div>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Offscreen Tools (2) &mdash; Network + Terminal</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Parameters</th><th>Returns</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>fetch_url</code></td><td><code>url: string</code> (required)</td><td>Markdown content from URL</td><td>20KB max. Blocked URLs rejected. Works on both platforms.</td></tr>
+            <tr><td><code>save_entities</code></td><td><code>nodes: Array&lt;{name, type, properties?, tags?}&gt;</code>, <code>edges: Array&lt;{sourceName, targetName, label, type?}&gt;</code></td><td>N/A (terminal)</td><td><strong>Never actually executed.</strong> When detected, the agent loop immediately exits &mdash; the tool's <code>input</code> IS the extraction result. Always included; cannot be disabled.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT TOOLS CATALOG -->
+  <h3>Chat Tools (16 static + 1 dynamic)</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">Used by the chat agent for knowledge graph interaction. All execute in the renderer process via <code>CommandContext</code> with direct DB access. Results include <code>collectedNodeIds</code>/<code>collectedEdgeIds</code> for building the referenced subgraph visualization.</p>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Search &amp; Retrieval (8 tools)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Parameters</th><th>Strategy</th></tr></thead>
+          <tbody>
+            <tr><td><code>search_knowledge</code></td><td><code>query: string</code></td><td><strong>Recommended first tool.</strong> RAG pipeline: RRF fusion of FTS5 + vector search, 1-hop neighbor expansion, source excerpt retrieval with URLs for citation.</td></tr>
+            <tr><td><code>search_nodes</code></td><td><code>query: string</code>, <code>limit?: 10</code></td><td>FTS5 full-text search over node names</td></tr>
+            <tr><td><code>search_sources</code></td><td><code>query: string</code>, <code>limit?: 5</code></td><td>FTS5 search over stored source content (web page text)</td></tr>
+            <tr><td><code>get_node_details</code></td><td><code>nodeId: string</code></td><td>Full node properties, type, source URL, summary</td></tr>
+            <tr><td><code>get_neighbors</code></td><td><code>nodeId: string</code>, <code>hops?: 1</code> (max 3)</td><td>N-hop graph traversal from a node</td></tr>
+            <tr><td><code>get_edges_for_node</code></td><td><code>nodeId: string</code></td><td>All edges with labels, types, connected node IDs</td></tr>
+            <tr><td><code>get_source_content</code></td><td><code>nodeId: string</code></td><td>Full source text or note markdown for a node</td></tr>
+            <tr><td><code>get_nodes_batch</code></td><td><code>node_ids: string[]</code> (max 50)</td><td>Batch fetch of multiple nodes by ID array</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Mutation (6 tools)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Parameters</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>create_node</code></td><td><code>name</code>, <code>type</code> (required), <code>properties?</code></td><td>Creates new node in graph. Returns created node.</td></tr>
+            <tr><td><code>update_node</code></td><td><code>nodeId</code> (required), <code>name?</code>, <code>type?</code>, <code>properties?</code></td><td>Partial update of existing node</td></tr>
+            <tr><td><code>create_edge</code></td><td><code>sourceId</code>, <code>targetId</code>, <code>label</code> (required), <code>type?</code></td><td>Creates directed relationship</td></tr>
+            <tr><td><code>delete_node</code></td><td><code>node_id: string</code></td><td>Removes node and all connected edges</td></tr>
+            <tr><td><code>delete_nodes_batch</code></td><td><code>node_ids: string[]</code> (max 50)</td><td>Batch removal with all connected edges</td></tr>
+            <tr><td><code>merge_nodes</code></td><td><code>primary_node_id</code>, <code>secondary_node_id</code></td><td>Keep primary, transfer secondary's edges, add secondary name as alias, delete secondary. Uses LLM world knowledge for dedup (not embeddings).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapsible open" onclick="this.classList.toggle('open')">
+    <div class="collapsible-header">
+      <h4>Special (3 tools, includes 1 dynamic)</h4>
+      <span class="collapsible-chevron">&#9654;</span>
+    </div>
+    <div class="collapsible-body">
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Parameters</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>manage_memory</code></td><td><code>action: 'create'|'update'|'delete'|'list'</code>, <code>filename?</code>, <code>type?</code>, <code>name?</code>, <code>content?</code>, <code>tags?</code>, <code>supersedes?</code></td><td>Agent self-governance: creates/updates memory files with tags and supersession chains</td></tr>
+            <tr><td><code>index_notes_folder</code></td><td>(none)</td><td>Re-indexes markdown folder into KG. Creates resource nodes and wiki-link edges.</td></tr>
+            <tr><td><code>semantic_search</code></td><td><code>query: string</code>, <code>limit?: 5</code></td><td><strong>Electron-only, dynamically added.</strong> Not in CHAT_AGENT_TOOLS constant &mdash; appended in <code>getToolDefs()</code> when <code>platformId === 'electron'</code> and not disabled. Uses sqlite-vec KNN search.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOL EXECUTION CONTEXTS -->
+  <h3>Platform Dispatch Matrix</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">The same tool name resolves to different execution strategies depending on the platform and tool system.</p>
+  <div class="ipc-table-wrap">
+    <table>
+      <thead><tr><th>Tool System</th><th>Chrome Extension</th><th>Electron Desktop</th><th>UI (Chat)</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Extraction (content-script)</strong></td><td>Offscreen &rarr; SW &rarr; Content Script &rarr; DOM</td><td style="color:var(--red)">Blocked (error returned to LLM)</td><td>N/A</td></tr>
+        <tr><td><strong>Extraction (fetch_url)</strong></td><td>Local <code>fetchAndCleanContent()</code> in offscreen</td><td>Node.js <code>fetch()</code> in main process</td><td>N/A</td></tr>
+        <tr><td><strong>Extraction (save_entities)</strong></td><td colspan="2" style="text-align:center;">Never executed &mdash; input parsed as ExtractionResult, loop exits immediately</td><td>N/A</td></tr>
+        <tr><td><strong>Chat (all 17 tools)</strong></td><td colspan="2" style="text-align:center;">N/A for extraction executors</td><td>Direct DB via CommandContext</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- CONTENT-SCRIPT DISPATCH FLOW -->
+  <h3>Content-Script Tool Dispatch (Chrome)</h3>
+  <div class="process-diagram">
+    <div class="pd-box" style="border-color:var(--green-dim);"><div class="pd-title">Agent Loop</div><div class="pd-sub">toolExecutor.execute(tc)</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">IPC</div></div>
+    <div class="pd-box" style="border-color:var(--purple);"><div class="pd-title">Offscreen Doc</div><div class="pd-sub">ContentScriptToolExecutor</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">TOOL_EXECUTE msg</div></div>
+    <div class="pd-box" style="border-color:var(--accent-dim);"><div class="pd-title">Service Worker</div><div class="pd-sub">Message relay</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">chrome.tabs.sendMessage</div></div>
+    <div class="pd-box" style="border-color:var(--orange);"><div class="pd-title">Content Script</div><div class="pd-sub">executeTool(name, input)</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">DOM access</div></div>
+    <div class="pd-box external"><div class="pd-title">Page DOM</div><div class="pd-sub">Live document</div></div>
+  </div>
+
+  <!-- CHAT TOOL EXECUTION -->
+  <h3>Chat Tool Execution (All Platforms)</h3>
+  <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:14px;">Chat tools run entirely in the renderer process. The <code>CommandContext</code> provides direct access to the database, notes, storage, and graph snapshot.</p>
+  <div class="process-diagram">
+    <div class="pd-box renderer"><div class="pd-title">Chat Agent Loop</div><div class="pd-sub">chat-agent-loop.ts</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">executeToolCmd()</div></div>
+    <div class="pd-box" style="border-color:var(--purple);"><div class="pd-title">chat-tool-executor.ts</div><div class="pd-sub">switch(name) { case... }</div></div>
+    <div class="pd-arrow"><div>&rarr;</div><div class="pd-arrow-label">ctx.db.*</div></div>
+    <div class="pd-box electron"><div class="pd-title">CommandContext</div><div class="pd-sub">DB, Notes, Storage, Graph</div></div>
+  </div>
+  <div class="card" style="margin-top:16px; max-width:700px;">
+    <div class="card-title">Subgraph Accumulation</div>
+    <div class="card-desc">Each <code>ToolExecResult</code> returns optional <code>collectedNodeIds: string[]</code> and <code>collectedEdgeIds: string[]</code>. These are accumulated across all tool calls in a chat turn into <code>Set&lt;string&gt;</code> collections. The final <code>done</code> event includes <code>subgraph: { nodeIds, edgeIds }</code> for rendering the referenced entities as a graph overlay.</div>
+  </div>
+
+  <!-- TOOL FILTERING -->
+  <h3>Tool Filtering &amp; Configuration</h3>
+  <div class="two-col">
+    <div>
+      <h4>AgentToolConfig</h4>
+      <div class="card">
+        <div class="card-file">src/shared/agent-settings-types.ts</div>
+        <div class="card-desc" style="font-family:'SF Mono',Consolas,monospace; font-size:0.78rem; line-height:1.8;">
+          disabledExtractionTools: string[]<br>
+          disabledChatTools: string[]<br>
+          chatMaxIterations?: number
+        </div>
+        <p style="color:var(--text-dim); font-size:0.8rem; margin-top:8px;">Persisted in <code>PlatformStorage</code> under key <code>'agentToolConfig'</code>. Read by both extraction and chat hooks at run start.</p>
+      </div>
+    </div>
+    <div>
+      <h4>Filtering Rules</h4>
+      <ul class="feature-list">
+        <li><strong>Extraction:</strong> <code>save_entities</code> is <strong>always included</strong> regardless of disabled list (it's the only way to complete extraction).</li>
+        <li><strong>Chat:</strong> All 16 base tools filterable. <code>semantic_search</code> independently gated by platform (<code>platformId === 'electron'</code>) AND disabled list.</li>
+        <li><strong>Timing:</strong> Filtering happens <em>before</em> converting to Anthropic format &mdash; disabled tools are never sent to the LLM, so the model doesn't even know they exist.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PROGRESS EVENTS -->
+  <h3>Progress Event Types</h3>
+  <div class="two-col">
+    <div>
+      <h4>Extraction Agent Events</h4>
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Payload</th></tr></thead>
+          <tbody>
+            <tr><td><code>llm_start</code></td><td>&mdash;</td></tr>
+            <tr><td><code>llm_chunk</code></td><td><code>text</code> (streaming token)</td></tr>
+            <tr><td><code>llm_end</code></td><td><code>text</code> (full response)</td></tr>
+            <tr><td><code>tool_call</code></td><td><code>toolCall: ToolCall</code></td></tr>
+            <tr><td><code>tool_result</code></td><td><code>toolResult</code> or <code>toolError</code></td></tr>
+            <tr><td><code>extraction_complete</code></td><td><code>extractionResult</code>, tokens, model</td></tr>
+            <tr><td><code>done</code></td><td>tokens, model</td></tr>
+            <tr><td><code>error</code></td><td><code>error: string</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h4>Chat Agent Events</h4>
+      <div class="ipc-table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Payload</th></tr></thead>
+          <tbody>
+            <tr><td><code>text_chunk</code></td><td><code>textChunk</code> (streaming)</td></tr>
+            <tr><td><code>turn</code> (thinking)</td><td><code>content</code> (LLM text)</td></tr>
+            <tr><td><code>turn</code> (tool_call)</td><td><code>toolName</code>, <code>toolInput</code></td></tr>
+            <tr><td><code>turn</code> (tool_result)</td><td><code>content</code>, <code>isError?</code></td></tr>
+            <tr><td><code>done</code></td><td><code>finalText</code>, <code>subgraph</code></td></tr>
+            <tr><td><code>error</code></td><td><code>error: string</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DESIGN PRINCIPLES -->
+  <h3>Design Principles</h3>
+  <ul class="feature-list">
+    <li><strong>Dependency injection over inheritance:</strong> The core agent loop accepts <code>streamFn</code>, <code>toolExecutor</code>, and <code>onProgress</code> as arguments. No abstract base classes, no platform-specific imports. Adding a new platform means writing one ToolExecutor implementation.</li>
+    <li><strong>Terminal tool pattern:</strong> <code>save_entities</code> is never executed &mdash; its <code>input</code> field IS the extraction output. This lets the LLM decide when extraction is complete without needing a separate "done" signal.</li>
+    <li><strong>Execution context tags:</strong> Each tool definition carries <code>executionContext: 'content-script' | 'offscreen' | 'ui'</code>. The ToolExecutor implementation uses this tag to route dispatch. Adding a new context (e.g., <code>'worker'</code>) requires only a new tag value and executor branch.</li>
+    <li><strong>Dynamic tool registration:</strong> <code>semantic_search</code> is appended at runtime based on platform capability. This pattern extends naturally to any future platform-gated tool.</li>
+    <li><strong>Subgraph accumulation:</strong> Chat tools return collected entity IDs alongside their text results. The agent loop accumulates these across iterations, producing a referenced subgraph in the final event. This separates data collection from visualization without coupling tools to the rendering layer.</li>
+    <li><strong>Filtering is pre-LLM:</strong> Disabled tools are removed before sending the tool list to the Anthropic API. The model never sees disabled tools, preventing hallucinated calls to unavailable tools.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<!-- EMBEDDINGS -->
+<!-- ============================================================ -->
+<section id="embeddings">
+  <h2>Embedding System <span class="badge badge-electron">ELECTRON-ONLY</span></h2>
+  <p class="section-desc">Opt-in vector embedding system for semantic search. Two providers: ONNX (local, 384d MiniLM) and OpenAI (cloud, 1536d/3072d). Lazy-initialized after first DB init. Chrome extension is completely unaffected.</p>
+
+  <div class="diagram">
+    <div class="arch-stack">
+      <div class="arch-layer" style="border-color: var(--green-dim);">
+        <div class="layer-title">Renderer: embedding.searchSimilar(query, topK)</div>
+        <div class="layer-detail">PlatformEmbedding interface &bull; IPC invoke</div>
+      </div>
+      <div class="arch-arrow">&darr; embedding:search-similar &darr;</div>
+      <div class="arch-layer" style="border-color: var(--accent-dim);">
+        <div class="layer-title">EmbeddingService (Main Process Orchestrator)</div>
+        <div class="layer-detail">Configure, embed, search, handleNodeMutation, handleNodeDeleted</div>
+      </div>
+      <div class="arch-arrow">&darr; &darr;</div>
+      <div style="display: flex; gap: 16px; justify-content: center;">
+        <div class="arch-layer" style="border-color: var(--purple); flex: 1; max-width: 380px;">
+          <div class="layer-label">Provider</div>
+          <div class="layer-title">ONNX Provider (Local)</div>
+          <div class="layer-detail">worker_threads &bull; MiniLM-L6-v2 &bull; 384 dimensions &bull; Quantized or full</div>
+        </div>
+        <div class="arch-layer" style="border-color: var(--orange); flex: 1; max-width: 380px;">
+          <div class="layer-label">Provider</div>
+          <div class="layer-title">OpenAI Provider (Cloud)</div>
+          <div class="layer-detail">text-embedding-3-small/large &bull; 1536/3072 dimensions &bull; API calls</div>
+        </div>
+      </div>
+      <div class="arch-arrow">&darr; &darr;</div>
+      <div style="display: flex; gap: 16px; justify-content: center;">
+        <div class="arch-layer" style="border-color: var(--cyan); flex: 1; max-width: 380px;">
+          <div class="layer-title">EmbeddingQueue</div>
+          <div class="layer-detail">Background processing &bull; Batch chunks (12-32) &bull; 50ms idle delay</div>
+        </div>
+        <div class="arch-layer" style="border-color: var(--orange); border-style: dashed; flex: 1; max-width: 380px;">
+          <div class="layer-title">sqlite-vec (KNN Storage)</div>
+          <div class="layer-detail">vec_nodes virtual table &bull; embedding_metadata &bull; MATCH + k=? syntax</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Embedding Text Strategy</h3>
+  <div class="ipc-table-wrap">
+    <table>
+      <thead><tr><th>Node Type</th><th>Text Construction</th></tr></thead>
+      <tbody>
+        <tr><td><code>entity</code></td><td>"{name}. {label}. {summary}" &mdash; includes label and edge labels as context</td></tr>
+        <tr><td><code>note</code></td><td>Frontmatter description/labels preferred, fallback to first 500 chars of body</td></tr>
+        <tr><td><code>resource</code></td><td>"{name}. {source title}. {first 500 chars of content}"</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- COMPANION -->
+<!-- ============================================================ -->
+<section id="companion">
+  <h2>Companion Extension <span class="badge badge-chrome">CHROME</span></h2>
+  <p class="section-desc">A separate Chrome extension that captures the rendered DOM of web pages and sends it to the desktop app via localhost HTTP. Communication is unidirectional: browser &rarr; desktop.</p>
+
+  <h3>Communication Flow</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-icon fi-pink">1</div>
+      <div class="flow-content"><div class="flow-title">User right-clicks "Extract with Synapse"</div><div class="flow-detail">Context menu in Chrome browser (page or link context)</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">2</div>
+      <div class="flow-content"><div class="flow-title">Companion service worker captures page</div><div class="flow-detail">chrome.scripting.executeScript() &rarr; clones DOM, removes noise, extracts markdown (max 50K chars)</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">3</div>
+      <div class="flow-content"><div class="flow-title">HTTP POST to desktop app</div><div class="flow-detail">POST http://127.0.0.1:19876/api/capture with {title, url, content, targetVaultPath}</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-cyan">4</div>
+      <div class="flow-content"><div class="flow-title">CompanionServer receives &amp; broadcasts</div><div class="flow-detail">Broadcasts to all BrowserWindow instances via IPC: companion:capture channel</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">5</div>
+      <div class="flow-content"><div class="flow-title">useCompanionCapture hook receives</div><div class="flow-detail">Sets pendingCapture in LLMStore, opens extraction modal in UI</div></div>
+    </div>
+  </div>
+
+  <h3>HTTP Endpoints (port 19876)</h3>
+  <div class="ipc-table-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dir-tag dir-http">GET</span></td><td><code>/api/identify</code></td><td>Health check: {app: 'kg-desktop', version: '1.0.0'}</td></tr>
+        <tr><td><span class="dir-tag dir-http">GET</span></td><td><code>/api/vaults</code></td><td>List available vaults for companion to display</td></tr>
+        <tr><td><span class="dir-tag dir-http">POST</span></td><td><code>/api/capture</code></td><td>Receive captured page content, broadcast to renderer</td></tr>
+        <tr><td><span class="dir-tag dir-http">POST</span></td><td><code>/api/reading-queue</code></td><td>Queue URL for later reading/extraction</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- MCP & TOOL REGISTRY -->
+<!-- ============================================================ -->
+<section id="mcp">
+  <h2>MCP & Tool Registry <span class="badge badge-electron">ELECTRON</span></h2>
+  <p class="section-desc">Exposes 31 graph tools to external agents (Claude Desktop, Claude Code, Cursor) via MCP protocol. Unified ToolRegistry routes all tool execution &mdash; both in-app agent and external clients use the same pipeline.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-header"><span class="dot dot-blue"></span>Tool Registry</div>
+      <div class="card-body">
+        <p>Singleton in main process. Provider-based architecture with namespace dispatch (<code>__</code> separator).</p>
+        <ul>
+          <li><code>BuiltinToolProvider</code> &mdash; 31 tools (16 core + 15 extended modules)</li>
+          <li><code>McpToolProvider</code> &mdash; per external MCP server</li>
+          <li>IPC: <code>tools:list</code> / <code>tools:execute</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="dot dot-green"></span>Extended Tool Modules</div>
+      <div class="card-body">
+        <p>High cohesion / loose coupling. Each module: definitions + executor.</p>
+        <ul>
+          <li><strong>note-tools</strong> &mdash; read, create, update, list, search notes</li>
+          <li><strong>edge-tools</strong> &mdash; update, delete, get-between edges</li>
+          <li><strong>graph-tools</strong> &mdash; overview, subgraph, nodes-by-type</li>
+          <li><strong>entity-tools</strong> &mdash; similar entities, aliases, tags</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="dot dot-orange"></span>MCP Server (Inbound)</div>
+      <div class="card-body">
+        <p>Two transports:</p>
+        <ul>
+          <li><strong>HTTP</strong> &mdash; <code>/mcp</code> on companion server (:19876)</li>
+          <li><strong>stdio CLI</strong> &mdash; <code>synapse-mcp --vault &lt;path&gt; --allow-write</code></li>
+          <li><strong>Desktop Extension</strong> &mdash; <code>.mcpb</code> one-click install</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="dot dot-purple"></span>Real-Time Graph Sync</div>
+      <div class="card-body">
+        <p>External writes update canvas immediately:</p>
+        <ul>
+          <li><strong>HTTP:</strong> <code>onGraphMutated()</code> &rarr; <code>db:sync reset</code></li>
+          <li><strong>stdio:</strong> <code>notifyApp()</code> &rarr; POST <code>/api/graph-changed</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">1</div>
+      <div class="flow-content"><div class="flow-title">Agent connects via stdio</div><div class="flow-detail">Claude Desktop spawns <code>synapse-mcp</code>. Tools gated by <code>--allow-write</code>.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">2</div>
+      <div class="flow-content"><div class="flow-title">Write tool executed</div><div class="flow-detail">e.g. <code>create_node</code> &rarr; direct SQL INSERT via better-sqlite3.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-orange">3</div>
+      <div class="flow-content"><div class="flow-title">Notify running app</div><div class="flow-detail">POST to <code>127.0.0.1:19876/api/graph-changed</code> (fire-and-forget).</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">4</div>
+      <div class="flow-content"><div class="flow-title">Graph updates live</div><div class="flow-detail">Companion server broadcasts reset &rarr; graph-store reloads &rarr; canvas re-renders.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- STARTUP SEQUENCE -->
+<!-- ============================================================ -->
+<section id="startup">
+  <h2>Startup Sequence <span class="badge badge-electron">ELECTRON</span></h2>
+  <p class="section-desc">Complete initialization timeline from app launch to interactive state.</p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">1</div>
+      <div class="flow-content"><div class="flow-title">Protocol Registration</div><div class="flow-detail">Register <code>app://</code> custom protocol with standard scheme (before app.ready). Enables fetch, CORS, stream, SharedWorker support.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">2</div>
+      <div class="flow-content"><div class="flow-title">app.whenReady()</div><div class="flow-detail">Protocol handler serves renderer files from dist-electron/renderer/ via app://kg/</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-orange">3</div>
+      <div class="flow-content"><div class="flow-title">StorageBackend Init</div><div class="flow-detail">Creates singleton, decrypts storage.json from OS keychain via safeStorage. Passes to LLM and notes backends.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">4</div>
+      <div class="flow-content"><div class="flow-title">Embedding Handlers Registered</div><div class="flow-detail">registerEmbeddingHandlers() early (lazy service creation after DB init). All 45+ IPC handlers registered synchronously.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-pink">5</div>
+      <div class="flow-content"><div class="flow-title">CompanionServer Starts</div><div class="flow-detail">HTTP server on 127.0.0.1:19876. Serves /api/identify, /api/vaults, /api/capture, /api/reading-queue.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-cyan">6</div>
+      <div class="flow-content"><div class="flow-title">VaultManager Created</div><div class="flow-detail">Checks for --vault CLI arg. If present, opens vault asynchronously (resets DB, runs migrations, creates VaultContext).</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-blue">7</div>
+      <div class="flow-content"><div class="flow-title">registerVaultHandlers()</div><div class="flow-detail">Reconciliation (catches offline changes) &rarr; NoteFileHandler + SyncBroadcastHandler + ResourceDetectionHandler &rarr; VaultFileWatcher starts.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-green">8</div>
+      <div class="flow-content"><div class="flow-title">BrowserWindow Created</div><div class="flow-detail">Loads app://kg/index.html. Preload script exposes window.electronIPC.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-orange">9</div>
+      <div class="flow-content"><div class="flow-title">Renderer: db:request action='init'</div><div class="flow-detail">First DB request triggers lazy EmbeddingService creation (if config.enabled). Service starts, broadcasts progress.</div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-icon fi-purple">10</div>
+      <div class="flow-content"><div class="flow-title">App Interactive</div><div class="flow-detail">Graph loaded &rarr; node types loaded &rarr; sync listeners started &rarr; companion capture hook active &rarr; ready for user interaction.</div></div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <h3>Multi-Vault Architecture</h3>
+  <p style="color:var(--text-dim); font-size:0.9rem; margin-bottom:16px;">Single vault per process. Switching vaults spawns a new Electron process via <code>app.relaunch({ args: ['--vault', path] })</code>. Each process has its own DB connection, event bus, file watcher, and embedding service.</p>
+  <div class="process-diagram">
+    <div class="pd-box electron"><div class="pd-title">Process 1</div><div class="pd-sub">Vault: ~/research</div></div>
+    <div class="pd-arrow" style="color:var(--text-dim); font-size:0.8rem;">independent</div>
+    <div class="pd-box electron"><div class="pd-title">Process 2</div><div class="pd-sub">Vault: ~/work</div></div>
+    <div class="pd-arrow" style="color:var(--text-dim); font-size:0.8rem;">independent</div>
+    <div class="pd-box electron"><div class="pd-title">Process 3</div><div class="pd-sub">Vault: ~/personal</div></div>
+  </div>
+
+  <div class="sep"></div>
+
+  <h3>Key Design Principles</h3>
+  <ul class="feature-list">
+    <li><strong>Graph-as-registry:</strong> SQLite is the source of truth. Filesystem is a projection. Every file with a graph node has vault_path set on the node.</li>
+    <li><strong>Event-driven:</strong> Graph mutations and file events flow through VaultEventBus. Handlers subscribe independently.</li>
+    <li><strong>Platform-agnostic UI:</strong> Same React code runs on both Electron and Chrome via @platform alias. Zero platform-specific imports in UI components.</li>
+    <li><strong>Shared DB handle:</strong> VaultManager.open() calls resetBetterSQLite(dbPath) then runMigrations(). All code shares one DB handle.</li>
+    <li><strong>Lazy initialization:</strong> EmbeddingService initializes after first DB init, not during app.whenReady(). Avoids race conditions.</li>
+    <li><strong>Streaming-first LLM:</strong> All LLM operations stream tokens in real-time. Fire-and-forget invoke, responses matched by requestId.</li>
+    <li><strong>Local-first:</strong> All data stays in the vault directory. API keys stored in app settings, never in vault.</li>
+  </ul>
+</section>
+
+</div>
+
+<footer style="padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 0.85rem; border-top: 1px solid var(--border);">
+  Synapse Architecture Visualization &bull; Generated 2026-05-16 &bull; Based on deep codebase analysis
+</footer>
+
+<script>
+  // Smooth scrolling for nav links
+  document.querySelectorAll('.nav a').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Active nav highlight on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-80px 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

@@ -214,7 +214,14 @@ kg_extension/
 │   │   │   └── extraction-review-store.ts # Ephemeral review session with undo/redo
 │   │   └── transforms/
 │   │       └── cluster-to-render.ts     # Cluster summaries → RenderNode/RenderEdge for far zoom
-│   ├── llm/                        # (planned) Provider abstraction
+│   ├── core/
+│   │   ├── llm-protocol.ts         # Provider-neutral types: LLMMessage, StreamFn, LLMStreamResult
+│   │   ├── agent-loop.ts           # Shared agent loop (injectable StreamFn + ToolExecutor)
+│   │   ├── memory-extractor.ts     # Session summarization (accepts CommandContext, no @platform imports)
+│   │   ├── system-prompts.ts       # Agent system prompts
+│   │   ├── prompt-assembler.ts     # Memory + prompt assembly
+│   │   ├── retry.ts                # withRetry (rate-limit aware)
+│   │   └── usage.ts                # Token usage tracking
 │   ├── content-script/
 │   │   ├── index.ts                # Entry: listens for extraction + TOOL_EXECUTE requests
 │   │   ├── page-extractor.ts       # Readability-based text extraction
@@ -228,8 +235,8 @@ kg_extension/
 │   │   └── tab-manager.ts          # Extension tab open/close/focus
 │   ├── offscreen/
 │   │   ├── index.ts                # Entry: message listener (LLM_REQUEST + AGENT_RUN_START)
-│   │   ├── llm-executor.ts         # Direct HTTP to OpenAI/Anthropic with streaming + tool-use
-│   │   └── agent-loop.ts           # Agentic tool-use loop for page extraction
+│   │   ├── llm-executor.ts         # Anthropic HTTP streaming + tool-use (types aliased from core/llm-protocol)
+│   │   └── agent-loop.ts           # Chrome-specific agent loop wrapper (injects streamAnthropicWithTools)
 │   └── ui/
 │       ├── index.html              # Single HTML entry for both side panel and tab
 │       ├── main.tsx                # React root mount
@@ -491,7 +498,7 @@ The `windowed` flag gates the entire viewport pipeline. When false, all data is 
 
 ## Agent Loop for Page Extraction
 
-The extension supports an agentic LLM extraction mode (Anthropic-only) that inspects the current page DOM via tool calls to extract knowledge graph entities.
+The extension supports an agentic LLM extraction mode that inspects the current page DOM via tool calls to extract knowledge graph entities. The LLM call path is provider-neutral: `src/core/llm-protocol.ts` defines `LLMMessage`, `ContentBlock`, `LLMStreamResult`, and `StreamFn`. The Electron main process (`electron/llm-backend.ts`) routes calls through a provider factory (`getStreamFn(provider)`) — currently Anthropic, with the interface ready for OpenAI/Gemini/local adapters via `registerStreamFn()`.
 
 ### Architecture
 
@@ -695,16 +702,46 @@ Central registry for all tool providers. The renderer never calls `executeTool()
 
 ### MCP Server (Exposing Graph to External Agents)
 
-Two transports serve the same tool set:
+Two transports serve the same tool set (31 tools total: 16 core + 15 extended):
 
-**HTTP (Streamable HTTP):** `McpServerBridge` adds an `/mcp` endpoint to the companion server (`127.0.0.1:19876`). Available when the desktop app is running. Configured via `.kg/mcp-server.json` with access profiles (read-only by default).
+**HTTP (Streamable HTTP):** `McpServerBridge` adds an `/mcp` endpoint to the companion server (`127.0.0.1:19876`). Always active when a vault is open. Access profile in `.kg/mcp-server.json` controls read/write permissions (read-only by default).
 
-**stdio CLI (`packages/synapse-mcp/`):** Standalone binary that opens vault DB directly via better-sqlite3. No Electron needed. Supports multi-vault (`--vault /a --vault /b`) and auto-discovery from recent vaults.
+**stdio CLI (`packages/synapse-mcp/`):** Standalone binary that opens vault DB directly via better-sqlite3. No Electron needed. Supports multi-vault (`--vault /a --vault /b`), auto-discovery from recent vaults, and `--allow-write` flag for write operations.
 
 ```bash
-# Claude Code / Cursor config
-{ "mcpServers": { "synapse": { "command": "node", "args": ["packages/synapse-mcp/dist/index.js", "--vault", "/path"] } } }
+# Claude Desktop config (stdio)
+{ "mcpServers": { "synapse": { "command": "node", "args": ["packages/synapse-mcp/dist/index.js", "--vault", "/path", "--allow-write"] } } }
 ```
+
+**Desktop Extension packaging:** `packages/synapse-mcp/manifest.json` defines a Claude Desktop Extension. Users install via `.mcpb` file — no manual JSON config needed. Build: `cd packages/synapse-mcp && npm run pack`.
+
+### Real-Time Graph Sync
+
+External MCP writes must update the running app's graph canvas immediately:
+
+```
+HTTP bridge:  tool execution → onGraphMutated() → BrowserWindow.send('db:sync', {type:'reset'})
+stdio CLI:    tool execution → notifyApp() → POST 127.0.0.1:19876/api/graph-changed → same broadcast
+Both paths:   → graph-store.loadAll() → canvas re-renders
+```
+
+The companion server's `/api/graph-changed` endpoint receives fire-and-forget POSTs from the stdio CLI after successful write operations. This bridges the gap between the CLI (which opens its own SQLite connection) and the Electron renderer (which needs to know data changed).
+
+### Extended Tool Modules
+
+Tools are organized in two layers for high cohesion / loose coupling:
+
+```
+src/commands/tools/
+├── types.ts          — ToolModule interface
+├── note-tools.ts     — read_note, create_note, update_note, list_notes, search_notes
+├── edge-tools.ts     — update_edge, delete_edge, get_edges_between
+├── graph-tools.ts    — get_graph_overview, get_subgraph, get_nodes_by_type
+├── entity-tools.ts   — find_similar_entities, add_alias, get_aliases, tag_node, get_node_tags
+└── index.ts          — aggregator: EXTENDED_TOOL_DEFINITIONS + executeExtendedTool()
+```
+
+Each module exports `definitions` (schemas) + `execute(ctx, name, input)` returning `null` for unhandled tools. The main executor (`chat-tool-executor.ts`) delegates to `executeExtendedTool()` as a fallback after core tools. Adding a new module = create file + add one import in `index.ts`.
 
 ### Modularity Principle
 
@@ -712,6 +749,7 @@ Each component is independently removable:
 - Remove in-app agent → registry + MCP server still expose tools
 - Remove MCP client → built-in tools and MCP server unaffected
 - Remove MCP server → in-app agent and MCP client unaffected
+- Remove a tool module → one import change in `src/commands/tools/index.ts`
 
 The in-app agent is just another consumer of the registry (calls `tools:execute` IPC). It can be replaced with an embedded MCP client without architectural changes.
 
@@ -721,14 +759,15 @@ The in-app agent is just another consumer of the registry (calls `tools:execute`
 |---|---|
 | `electron/mcp/types.ts` | `ToolProvider`, `IToolRegistry`, config interfaces |
 | `electron/mcp/tool-registry.ts` | Registry singleton with namespace dispatch |
-| `electron/mcp/builtin-tool-provider.ts` | Wraps `CHAT_AGENT_TOOLS` + `executeTool()` |
+| `electron/mcp/builtin-tool-provider.ts` | Wraps `ALL_CHAT_AGENT_TOOLS` + `executeTool()` |
 | `electron/mcp/main-process-context.ts` | Creates `CommandContext` with direct DataStore |
 | `electron/mcp/mcp-client-manager.ts` | Manages outbound stdio connections |
 | `electron/mcp/mcp-tool-provider.ts` | `ToolProvider` for a single MCP server |
-| `electron/mcp/mcp-server-bridge.ts` | Exposes tools via Streamable HTTP |
+| `electron/mcp/mcp-server-bridge.ts` | HTTP MCP server with `onGraphMutated` callback |
 | `electron/mcp/mcp-config.ts` | Config loading, merging, secret resolution |
 | `electron/mcp/mcp-ipc.ts` | IPC handler registration |
-| `packages/synapse-mcp/` | Standalone stdio CLI binary |
+| `packages/synapse-mcp/` | Standalone stdio CLI + Desktop Extension manifest |
+| `src/commands/tools/` | Extended tool modules (note, edge, graph, entity) |
 
 ---
 
