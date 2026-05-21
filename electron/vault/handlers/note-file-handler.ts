@@ -1,5 +1,5 @@
 import { dirname } from 'path';
-import { existsSync, renameSync, unlinkSync, writeFileSync, mkdirSync, statSync } from 'fs';
+import { existsSync, renameSync, unlinkSync, mkdirSync, statSync } from 'fs';
 import type { VaultContext } from '../vault-context';
 import type { VaultEventBus } from '../event-bus';
 
@@ -38,17 +38,14 @@ export class NoteFileHandler {
 
   private handleNoteCreated(nodeId: string, name: string): void {
     const relativePath = this.deriveNotePath(name);
-    const absolutePath = this.ctx.resolve(relativePath);
 
-    mkdirSync(dirname(absolutePath), { recursive: true });
-    if (!existsSync(absolutePath)) {
-      writeFileSync(absolutePath, '', 'utf-8');
-    }
-
-    const stat = statSync(absolutePath);
+    // Only set vault_path in the DB — do NOT create an empty placeholder file.
+    // The actual file will be created by notes:write with full content.
+    // Creating an empty file here causes a race condition: if notes:write
+    // hasn't run yet, readers see a 0-byte file.
     this.ctx.db.prepare(
-      'UPDATE nodes SET vault_path = ?, file_mtime = ?, file_size = ? WHERE id = ?'
-    ).run(relativePath, Math.floor(stat.mtimeMs), stat.size, nodeId);
+      'UPDATE nodes SET vault_path = ? WHERE id = ?'
+    ).run(relativePath, nodeId);
   }
 
   private handleNoteRenamed(nodeId: string, newName: string): void {
