@@ -1,20 +1,32 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { IToolRegistry, McpServerExposedConfig, ToolFilter } from './types';
 
+export interface McpBridgeOptions {
+  registry: IToolRegistry;
+  config: McpServerExposedConfig;
+  onGraphMutated?: () => void;
+}
+
+const WRITE_TOOL_NAMES = new Set([
+  'create_node', 'update_node', 'create_edge',
+  'delete_node', 'delete_nodes_batch', 'merge_nodes',
+  'create_note', 'update_note',
+  'update_edge', 'delete_edge',
+  'add_alias', 'tag_node',
+]);
+
 export class McpServerBridge {
-  private mcpServer: McpServer;
-  private transport: StreamableHTTPServerTransport | null = null;
   private config: McpServerExposedConfig;
   private registry: IToolRegistry;
+  private onGraphMutated?: () => void;
 
-  constructor(registry: IToolRegistry, config: McpServerExposedConfig) {
-    this.registry = registry;
-    this.config = config;
-    this.mcpServer = new McpServer({ name: 'synapse', version: '1.0.0' });
-    this.registerHandlers();
+  constructor(opts: McpBridgeOptions) {
+    this.registry = opts.registry;
+    this.config = opts.config;
+    this.onGraphMutated = opts.onGraphMutated;
   }
 
   private getFilter(): ToolFilter {
@@ -34,11 +46,13 @@ export class McpServerBridge {
     };
   }
 
-  private registerHandlers(): void {
-    const lowLevel = this.mcpServer.server;
+  private createServer(): Server {
+    const server = new Server(
+      { name: 'synapse', version: '1.0.0' },
+      { capabilities: { tools: {} } },
+    );
 
-    // tools/list — return available tools with JSON Schema input schemas
-    lowLevel.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
       const filter = this.getFilter();
       const tools = this.registry.getAvailableTools(filter);
       return {
@@ -50,8 +64,7 @@ export class McpServerBridge {
       };
     });
 
-    // tools/call — execute a tool and return result
-    lowLevel.setRequestHandler(CallToolRequestSchema, async (request) => {
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
       const filter = this.getFilter();
       const available = this.registry.getAvailableTools(filter);
@@ -66,6 +79,11 @@ export class McpServerBridge {
 
       try {
         const result = await this.registry.executeTool(name, (args ?? {}) as Record<string, unknown>);
+
+        if (!result.isError && WRITE_TOOL_NAMES.has(name)) {
+          this.onGraphMutated?.();
+        }
+
         return {
           content: [{ type: 'text' as const, text: result.result }],
           isError: result.isError ?? false,
@@ -77,18 +95,23 @@ export class McpServerBridge {
         };
       }
     });
+
+    return server;
   }
 
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!this.transport) {
-      this.transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      await this.mcpServer.connect(this.transport);
+    // SDK v1.29+ requires a fresh transport per request in stateless mode
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const server = this.createServer();
+    await server.connect(transport);
+    try {
+      await transport.handleRequest(req, res);
+    } finally {
+      await server.close().catch(() => {});
     }
-    await this.transport.handleRequest(req, res);
   }
 
   async dispose(): Promise<void> {
-    try { await this.mcpServer.close(); } catch {}
-    this.transport = null;
+    // no persistent state to clean up in per-request mode
   }
 }
