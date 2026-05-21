@@ -1,5 +1,4 @@
-import { app } from 'electron';
-import { join, resolve, relative } from 'path';
+import { resolve, relative } from 'path';
 import {
   readFileSync,
   writeFileSync,
@@ -9,14 +8,37 @@ import {
   mkdirSync,
 } from 'fs';
 
-const ROOT = join(app.getPath('documents'), 'KnowledgeGraph');
+let root: string | null = null;
+
+/**
+ * Set the root directory for file operations.
+ * Called when a vault is opened — points to `{vaultPath}/.kg/agent/`.
+ */
+export function setRoot(newRoot: string): void {
+  root = newRoot;
+}
+
+/**
+ * Clear the root (e.g. when vault is closed).
+ */
+export function clearRoot(): void {
+  root = null;
+}
+
+function getRoot(): string {
+  if (!root) {
+    throw new Error('Files backend: no vault is open (root not set)');
+  }
+  return root;
+}
 
 function validatePath(path: string): string {
   if (path.includes('..') || path.startsWith('/')) {
     throw new Error(`Invalid path: ${path}`);
   }
-  const full = resolve(ROOT, path);
-  const rel = relative(ROOT, full);
+  const currentRoot = getRoot();
+  const full = resolve(currentRoot, path);
+  const rel = relative(currentRoot, full);
   if (rel.startsWith('..')) {
     throw new Error(`Path escapes root: ${path}`);
   }
@@ -24,9 +46,17 @@ function validatePath(path: string): string {
 }
 
 export function readFile(path: string): string | null {
-  const full = validatePath(path);
-  if (!existsSync(full)) return null;
-  return readFileSync(full, 'utf-8');
+  try {
+    const full = validatePath(path);
+    if (!existsSync(full)) return null;
+    return readFileSync(full, 'utf-8');
+  } catch (e: any) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') {
+      console.warn(`[files-backend] Cannot read file ${path}: ${e.code}`);
+      return null;
+    }
+    throw e;
+  }
 }
 
 export function writeFile(path: string, content: string): void {
@@ -45,8 +75,17 @@ export function listFiles(prefix: string): string[] {
   const cleanPrefix = prefix.replace(/\/$/, '');
   const full = validatePath(cleanPrefix);
   if (!existsSync(full)) return [];
-  const entries = readdirSync(full);
-  return entries
-    .filter((name) => name.endsWith('.md'))
-    .map((name) => `${cleanPrefix}/${name}`);
+  try {
+    const entries = readdirSync(full);
+    return entries
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => `${cleanPrefix}/${name}`);
+  } catch (e: any) {
+    // Gracefully handle permission errors (EPERM/EACCES) — return empty list
+    if (e.code === 'EPERM' || e.code === 'EACCES') {
+      console.warn(`[files-backend] Cannot read directory ${full}: ${e.code}`);
+      return [];
+    }
+    throw e;
+  }
 }

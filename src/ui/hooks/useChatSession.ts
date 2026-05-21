@@ -166,17 +166,23 @@ export function useChatSession() {
         : null;
 
       const memCtx = createUICommandContext();
-      const allMemories = await loadValidMemories(memCtx);
-
-      const { formatted: memoryContext } = await retrieveMemories(
-        input,
-        allMemories,
-        [createMetadataRetriever()],
-        createRRFFuser(),
-        createAnnotatedFormatter(),
-        { topK: 10, charBudget: 2000 },
-        memCtx,
-      );
+      let allMemories: Awaited<ReturnType<typeof loadValidMemories>> = [];
+      let memoryContext = '';
+      try {
+        allMemories = await loadValidMemories(memCtx);
+        const result = await retrieveMemories(
+          input,
+          allMemories,
+          [createMetadataRetriever()],
+          createRRFFuser(),
+          createAnnotatedFormatter(),
+          { topK: 10, charBudget: 2000 },
+          memCtx,
+        );
+        memoryContext = result.formatted;
+      } catch (e) {
+        console.warn('[useChatSession] Memory loading failed, continuing without memories:', e);
+      }
 
       const episodicMemories = allMemories
         .filter((m) => m.type === 'episodic')

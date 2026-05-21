@@ -349,7 +349,12 @@ app.whenReady().then(() => {
     filesBackend.removeFile(filePath);
   });
   ipcMain.handle('files:list', (_event, prefix: string) => {
-    return filesBackend.listFiles(prefix);
+    try {
+      return filesBackend.listFiles(prefix);
+    } catch (e: any) {
+      console.warn('[files:list] Error listing files:', e.message);
+      return [];
+    }
   });
 
   ipcMain.handle('runtime:sendMessage', async (_event, message) => {
@@ -415,6 +420,9 @@ app.whenReady().then(() => {
     const ctx = vaultManager.getContext();
     if (!ctx) return;
 
+    // Point files backend at the active vault's agent directory
+    filesBackend.setRoot(path.join(ctx.kgPath, 'agent'));
+
     // Run reconciliation to catch offline changes
     reconcileVault(ctx);
 
@@ -475,9 +483,20 @@ app.whenReady().then(() => {
     }
 
     // MCP Server — expose graph tools to external agents
+    // Always enabled when vault is open; config only controls access profiles
     const serverConfig = loadMcpServerConfig(ctx.path);
-    if (serverConfig.enabled && toolRegistry) {
-      mcpServerBridge = new McpServerBridge(toolRegistry, serverConfig);
+    if (toolRegistry) {
+      mcpServerBridge = new McpServerBridge({
+        registry: toolRegistry,
+        config: { ...serverConfig, enabled: true },
+        onGraphMutated: () => {
+          const windows = BrowserWindow.getAllWindows();
+          console.log(`[MCP] Graph mutated, broadcasting reset to ${windows.length} window(s)`);
+          for (const win of windows) {
+            win.webContents.send('db:sync', { type: 'reset' });
+          }
+        },
+      });
       console.log('[MCP] Server bridge started');
     }
   }
@@ -501,6 +520,7 @@ app.whenReady().then(() => {
     toolRegistry = null;
     mcpServerBridge?.dispose();
     mcpServerBridge = null;
+    filesBackend.clearRoot();
   }
 
   ipcMain.handle('vault-workspace:get-status', () => {
