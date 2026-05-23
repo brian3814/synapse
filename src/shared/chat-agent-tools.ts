@@ -2,6 +2,7 @@
 
 import type { ToolDefinition } from './agent-tools';
 import { toAnthropicTools } from './agent-tools';
+import { EXTENDED_TOOL_DEFINITIONS } from '../commands/tools';
 
 export type { ToolDefinition };
 export { toAnthropicTools };
@@ -348,6 +349,11 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
     },
     executionContext: 'ui',
   },
+];
+
+export const ALL_CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
+  ...CHAT_AGENT_TOOLS,
+  ...EXTENDED_TOOL_DEFINITIONS,
 ];
 
 /** Convert chat tool definitions to Anthropic API tool format */
