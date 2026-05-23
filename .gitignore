@@ -33,3 +33,6 @@ dist-companion/
 # Eval results (auto-generated)
 evals/results/
 test-results/
+.agents/
+skills-lock.json
+tests/screenshots/
