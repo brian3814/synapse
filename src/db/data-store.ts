@@ -102,6 +102,9 @@ export interface EdgeRepository {
   getTypes(): Promise<string[]>;
   search(queryText: string, limit?: number): Promise<(DbEdge & { source_name: string; target_name: string })[]>;
   getBetween(nodeIds: string[]): Promise<DbEdge[]>;
+  getOntologyEdgeTypes(): Promise<{ type: string; description: string | null; category: string }[]>;
+  getDistinctEdgeLabels(): Promise<string[]>;
+  createOntologyEdgeType(input: { type: string; description?: string; category?: string }): Promise<void>;
 }
 
 export interface NodeTypeRepository {
@@ -113,6 +116,7 @@ export interface NodeTypeRepository {
     category?: 'structural' | 'entity_label';
   }): Promise<NodeType>;
   delete(type: string): Promise<boolean>;
+  getDistinctEntityLabels(): Promise<string[]>;
 }
 
 export interface SourceContentRepository {

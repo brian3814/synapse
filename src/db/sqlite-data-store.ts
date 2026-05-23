@@ -71,6 +71,9 @@ export function createSqliteDataStore(
       getTypes: () => edgeQueries.getEdgeTypes(),
       search: (q, limit) => edgeQueries.searchEdges(q, limit),
       getBetween: (nodeIds) => edgeQueries.getEdgesBetween(nodeIds),
+      getOntologyEdgeTypes: () => edgeQueries.getAllOntologyEdgeTypes(),
+      getDistinctEdgeLabels: () => edgeQueries.getDistinctEdgeLabels(),
+      createOntologyEdgeType: (input) => edgeQueries.createOntologyEdgeType(input),
     },
 
     // ── Node Type Repository ────────────────────────────────────────
@@ -79,6 +82,7 @@ export function createSqliteDataStore(
       getAll: () => nodeTypeQueries.getAllNodeTypes(),
       create: (input) => nodeTypeQueries.createNodeType(input),
       delete: (type) => nodeTypeQueries.deleteNodeType(type),
+      getDistinctEntityLabels: () => nodeTypeQueries.getDistinctEntityLabels(),
     },
 
     // ── Source Content Repository ───────────────────────────────────

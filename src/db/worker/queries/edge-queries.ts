@@ -162,6 +162,40 @@ export async function searchEdges(
   }));
 }
 
+export interface OntologyEdgeType {
+  type: string;
+  description: string | null;
+  category: string;
+}
+
+export async function getAllOntologyEdgeTypes(): Promise<OntologyEdgeType[]> {
+  const { rows } = await executeQuery<OntologyEdgeType>(
+    'SELECT type, description, category FROM ontology_edge_types ORDER BY type;'
+  );
+  return rows;
+}
+
+export async function getDistinctEdgeLabels(): Promise<string[]> {
+  const { rows } = await executeQuery<{ label: string }>(
+    `SELECT type AS label FROM ontology_edge_types
+     UNION
+     SELECT DISTINCT label FROM edges
+     ORDER BY label;`
+  );
+  return rows.map(r => r.label);
+}
+
+export async function createOntologyEdgeType(input: {
+  type: string;
+  description?: string;
+  category?: string;
+}): Promise<void> {
+  await executeExec(
+    'INSERT OR IGNORE INTO ontology_edge_types (type, description, category) VALUES (?, ?, ?);',
+    [input.type, input.description ?? null, input.category ?? 'semantic']
+  );
+}
+
 export async function getEdgesBetween(nodeIds: string[]): Promise<DbEdge[]> {
   if (nodeIds.length === 0) return [];
   const placeholders = nodeIds.map(() => '?').join(',');

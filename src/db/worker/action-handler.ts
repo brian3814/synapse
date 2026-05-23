@@ -167,6 +167,22 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.edges.search(p.query, p.limit) };
       }
 
+      case 'edges.getOntologyEdgeTypes': {
+        ensureInit();
+        return { result: await dataStore.edges.getOntologyEdgeTypes() };
+      }
+
+      case 'edges.getDistinctEdgeLabels': {
+        ensureInit();
+        return { result: await dataStore.edges.getDistinctEdgeLabels() };
+      }
+
+      case 'edges.createOntologyEdgeType': {
+        ensureInit();
+        await dataStore.edges.createOntologyEdgeType(params as any);
+        return { result: true };
+      }
+
       // Node type operations
       case 'nodeTypes.getAll': {
         ensureInit();
@@ -186,6 +202,11 @@ export function createActionHandler(dataStore: DataStore) {
           result: success,
           syncEvent: success ? { type: 'node_type_deleted', nodeTypeId: params as string } : undefined,
         };
+      }
+
+      case 'nodeTypes.getDistinctEntityLabels': {
+        ensureInit();
+        return { result: await dataStore.nodeTypes.getDistinctEntityLabels() };
       }
 
       // Source content operations
