@@ -77,9 +77,7 @@ jobs:
         run: npm ci
 
       - name: Build & package
-        run: npm run ${{ matrix.dist }}
-        env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+        run: npm run ${{ matrix.dist }} -- --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
