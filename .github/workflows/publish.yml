@@ -1,0 +1,107 @@
+name: Publish & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up public remote
+        run: |
+          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/brian3814/synapse.git
+          git fetch public main --depth=1 2>/dev/null || true
+          git fetch public refs/tags/public/latest:refs/tags/public/latest 2>/dev/null || true
+
+      - name: Publish filtered snapshot
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ./publish.sh "${TAG} release"
+
+      - name: Push publish branch to private repo
+        run: git push origin publish --force
+
+  build:
+    needs: publish
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            dist: dist:mac
+          - os: windows-latest
+            dist: dist:win
+          - os: ubuntu-latest
+            dist: dist:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & package
+        run: npm run ${{ matrix.dist }}
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: find artifacts -type f | head -20
+
+      - name: Create release on public repo
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: brian3814/synapse
+          tag_name: ${{ github.ref_name }}
+          name: Synapse ${{ github.ref_name }}
+          draft: false
+          files: artifacts/*
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          body: |
+            ## Synapse ${{ github.ref_name }}
+
+            ### Downloads
+            - **macOS**: `.dmg` (Intel + Apple Silicon) or `.zip`
+            - **Windows**: `.exe` installer
+            - **Linux**: `.AppImage` or `.deb`
+
+            > ⚠️ Builds are unsigned. macOS: right-click → Open. Windows: click "More info" → "Run anyway".
