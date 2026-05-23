@@ -12,19 +12,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Configure git
+      - name: Configure git and auth
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          gh auth setup-git
 
       - name: Set up public remote
         run: |
-          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_PAT }}@github.com/brian3814/synapse.git
+          git remote add public https://github.com/brian3814/synapse.git
           git fetch public main --depth=1 2>/dev/null || true
           git fetch public refs/tags/public/latest:refs/tags/public/latest 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+
+      - name: Test push to public repo
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+        run: |
+          EMPTY_TREE=$(git mktree < /dev/null)
+          TEST_COMMIT=$(git commit-tree "$EMPTY_TREE" -m "auth test")
+          git push public "$TEST_COMMIT":refs/heads/auth-test --force
+          git push public --delete refs/heads/auth-test
+          echo "Push test passed"
 
       - name: Publish filtered snapshot
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           ./publish.sh "${TAG} release"

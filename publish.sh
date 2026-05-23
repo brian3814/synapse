@@ -47,6 +47,7 @@ fi
 
 git tag -f public/latest "$NEW_COMMIT"
 git branch -f publish "$NEW_COMMIT"
+
 git push public "$NEW_COMMIT":refs/heads/main --force
 echo ""
 echo "Published to public remote:"
