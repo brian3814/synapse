@@ -1,0 +1,268 @@
+# Agentic-First Architecture Design Spec
+
+## Problem
+
+The knowledge graph app has strong **bottom-half** abstractions (DataStore for persistence, PlatformNotes/Storage/LLM/Browser for I/O), but all business logic is trapped in React hooks and Zustand stores. An external agent, MCP client, or plugin cannot operate on the knowledge graph without puppeteering the React UI.
+
+## Goal
+
+Make the app controllable by any AI agent (built-in, Claude Desktop, Cursor, custom) and extensible via plugins (Obsidian-style), by extracting a command layer that any adapter can call.
+
+## Architecture
+
+```
+┌───────────┐  ┌───────────┐  ┌──────────┐  ┌─────────┐
+│  React UI │  │ MCP Server│  │ HTTP API │  │ Plugins │
+│  (hooks)  │  │ (stdio/SSE)│ │ (future) │  │         │
+└─────┬─────┘  └─────┬─────┘  └────┬─────┘  └────┬────┘
+      │              │              │              │
+      ▼              ▼              ▼              ▼
+┌─────────────────────────────────────────────────────┐
+│  Command Layer  +  Tool Registry  +  Event Bus      │
+│  src/commands/     src/tools/        src/events/     │
+└──────────────┬──────────────────────────────────────┘
+               │
+     ┌─────────┼──────────┐
+     ▼         ▼          ▼
+ DataStore  PlatformNotes  PlatformLLM  ...
+```
+
+## Phases
+
+| Phase | Scope | Depends On |
+|-------|-------|-----------|
+| 1. Command Layer | Extract orchestration from hooks/stores into `src/commands/` | Nothing |
+| 2. Tool Registry | Replace hardcoded tool arrays with dynamic registry in `src/tools/` | Phase 1 |
+| 3. Event Bus | Formalize BroadcastChannel sync into typed pub/sub in `src/events/` | Phase 1 |
+| 4. MCP Server | Expose commands to external agents via MCP in `src/mcp/` | Phases 1 + 3 |
+
+---
+
+## Phase 1: Command Layer
+
+### What's Missing (the "top half")
+
+Business logic is trapped in React hooks and Zustand stores:
+
+| Current Location | Logic |
+|---|---|
+| `useLLMExtraction.ts` (~1044 lines) | Entity extraction, diff building, review, 3-phase merge |
+| `chat-agent-loop.ts` (~443 lines) | Chat tool dispatch (10-tool switch), agent loop, subgraph tracking |
+| `graph-store.ts` (~426 lines) | Node/edge CRUD with DB calls, provenance, cascade cleanup |
+| `rag-pipeline.ts` (~257 lines) | RAG retrieval, subgraph expansion, source excerpts |
+| `wikilink-parser.ts` (~141 lines) | Wikilink resolution + edge creation (uses useGraphStore) |
+| `useChatSession.ts` (~218 lines) | Session lifecycle, message persistence |
+| `useNLQuery.ts` (~63 lines) | NL → GraphQL pipeline |
+
+### Design
+
+Commands are pure async functions that take a `CommandContext` (dependency bag) and return `CommandResult<T>` (data + events). React hooks become thin wrappers.
+
+```typescript
+import type { DataStore } from '../db/data-store';
+
+interface CommandContext {
+  db: DataStore;            // the existing 16-repository interface (src/db/data-store.ts)
+  storage: PlatformStorage;
+  notes: PlatformNotes;
+  files: PlatformFiles;     // path-safe file I/O (memory/, etc.) — added by file-based memory design
+  llm: PlatformLLM;
+  browser: PlatformBrowser;
+  getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
+}
+
+interface CommandResult<T> {
+  data: T;
+  events: CommandEvent[];   // node_created, edge_deleted, reset, etc.
+}
+```
+
+**Critical design rule:** `CommandContext.db` is `DataStore` — the existing 16-repository interface at `src/db/data-store.ts`. Commands call `ctx.db.nodes.create()`, `ctx.db.entityResolution.findMatches()`, etc. Commands NEVER import from `src/db/client/db-client.ts` (that's a renderer-specific transport wrapper).
+
+For UI context, `createUICommandContext()` builds a `DataStore`-shaped adapter that delegates to `db-client.ts` namespaces (since db-client already has the right methods, just with renderer transport). For MCP/server context, it uses `SqliteDataStore` directly. `getGraphSnapshot()` is async (`Promise<...>`) — UI wraps Zustand state with `Promise.resolve()`; server queries the DB.
+
+### Command Modules
+
+| Module | Extracts From | Operations |
+|---|---|---|
+| `graph-commands.ts` | `graph-store.ts` | createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, clearAll |
+| `extraction-commands.ts` | `useLLMExtraction.ts` | normalizeExtractedNode, ensureResourceNode, buildDiffItems, applyDiff, buildReviewData, applyReview |
+| `note-commands.ts` | `NoteEditor.tsx` + `wikilink-parser.ts` | saveNote, createWikilinkEdgesForNote |
+| `rag-commands.ts` | `rag-pipeline.ts` | retrieveRAGContext, formatRAGPrompt |
+| `chat-tool-executor.ts` | `chat-agent-loop.ts` | executeTool (all 10 chat tools) |
+| `chat-commands.ts` | `useChatSession.ts` | ensureSession, sendChatMessage |
+| `nl-query-commands.ts` | `useNLQuery.ts` | executeNLQuery |
+
+### Migration Pattern
+
+```typescript
+// Before: hook does everything
+const startExtraction = useCallback(async (text, sourceUrl) => {
+  // 70 lines of orchestration with direct store/DB/platform calls
+}, [...]);
+
+// After: hook is thin wrapper
+const startExtraction = useCallback(async (text, sourceUrl) => {
+  const ctx = createUICommandContext();
+  const result = await extractionCommands.startExtraction(ctx, text, sourceUrl, callbacks);
+  llmStore.getState().setDiff(result.data.diff);
+}, [...]);
+```
+
+### Risk: useGraphStore.getState() in extraction
+
+`applyReview` (290-line merge) reads Zustand state mid-execution. After extraction to commands, it uses `ctx.getGraphSnapshot()` for the baseline, but newly-created nodes are tracked in a local map (`tempIdToRealId`) — the same pattern the original code uses. No behavior change needed.
+
+---
+
+## Phase 2: Tool Registry
+
+**Absorbs** all existing chat tools when it lands — including any added by the harness (e.g., `index_notes_folder`). If harness ships first using old arrays, Phase 2 dynamically iterates `CHAT_AGENT_TOOLS` at registration time and wraps each tool. No standalone `chat-tool-registry.ts` should be built by either plan.
+
+### Current State
+
+- `src/shared/agent-tools.ts` — 9 extraction tools in static `AGENT_TOOLS` array
+- `src/shared/chat-agent-tools.ts` — 10 chat tools in static `CHAT_AGENT_TOOLS` array
+- Tool dispatch via switch statements in 4 locations
+- System prompts hardcode tool descriptions
+
+### Design
+
+```typescript
+interface UnifiedToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;  // JSON Schema
+  category: 'extraction' | 'chat' | 'graph' | 'custom';
+  execute?: (input: Record<string, unknown>, ctx: CommandContext) => Promise<string>;
+}
+```
+
+Tools with `execute` run anywhere. Content-script tools (DOM access) leave `execute` undefined — dispatched via `browser.executeTool()`.
+
+### Components
+
+| Component | Purpose |
+|---|---|
+| `ToolRegistry` class | `register()`, `unregister()`, `get()`, `list()`, `toAnthropicTools()` |
+| `ToolDispatcher` class | Implements `ToolExecutor` interface, uses registry + ctx + content-script fallback |
+| Built-in tools | extraction-tools (9), chat-tools (10), graph-tools (new: kg_create_node, etc.) |
+| Prompt builder | Auto-generates system prompts from registered tools |
+
+### Agent Loop Migration
+
+`src/core/agent-loop.ts` accepts tools + system prompt as parameters instead of importing hardcoded arrays. Callers pass a `ToolDispatcher`.
+
+---
+
+## Phase 3: Event Bus
+
+### Current State
+
+- `src/shared/sync-events.ts` — 10 `SyncEvent` types over `BroadcastChannel`
+- 5 separate `BroadcastChannel` instances across files for the same channel
+- No lifecycle events (extraction_started, etc.)
+- No subscription API for external consumers
+
+### Design
+
+```typescript
+type KGEvent = SyncEvent | LifecycleEvent;
+
+type LifecycleEvent =
+  | { type: 'extraction_started'; mode: 'simple' | 'agent' }
+  | { type: 'extraction_complete'; nodesAdded: number; edgesAdded: number }
+  | { type: 'extraction_error'; error: string }
+  | { type: 'chat_message'; sessionId: string; role: string }
+  | { type: 'tool_registered'; toolName: string }
+  | { type: 'tool_unregistered'; toolName: string };
+```
+
+`EventBus` class: `on(type, handler)`, `onAny(handler)`, `emit(event)`, `emitAll(events)`, `enableBroadcast()`, `disableBroadcast()`.
+
+### Key Invariants
+
+1. The DB layer (`db-shared-worker.ts`) continues posting to `BroadcastChannel` directly. The eventBus **receives** from it, not replaces it. Stores subscribe via `eventBus.on(...)` instead of opening their own channels.
+
+2. **React StrictMode safety:** The EventBus singleton must NOT have a permanent `disposed` flag. App cleanup calls `disableBroadcast()` (closes the BroadcastChannel) instead of `dispose()`. `enableBroadcast()` is idempotent and can be called again after disable. This prevents dev double-mount from permanently killing the singleton.
+
+3. **Electron main-process bridge (deferred):** The renderer EventBus only covers the renderer process. MCP (Phase 4) runs in Electron's main process and broadcasts command events to renderer windows via an injected `EventBroadcaster` callback. Forwarding events to MCP clients as notifications is deferred until the EventBus (Phase 3) provides a `MainProcessEventBridge` with proper subscription infrastructure. Phase 4 v1 does NOT deliver MCP client notifications — it only syncs the renderer UI.
+
+---
+
+## Phase 4: MCP Server
+
+### Design
+
+MCP server runs in Electron main process. Two transports:
+- **stdio** — for Claude Desktop / Cursor integration
+- **HTTP-SSE** — extends companion server on port 19876
+
+**Event delivery (v1):** Phase 4 v1 syncs renderer windows only — mutating MCP tools call commands, then broadcast `CommandResult.events` to all `BrowserWindow`s via `webContents.send('db:sync', ...)`. MCP client push notifications (forwarding graph events to connected MCP clients via SSE or notification messages) are a **follow-up** after Phase 3's `EventBus` provides the main-process subscription infrastructure.
+
+### MCP Tools (from commands)
+
+| MCP Tool | Source |
+|---|---|
+| `kg_create_node`, `kg_update_node`, `kg_delete_node` | `graphCommands.*` |
+| `kg_create_edge`, `kg_search_nodes`, `kg_get_node` | `graphCommands.*` + `ctx.db.*` |
+| `kg_get_neighbors`, `kg_search_sources`, `kg_get_source_content` | `ctx.db.*` |
+| `kg_extract_text` (conditional — requires LLM) | `ctx.llm.streamExtraction()` |
+| `kg_save_note`, `kg_read_note`, `kg_search_notes` | `noteCommands.*` + `ctx.db.*` |
+| `kg_query` | `ctx.db.graphQuery()` |
+
+### MCP Resources
+
+| URI Pattern | Data |
+|---|---|
+| `kg://graph/stats` | Node/edge counts, type distribution |
+| `kg://nodes/{id}` | Full node with properties |
+| `kg://notes/{nodeId}` | Note markdown content |
+| `kg://sources/{nodeId}` | Stored page content |
+
+### Server CommandContext
+
+`createServerCommandContext()` builds a `CommandContext` without Zustand — uses `DataStore` directly for `getGraphSnapshot()`.
+
+### Chrome Extension
+
+Chrome extensions cannot run MCP servers. MCP is Electron-only. Chrome access requires the Electron app running as a bridge.
+
+---
+
+## Verification
+
+| Phase | Verification |
+|-------|-------------|
+| 1 | `npm run build` + `npm run build:electron` clean. All extraction, review, chat, note, create panel workflows work on both platforms. |
+| 2 | Register a test tool at runtime → appears in system prompt. All extraction + chat flows work. |
+| 3 | Cross-tab sync works. Subscribe to events via console → events fire. |
+| 4 | Claude Desktop sees KG tools. Create node via Claude → appears in Electron app. |
+
+## Risk Matrix
+
+| Risk | Phase | Mitigation |
+|------|-------|-----------|
+| `applyReview` regression (290 lines) | 1 | Track created nodes in local map, snapshot only needs pre-command state |
+| System prompt quality regression | 2 | Diff auto-generated vs handcrafted prompts before switching |
+| Cross-tab sync break | 3 | Keep BroadcastChannel as eventBus internal transport |
+| EventBus killed by React StrictMode | 3 | `disableBroadcast()` not `dispose()` for cleanup; `enableBroadcast()` idempotent |
+| MCP can't receive events from renderer | 4 | MainProcessEventBridge in Electron main, separate from renderer eventBus |
+| MCP adds dependency with no Chrome benefit | 4 | Electron-only scope |
+| RAG subgraph tracking is global state | 1 | Return subgraph IDs per tool invocation, not module-level globals |
+
+## Relationship to Agent Harness
+
+The agent harness spec (`docs/superpowers/specs/2026-05-03-agent-harness-design.md`) adds custom prompts, memory, and new tools. It was designed before this agentic-first architecture.
+
+**Rollout order constraint:**
+
+- **File-based memory must land before Phase 2 (tool registry).** The file-based memory implementation removes `search_memories` from `CHAT_AGENT_TOOLS` and adds `manage_memory`. Phase 2's dynamic absorption then picks up the correct tool set. If Phase 2 runs first, it would register the deprecated `search_memories` tool.
+- **Phase 1 (commands) is independent** — can land before or after file-based memory.
+- **Harness Phase 1 (prompts/presets)** ships using existing `CHAT_AGENT_TOOLS` array. Agentic-first Phase 2 later migrates all tools — including harness additions (`index_notes_folder`, `manage_memory`).
+
+**Invariants regardless of order:**
+- Harness custom prompts are orthogonal to both — prompt assembly works with or without the command layer
+- Episodic memory (session summaries) remains in `DataStore` via `MemoryRepository` (episodic methods only). Semantic memory is file-backed via `memoryCommands.*` using `ctx.files` — see `2026-05-03-file-based-memory-and-folder-index-design.md`
+- Harness preset `allowedTools`/`model` enforcement requires the unified registry's `ToolDispatcher` allowlist — defer those preset fields until Phase 2 lands
+- No standalone `chat-tool-registry.ts` — either use old arrays (pre-Phase 2) or the unified registry (post-Phase 2)

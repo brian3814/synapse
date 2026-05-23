@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "synapse": {
+      "command": "node",
+      "args": [
+        "packages/synapse-mcp/dist/index.js",
+        "--allow-write"
+      ]
+    }
+  }
+}
