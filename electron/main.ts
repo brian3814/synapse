@@ -405,12 +405,11 @@ app.whenReady().then(() => {
 
   // Auto-open vault from --vault CLI arg (used by relaunch for multi-vault)
   const vaultArgIdx = process.argv.indexOf('--vault');
-  if (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1]) {
-    const vaultPath = process.argv[vaultArgIdx + 1];
-    vaultManager.open(vaultPath)
-      .then(() => registerVaultHandlers())
-      .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e));
-  }
+  const vaultReadyPromise = (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1])
+    ? vaultManager.open(process.argv[vaultArgIdx + 1])
+        .then(() => registerVaultHandlers())
+        .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e))
+    : Promise.resolve();
   let noteFileHandler: NoteFileHandler | null = null;
   let syncBroadcastHandler: SyncBroadcastHandler | null = null;
   let resourceDetectionHandler: ResourceDetectionHandler | null = null;
@@ -617,7 +616,7 @@ app.whenReady().then(() => {
     spawnVaultProcess(result.filePaths[0]);
   });
 
-  createWindow();
+  vaultReadyPromise.then(() => createWindow());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
