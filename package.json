@@ -13,6 +13,7 @@
     "build:electron-renderer": "vite build --config vite.config.electron.ts",
     "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
     "dev:electron": "npm run build:electron && electron .",
+    "dev:electron:test": "npm run build:electron && electron . --remote-debugging-port=9222",
     "build:companion": "vite build --config packages/companion/vite.config.ts",
     "build:mcp": "cd packages/synapse-mcp && npm run build",
     "dist:mac": "npm run build:electron && electron-builder --mac",
@@ -20,8 +21,8 @@
     "dist:linux": "npm run build:electron && electron-builder --linux"
   },
   "build": {
-    "appId": "com.kg-desktop.app",
-    "productName": "KG Desktop",
+    "appId": "com.synapse.app",
+    "productName": "Synapse",
     "directories": {
       "output": "release",
       "buildResources": "build-resources"
@@ -70,6 +71,8 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.75",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.2.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/chrome": "^0.1.37",

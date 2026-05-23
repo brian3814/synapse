@@ -6,6 +6,13 @@
         "packages/synapse-mcp/dist/index.js",
         "--allow-write"
       ]
+    },
+    "playwright": {
+      "command": "node_modules/.bin/playwright-mcp",
+      "args": [
+        "--cdp-endpoint", "ws://127.0.0.1:9222/devtools/browser/a18c466f-ecc4-4ae8-a9aa-8c62dc03e458",
+        "--caps", "vision"
+      ]
     }
   }
 }
