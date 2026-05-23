@@ -1,9 +1,39 @@
+export interface ExtractionGraphContext {
+  entityLabels: string[];
+  edgeLabels: string[];
+}
+
+function buildEntityLabelBlock(ctx?: ExtractionGraphContext): string {
+  if (ctx && ctx.entityLabels.length > 0) {
+    const list = ctx.entityLabels.join(', ');
+    return `- Every node is an entity. Use the "label" field to categorize it semantically.
+- STRONGLY PREFER reusing an existing label. Only create a new label if none of the existing ones adequately describe the entity.
+- Existing entity labels in this graph: ${list}
+- If you must create a new label, use a short lowercase snake_case term.`;
+  }
+  return `- Every node is an entity. Use the "label" field to categorize it semantically (e.g. concept, person, organization, technology).
+- Use short lowercase snake_case labels.`;
+}
+
+function buildEdgeLabelBlock(ctx?: ExtractionGraphContext): string {
+  if (ctx && ctx.edgeLabels.length > 0) {
+    const list = ctx.edgeLabels.join(', ');
+    return `- STRONGLY PREFER reusing an existing relationship label. Only create a new label if none of the existing ones adequately describe the relationship.
+- Existing relationship labels in this graph: ${list}
+- If you must create a new label, use consistent lowercase snake_case (e.g. "works_at", "located_in").`;
+  }
+  return `- Use consistent, lowercase snake_case relationship labels (e.g. "created_by", "part_of", "used_in", "works_at").`;
+}
+
 /**
- * System prompt for the Quick-extract LLM pass. The notes toggle is the
- * cross-cutting Phase 4 feature — when enabled, we add a `notes[]` array
- * alongside nodes/edges and instruct the LLM to produce focused prose units.
+ * System prompt for the Quick-extract LLM pass. Accepts optional graph context
+ * to inject existing entity labels and edge labels dynamically.
  */
-export function getQuickExtractSystemPrompt(notesEnabled: boolean, customInstructions?: string): string {
+export function getQuickExtractSystemPrompt(
+  notesEnabled: boolean,
+  customInstructions?: string,
+  graphContext?: ExtractionGraphContext,
+): string {
   const notesBlock = notesEnabled
     ? `
   "notes": [
@@ -46,29 +76,17 @@ Output format:
 
 Rules for NODES:
 - Do NOT output resource nodes — the system automatically creates a resource node for the source URL. Only output entities.
-- Every node is an entity. Use the "label" field to categorize it semantically. Allowed labels:
-    - concept       (abstract idea, topic, field, theory)
-    - person        (named individual)
-    - organization  (company, institution, research group)
-    - technology    (tool, framework, language, protocol)
-    - event         (dated occurrence, release, discovery)
-    - place         (geographic location)
-    - methodology   (process, workflow, design pattern)
-- If no label fits, default to "concept".
+${buildEntityLabelBlock(graphContext)}
 - Focus on the 5-15 most important entities.
 - Include relevant properties as key-value pairs on nodes.
 - Include a "tags" array for free-form domain annotations (e.g. ["ai", "research"]).
 
 Rules for EDGES:
-- Use consistent, lowercase relationship labels. Prefer this seed vocabulary when applicable:
-    - subfield_of, part_of, instance_of, created_by, affiliated_with,
-      used_in, builds_on, enables, contradicts, alternative_to,
-      preceded_by
-- Ensure all edges reference entities that exist in the nodes array by their exact name.
-- If none of the seed labels fit, use a short snake_case label describing the relationship.${notesRules}
+${buildEdgeLabelBlock(graphContext)}
+- Ensure all edges reference entities that exist in the nodes array by their exact name.${notesRules}
 
 Return ONLY valid JSON, no other text.${customInstructions ? `\n\n## Custom Instructions\n${customInstructions}` : ''}`;
 }
 
-/** Backwards-compatible default export (notes off). */
+/** Backwards-compatible default export (notes off, no graph context). */
 export const QUICK_EXTRACT_SYSTEM_PROMPT = getQuickExtractSystemPrompt(false);

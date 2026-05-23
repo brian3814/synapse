@@ -7,6 +7,8 @@ import { graphDataToRender } from '../../graph/transforms/db-to-render';
 import { reviewNodesToOverlayRender, reviewEdgesToOverlayRender } from '../../graph/transforms/review-to-render';
 
 const GREYED_OUT_COLOR = '#3f3f46'; // zinc-700
+const MERGE_TARGET_COLOR = '#71717a'; // zinc-500 — merge target stands out
+const MERGE_NEIGHBOR_COLOR = '#52525b'; // zinc-600 — 1-hop context, slightly brighter than dimmed
 
 export function useGraphData() {
   const nodes = useGraphStore((s) => s.nodes);
@@ -54,11 +56,29 @@ export function useGraphData() {
       return base;
     }
 
-    // Grey out existing nodes
+    // Build merge context: targets + their 1-hop neighbors get brighter colors
+    const mergeTargetIds = new Set<string>();
+    for (const rn of reviewNodes) {
+      if (!rn.removed && rn.mergeRecommendation?.status === 'accepted') {
+        mergeTargetIds.add(rn.mergeRecommendation.existingNodeId);
+      }
+    }
+    const mergeNeighborIds = new Set<string>(mergeTargetIds);
+    if (mergeTargetIds.size > 0) {
+      for (const e of filtered.edges) {
+        if (mergeTargetIds.has(e.sourceId)) mergeNeighborIds.add(e.targetId);
+        if (mergeTargetIds.has(e.targetId)) mergeNeighborIds.add(e.sourceId);
+      }
+    }
+
     const greyedNodes = base.nodes.map((n) => ({
       ...n,
-      color: GREYED_OUT_COLOR,
-      data: { ...n.data, cluster: 'existing' },
+      color: mergeTargetIds.has(n.id)
+        ? MERGE_TARGET_COLOR
+        : mergeNeighborIds.has(n.id)
+          ? MERGE_NEIGHBOR_COLOR
+          : GREYED_OUT_COLOR,
+      data: { ...n.data, cluster: mergeTargetIds.has(n.id) ? 'merge-target' : mergeNeighborIds.has(n.id) ? 'merge-context' : 'existing' },
     }));
 
     const overlayNodes = reviewNodesToOverlayRender(reviewNodes, typeColorMap);

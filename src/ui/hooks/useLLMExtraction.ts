@@ -3,10 +3,11 @@ import { storage, notes, llm, browser } from '@platform';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { useExtractionReviewStore, type ReviewNode, type ReviewEdge, type ReviewNote } from '../../graph/store/extraction-review-store';
+import { useNodeTypeStore } from '../../graph/store/node-type-store';
 import { createUICommandContext } from '../../commands/create-context';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
-import { getQuickExtractSystemPrompt } from '../../shared/quick-extract-prompt';
+import { getQuickExtractSystemPrompt, type ExtractionGraphContext } from '../../shared/quick-extract-prompt';
 import { AGENT_PROMPT_CONFIG_KEY, AGENT_TOOL_CONFIG_KEY } from '../../shared/agent-settings-types';
 import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
 
@@ -21,7 +22,16 @@ async function isNotesEnabled(): Promise<boolean> {
     return false;
   }
 }
-import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch } from '../../db/client/db-client';
+import { entityResolution, sourceContent, entitySources, edgeSources, noteSearch, nodeTypes as dbNodeTypes, edges as dbEdges } from '../../db/client/db-client';
+
+async function fetchGraphContext(): Promise<ExtractionGraphContext> {
+  const [entityLabels, edgeLabels] = await Promise.all([
+    dbNodeTypes.getDistinctEntityLabels(),
+    dbEdges.getDistinctEdgeLabels(),
+  ]);
+  return { entityLabels, edgeLabels };
+}
+
 import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';
@@ -223,12 +233,13 @@ export function useLLMExtraction() {
 
       const notesOn = await isNotesEnabled();
       const { promptConfig } = await getAgentConfig();
+      const graphContext = await fetchGraphContext();
 
       const streamResult = await llm.streamExtraction(
         {
           prompt: text,
           model: config.model,
-          systemPrompt: getQuickExtractSystemPrompt(notesOn, promptConfig?.extractionInstructions),
+          systemPrompt: getQuickExtractSystemPrompt(notesOn, promptConfig?.extractionInstructions, graphContext),
         },
         (chunk) => {
           useLLMStore.getState().appendToCurrentStep(chunk);
@@ -338,6 +349,7 @@ export function useLLMExtraction() {
     llmStore.setStatus('extracting');
 
     const notesOn = await isNotesEnabled();
+    const graphContext = await fetchGraphContext();
 
     try {
       const userContent = prompt
@@ -348,7 +360,7 @@ export function useLLMExtraction() {
         {
           prompt: userContent,
           model: config.model,
-          systemPrompt: getQuickExtractSystemPrompt(notesOn),
+          systemPrompt: getQuickExtractSystemPrompt(notesOn, undefined, graphContext),
         },
         (chunk) => {
           useLLMStore.getState().appendToCurrentStep(chunk);
@@ -550,6 +562,7 @@ export function useLLMExtraction() {
 
     const notesOn = await isNotesEnabled();
     const { promptConfig, toolConfig } = await getAgentConfig();
+    const graphContext = await fetchGraphContext();
 
     // Build agent prompt: include custom URL if provided, so the agent
     // uses fetch_url to retrieve it instead of reading the active tab.
@@ -568,6 +581,7 @@ export function useLLMExtraction() {
           notesEnabled: notesOn,
           customInstructions: promptConfig?.extractionInstructions,
           disabledTools: toolConfig?.disabledExtractionTools,
+          graphContext,
         },
         async (event) => {
           const store = useLLMStore.getState();
@@ -770,6 +784,7 @@ export function useLLMExtraction() {
       return;
     }
 
+    reviewStore.setViewMode('extracted');
     llmStore.setStatus('merging');
 
     try {
@@ -824,6 +839,16 @@ export function useLLMExtraction() {
           if (created) {
             tempIdToRealId.set(node.tempId, created.id);
           }
+        }
+      }
+
+      // Auto-register new entity labels in the ontology
+      const nodeTypeStore = useNodeTypeStore.getState();
+      const existingLabels = new Set(nodeTypeStore.getEntityLabels().map(t => t.type));
+      for (const node of activeNodes) {
+        if (node.type === 'entity' && node.label && !existingLabels.has(node.label)) {
+          await nodeTypeStore.createType({ type: node.label, category: 'entity_label' });
+          existingLabels.add(node.label);
         }
       }
 
@@ -889,6 +914,16 @@ export function useLLMExtraction() {
             })
           )
         );
+      }
+
+      // Auto-register new edge labels in the ontology
+      const existingEdgeTypes = await dbEdges.getOntologyEdgeTypes();
+      const existingEdgeSet = new Set(existingEdgeTypes.map(t => t.type));
+      for (const edge of activeEdges) {
+        if (edge.label && !existingEdgeSet.has(edge.label)) {
+          await dbEdges.createOntologyEdgeType({ type: edge.label });
+          existingEdgeSet.add(edge.label);
+        }
       }
 
       // Third pass: create note nodes and their about/mention/extracted_from edges.
@@ -1058,6 +1093,7 @@ export function useLLMExtraction() {
         }
       }
 
+      await useGraphStore.getState().loadAll();
       useExtractionReviewStore.getState().reset();
       useLLMStore.getState().reset();
     } catch (e: any) {
@@ -1099,6 +1135,7 @@ export function useLLMExtraction() {
 
     const notesOn = await isNotesEnabled();
     const { promptConfig } = await getAgentConfig();
+    const graphContext = await fetchGraphContext();
 
     try {
       const { result: extractionResult } = await runIngestionPipeline(
@@ -1122,7 +1159,7 @@ export function useLLMExtraction() {
             llm.streamExtraction(request, onChunk, (info) => {
               useLLMStore.getState().setRateLimitWait({ ...info, startedAt: Date.now() });
             }),
-          getSystemPrompt: (notesEnabled: boolean) => getQuickExtractSystemPrompt(notesEnabled, promptConfig?.extractionInstructions),
+          getSystemPrompt: (notesEnabled: boolean) => getQuickExtractSystemPrompt(notesEnabled, promptConfig?.extractionInstructions, graphContext),
           notesEnabled: notesOn,
           model: config.model,
         },
