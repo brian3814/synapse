@@ -29,7 +29,6 @@ release/
 
 # Companion extension build output
 dist-companion/
-publish.sh
 
 # Eval results (auto-generated)
 evals/results/
