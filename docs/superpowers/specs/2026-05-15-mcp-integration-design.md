@@ -22,17 +22,20 @@ Synapse as both an MCP client (consuming external MCP servers) and MCP server (e
 
 Patterns observed across the ecosystem:
 
-| Product | Tool Routing | Config Format | Transport |
-|---|---|---|---|
-| Claude Desktop | Flat merge (no namespace) | `mcpServers` JSON | stdio |
-| VS Code Copilot | Flat merge | `mcpServers` in settings/`.vscode/mcp.json` | stdio + HTTP |
-| Cursor | Flat merge | `mcpServers` JSON | stdio |
-| FastMCP | Namespaced flat merge via `mount()` | Python API / `mcpServers` JSON via `create_proxy()` | stdio + HTTP + in-memory |
-| LiteLLM | Namespaced flat merge (`server-tool`) | YAML config | stdio + HTTP + SSE |
-| Obsidian (community) | N/A (server only) | Claude Desktop config | stdio + HTTP |
-| Heptabase (official) | N/A (server only) | OAuth remote MCP | HTTP |
+
+| Product              | Tool Routing                          | Config Format                                       | Transport                |
+| -------------------- | ------------------------------------- | --------------------------------------------------- | ------------------------ |
+| Claude Desktop       | Flat merge (no namespace)             | `mcpServers` JSON                                   | stdio                    |
+| VS Code Copilot      | Flat merge                            | `mcpServers` in settings/`.vscode/mcp.json`         | stdio + HTTP             |
+| Cursor               | Flat merge                            | `mcpServers` JSON                                   | stdio                    |
+| FastMCP              | Namespaced flat merge via `mount()`   | Python API / `mcpServers` JSON via `create_proxy()` | stdio + HTTP + in-memory |
+| LiteLLM              | Namespaced flat merge (`server-tool`) | YAML config                                         | stdio + HTTP + SSE       |
+| Obsidian (community) | N/A (server only)                     | Claude Desktop config                               | stdio + HTTP             |
+| Heptabase (official) | N/A (server only)                     | OAuth remote MCP                                    | HTTP                     |
+
 
 Key findings:
+
 - Every product uses flat merge for tool routing; FastMCP and LiteLLM add namespace prefixes
 - All converge on the same `mcpServers` JSON config schema
 - Tools-only is the universal starting point (no product launches with resources/prompts)
@@ -109,6 +112,7 @@ interface ToolFilter {
 Manages all outbound MCP connections. Singleton in main process.
 
 **Responsibilities:**
+
 - Read merged config (global + vault) on vault open
 - For each enabled server: spawn transport, run MCP `initialize` handshake, discover tools via `client.listTools()`
 - Create `McpToolProvider` per server, register with `ToolRegistry`
@@ -121,6 +125,7 @@ Manages all outbound MCP connections. Singleton in main process.
 **Connection states**: `connecting → connected → disconnected | error`. Error state triggers reconnect with exponential backoff. UI is notified via `mcp:server-status-changed` broadcast.
 
 **Error handling:**
+
 - Subprocess crash → mark `error`, emit status event, attempt reconnect
 - Tool call timeout → return error `ToolResult` to agent (does not crash the loop)
 - Server unreachable at startup → skip provider registration, tools from that server absent
@@ -130,6 +135,7 @@ Manages all outbound MCP connections. Singleton in main process.
 Exposes Synapse's built-in tools as an MCP server for external agents.
 
 **Two transports:**
+
 - **Streamable HTTP**: Added to existing companion HTTP server at `127.0.0.1:19876/mcp`. Available when the desktop app is running.
 - **stdio CLI**: Separate `synapse-mcp` binary. Opens vault DB directly via better-sqlite3. Does not require the Electron app.
 
@@ -137,11 +143,13 @@ Exposes Synapse's built-in tools as an MCP server for external agents.
 
 **Exposed tools (12 of 14 built-in):**
 
-| Category | Tools |
-|---|---|
+
+| Category      | Tools                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Read (always) | `search_knowledge`, `search_nodes`, `get_node_details`, `get_neighbors`, `get_edges_for_node`, `search_sources`, `get_source_content` |
-| Write (gated) | `create_node`, `update_node`, `create_edge`, `delete_node`, `merge_nodes` |
-| Excluded | `manage_memory` (internal agent memory), `index_notes_folder` (admin operation) |
+| Write (gated) | `create_node`, `update_node`, `create_edge`, `delete_node`, `merge_nodes`                                                             |
+| Excluded      | `manage_memory` (internal agent memory), `index_notes_folder` (admin operation)                                                       |
+
 
 **No MCP-from-MCP forwarding**: The server only exposes built-in tools (`providerIds: ['builtin']`). Tools from external MCP servers that Synapse is connected to as a client are not re-exposed.
 
@@ -239,6 +247,7 @@ Two-layer merge: global app settings + per-vault `.kg/mcp.json`.
 ```
 
 **Merge rules:**
+
 1. Start with global `mcpServers`
 2. Vault entries with same key override global (deep merge per-server)
 3. Vault can add new servers not in global
@@ -277,59 +286,70 @@ The server name (object key) becomes the namespace prefix: `"github"` → tools 
 ### 5. Security
 
 **Secrets management:**
+
 - API keys and tokens use `${secret:name}` references, never plain text in config
 - Global secrets in app settings (same location as Anthropic API key)
 - Vault secrets in `.kg/secrets.json` — auto-added to `.gitignore`
 - Secrets resolved in-memory at spawn time, never logged
 
 **MCP client sandboxing:**
+
 - External MCP servers run as child processes. Synapse does not sandbox them (matches Claude Desktop, VS Code, Cursor). Trust is implicit — user explicitly adds servers.
 - Tool results flowing into LLM context are a prompt injection surface. Mitigated by: `tool_result` role separation in Anthropic API, max iteration limits on agent loop, no automatic code execution from results.
 
 **MCP server security:**
 
-| Concern | Mitigation |
-|---|---|
-| Unauthorized access | HTTP: configurable auth (none for local, bearer token, API key). Stdio: inherently local. |
-| Write operations | Access profiles gate read vs write. Default profile is read-only. |
-| Destructive tools | `delete_node` and `merge_nodes` individually blockable even in write profiles. |
-| Network exposure | HTTP binds `127.0.0.1` only. Not network-exposed. Remote access requires user-configured reverse proxy. |
+
+| Concern              | Mitigation                                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Unauthorized access  | HTTP: configurable auth (none for local, bearer token, API key). Stdio: inherently local.                                    |
+| Write operations     | Access profiles gate read vs write. Default profile is read-only.                                                            |
+| Destructive tools    | `delete_node` and `merge_nodes` individually blockable even in write profiles.                                               |
+| Network exposure     | HTTP binds `127.0.0.1` only. Not network-exposed. Remote access requires user-configured reverse proxy.                      |
 | Vault path traversal | Existing vault sandbox config (`allowedDirs`, `blockedExtensions`) applies — MCP tools go through same `executeTool()` path. |
 
+
 **Stdio CLI security:**
+
 - Read-only DB by default (`better-sqlite3` `readonly: true`)
 - Write requires explicit `--allow-write` flag
 - No access to app settings (API keys, global config)
 
 ### 6. IPC Channels
 
-New channels following existing patterns (`llm:*`, `embedding:*`, `vault-workspace:*`).
+New channels following existing patterns (`llm:`*, `embedding:*`, `vault-workspace:*`).
 
 **Tool Registry:**
 
-| Channel | Direction | Purpose |
-|---|---|---|
-| `tools:list` | invoke | Get available tools (merged, namespaced, filtered by `ToolFilter`) |
-| `tools:execute` | invoke | Execute tool by namespaced name, returns `ToolResult` |
-| `tools:on-changed` | broadcast | Tool list changed (MCP connect/disconnect, enable/disable) |
+
+| Channel            | Direction | Purpose                                                            |
+| ------------------ | --------- | ------------------------------------------------------------------ |
+| `tools:list`       | invoke    | Get available tools (merged, namespaced, filtered by `ToolFilter`) |
+| `tools:execute`    | invoke    | Execute tool by namespaced name, returns `ToolResult`              |
+| `tools:on-changed` | broadcast | Tool list changed (MCP connect/disconnect, enable/disable)         |
+
 
 **MCP Client:**
 
-| Channel | Direction | Purpose |
-|---|---|---|
-| `mcp:list-servers` | invoke | All configured servers with connection status |
-| `mcp:connect-server` | invoke | Manually connect/reconnect a server |
-| `mcp:disconnect-server` | invoke | Disconnect a server |
-| `mcp:get-server-tools` | invoke | List tools from a specific server |
-| `mcp:server-status-changed` | broadcast | Connection state changes |
+
+| Channel                     | Direction | Purpose                                       |
+| --------------------------- | --------- | --------------------------------------------- |
+| `mcp:list-servers`          | invoke    | All configured servers with connection status |
+| `mcp:connect-server`        | invoke    | Manually connect/reconnect a server           |
+| `mcp:disconnect-server`     | invoke    | Disconnect a server                           |
+| `mcp:get-server-tools`      | invoke    | List tools from a specific server             |
+| `mcp:server-status-changed` | broadcast | Connection state changes                      |
+
 
 **MCP Server:**
 
-| Channel | Direction | Purpose |
-|---|---|---|
-| `mcp-server:get-config` | invoke | Read server config (profiles, enabled state) |
-| `mcp-server:set-config` | invoke | Update server config |
-| `mcp-server:get-status` | invoke | Server running state, connected client count |
+
+| Channel                 | Direction | Purpose                                      |
+| ----------------------- | --------- | -------------------------------------------- |
+| `mcp-server:get-config` | invoke    | Read server config (profiles, enabled state) |
+| `mcp-server:set-config` | invoke    | Update server config                         |
+| `mcp-server:get-status` | invoke    | Server running state, connected client count |
+
 
 ### 7. Agent Loop Integration
 
@@ -413,12 +433,14 @@ McpClient    In-app Agent    McpServer
 
 Each component can be removed without affecting the others:
 
-| Component | Remove it and... | Nothing else changes because... |
-|---|---|---|
+
+| Component                           | Remove it and...                    | Nothing else changes because...              |
+| ----------------------------------- | ----------------------------------- | -------------------------------------------- |
 | In-app agent (`chat-agent-loop.ts`) | No chat panel, external agents only | Registry + MCP server still expose all tools |
-| MCP Client (`McpClientManager`) | No external tool consumption | Built-in tools and MCP server unaffected |
-| MCP Server (`McpServerBridge`) | No external agent access | In-app agent and MCP client unaffected |
-| BuiltinToolProvider | No graph tools at all | Registry still works with only MCP providers |
+| MCP Client (`McpClientManager`)     | No external tool consumption        | Built-in tools and MCP server unaffected     |
+| MCP Server (`McpServerBridge`)      | No external agent access            | In-app agent and MCP client unaffected       |
+| BuiltinToolProvider                 | No graph tools at all               | Registry still works with only MCP providers |
+
 
 **Design rule**: No component imports from or depends on another component. They only depend on the registry interface. The in-app agent does NOT call `executeTool()` directly — it goes through `tools:execute` IPC → registry, same as any other consumer. This means swapping the in-app agent for an embedded MCP client (Option 3 from design discussion) is a UI-only change.
 
@@ -457,6 +479,7 @@ synapse-mcp --vault /work                      # single vault (no confirmation n
 ## Phasing
 
 **This spec (Phase 1):**
+
 - ToolRegistry + BuiltinToolProvider
 - McpClientManager + McpToolProvider (client)
 - McpServerBridge (server, HTTP + stdio)
@@ -465,10 +488,13 @@ synapse-mcp --vault /work                      # single vault (no confirmation n
 - Multi-vault stdio CLI with vault confirmation (Approach 1+2)
 
 **Phase 2 (follow-up):**
+
 - Tool management UI (settings panel for servers, tools, profiles)
 - MCP resources (`synapse://node/{id}`, `synapse://types`, `synapse://status`)
 
 **Phase 3 (future):**
+
 - Plugin system with `PluginToolProvider` + sandboxed process isolation
 - MCP prompts
 - MCP Elicitation for vault confirmation (replaces Approach 1+2)
+
