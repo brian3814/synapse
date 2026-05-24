@@ -1,0 +1,92 @@
+{
+  "name": "kg-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main/main.cjs",
+  "scripts": {
+    "dev": "vite build --watch --mode development --config vite.config.chrome.ts",
+    "build": "tsc && vite build --config vite.config.chrome.ts",
+    "preview": "vite preview",
+    "build:chrome": "tsc && vite build --config vite.config.chrome.ts",
+    "build:electron-main": "esbuild electron/main.ts electron/preload.ts electron/embeddings/onnx-worker.ts --bundle --platform=node --outdir=dist-electron/main --format=cjs --out-extension:.js=.cjs --external:electron --packages=external",
+    "build:electron-renderer": "vite build --config vite.config.electron.ts",
+    "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
+    "dev:electron": "npm run build:electron && electron .",
+    "dev:electron:test": "npm run build:electron && electron . --remote-debugging-port=9222",
+    "build:companion": "vite build --config packages/companion/vite.config.ts",
+    "build:mcp": "cd packages/synapse-mcp && npm run build",
+    "dist:mac": "npm run build:electron && electron-builder --mac",
+    "dist:win": "npm run build:electron && electron-builder --win",
+    "dist:linux": "npm run build:electron && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.synapse.app",
+    "productName": "Synapse",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  },
+  "dependencies": {
+    "@dnd-kit/helpers": "^0.4.0",
+    "@dnd-kit/react": "^0.4.0",
+    "@huggingface/transformers": "^4.2.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "^0.6.0",
+    "better-sqlite3": "^12.9.0",
+    "pdfjs-dist": "^5.7.284",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "three": "^0.183.2",
+    "turndown": "^7.2.2",
+    "turndown-plugin-gfm": "^1.0.2",
+    "wa-sqlite": "^1.0.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.75",
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/vite": "^4.2.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/chrome": "^0.1.37",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.183.1",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
+    "sqlite-vec": "^0.1.9",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
