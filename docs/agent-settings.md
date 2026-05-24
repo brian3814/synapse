@@ -14,7 +14,7 @@ Append-only — default prompts are read-only, user adds custom instructions app
 
 ## Tool Toggles
 
-Each tool can be individually disabled. Extraction tools filtered in `agent-loop.ts` before passing to LLM; `save_entities` is never filterable. Chat tools filtered in `chat-agent-loop.ts`; `semantic_search` follows the same filter.
+Each tool can be individually disabled. Extraction tools filtered in `agent-loop.ts` before passing to LLM; `save_entities` is never filterable. Chat tools filtered in `src/ui/hooks/chat-agent-loop.ts`; `semantic_search` follows the same filter. `AgentToolConfig` also includes `chatMaxIterations?: number` (default: `DEFAULT_CHAT_MAX_ITERATIONS = 100`), controlling the maximum chat agent loop iterations via a slider in the UI.
 
 ## Vault Sandboxing
 

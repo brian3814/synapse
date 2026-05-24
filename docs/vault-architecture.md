@@ -6,9 +6,9 @@ The app uses a **Vault** — a single user-chosen directory containing everythin
 <vault-root>/
 ├── .kg/                    ← app internals (hidden)
 │   ├── config.json         ← vault identity & schema version
-│   ├── graph.db            ← SQLite database (source of truth)
-│   ├── embeddings/vec.db   ← sqlite-vec vector store
-│   └── agent/              ← agent memory & artifacts
+│   ├── graph.db            ← SQLite database (source of truth, includes sqlite-vec)
+│   └── agent/              ← agent memory
+│       └── artifacts/      ← agent-generated artifacts
 ├── notes/                  ← app-managed markdown (human-readable names)
 └── (user files anywhere)   ← auto-detected as resources
 ```
@@ -16,13 +16,13 @@ The app uses a **Vault** — a single user-chosen directory containing everythin
 ## Key Design Decisions
 
 - **Graph-as-registry**: Graph DB is the source of truth. Filesystem is a projection. Every file with a graph node has `vault_path` set on the node.
-- **Event bus**: Graph mutations and file events flow through `VaultEventBus`. Handlers subscribe independently (NoteFileHandler, ResourceDetectionHandler, EmbeddingHandler, SyncBroadcastHandler).
+- **Event bus**: Graph mutations and file events flow through `VaultEventBus`. Handlers subscribe independently (NoteFileHandler, ResourceDetectionHandler, SyncBroadcastHandler).
 - **File watcher**: Recursive `fs.watch` detects user files dropped anywhere in the vault (excluding `.kg/` and `notes/`). Creates resource nodes automatically.
 - **Reconciliation on startup**: mtime-based diff catches offline changes (new/modified/missing files).
 - **Human-readable note names**: Notes stored as `notes/Machine Learning.md`, not `{nodeId}.md`. `vault_path` column provides the mapping.
 - **API keys stay in app settings** (`~/Library/Application Support/`), never in the vault.
 - **Shared DB handle**: `VaultManager.open()` calls `resetBetterSQLite(dbPath)` then `runMigrations()` directly. The vault context receives the DB handle from `getDb()` — never opens its own connection. This ensures migrations run before reconciliation and all code shares one DB handle.
-- **Multi-vault**: Single vault per process. Switching vaults launches a new Electron process via `app.relaunch({ args: ['--vault', path] })`, matching Obsidian's window model. The `VaultSwitcher` dropdown in the header shows recent vaults and create/open options.
+- **Multi-vault**: Single vault per process. Switching vaults spawns a new detached Electron process via `spawnVaultProcess()` using `child_process.spawn()`, matching Obsidian's window model. The `VaultSwitcher` dropdown in the header shows recent vaults and create/open options.
 
 ## Key Files
 

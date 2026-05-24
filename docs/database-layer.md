@@ -39,7 +39,7 @@ Note content is stored as `.md` files, NOT in SQLite. UI code accesses notes via
 
 ## State Management
 
-Five Zustand stores in `src/graph/store/`:
+Ten Zustand stores in `src/graph/store/`:
 
 | Store | Purpose |
 |---|---|
@@ -48,6 +48,11 @@ Five Zustand stores in `src/graph/store/`:
 | `llm-store.ts` | Extraction pipeline state machine: `idle → extracting → extracted → reviewing → merging`. Also tracks agent runs (`AgentTurn[]`). |
 | `node-type-store.ts` | Node type definitions + auto-assigned colors from `TYPE_COLOR_PALETTE` (10 colors, cycles on exhaustion). |
 | `extraction-review-store.ts` | Ephemeral review session with undo/redo command pattern. Manages `ReviewNode[]`/`ReviewEdge[]` with temp IDs (`temp-${uuid}`). |
+| `auth-store.ts` | Authentication state (user, session, provider). |
+| `chat-context-store.ts` | Context nodes/notes passed to chat agent. |
+| `reading-list-store.ts` | Reading list items and extraction queue. |
+| `tag-store.ts` | Tag list and counts for filtering. |
+| `viewport-store.ts` | Camera position, zoom level, viewport bounds. |
 
 Stores are independent; hooks like `useLLMExtraction()` orchestrate multi-store updates.
 

@@ -3,9 +3,10 @@
 **Status:** Proposed  
 **Date:** 2026-04-06  
 **Updated:** 2026-04-07  
+**Implementation status:** The three-layer data model (resource/entity/note types, ontology tables, source tracking) has been implemented. Higher-level features (export renderer, wikilink-to-edge parser, folder browser UI, two-pass extraction) remain unimplemented. The primary platform is now Electron desktop; the Chrome extension is deprecated.  
 **Context:** The extension's knowledge graph needs a model that blends Karpathy's LLM Wiki pattern (compounding prose artifacts) with our existing structured graph (typed entities, entity resolution, graph algorithms). This document defines the unified model.
 
-**Scope:** URL-first, browser-native. Resources are webpages only. The database is the single source of truth. Markdown files are a one-direction export, never read back.
+**Scope:** URL-first, browser-native. Resources are webpages only. The database is the single source of truth. Markdown files are a one-direction export, never read back. *(Note: Per the [accepted ADR](adr-opfs-note-storage.md), note content is stored as `.md` files, not in SQLite. The DB stores note metadata + FTS index only.)*
 
 ---
 

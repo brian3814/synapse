@@ -2,7 +2,7 @@
 
 ## Extraction Modes
 
-Two extraction modes, both ending in the same review→apply flow:
+Three extraction modes, all ending in the same review→apply flow:
 
 **Simple text extraction** (`useLLMExtraction.startExtraction`): Raw text → `llm.streamExtraction()` → streaming JSON → parse via `extractionResultSchema` (Zod) → diff with existing graph → review.
 
@@ -12,7 +12,7 @@ Two extraction modes, both ending in the same review→apply flow:
 
 ## Review Flow
 
-`ExtractionReview` replaces old `DiffView`:
+`ExtractionReview` complements `DiffView` (`src/ui/components/llm/DiffView.tsx`):
 - Converts diff items → `ReviewNode[]`/`ReviewEdge[]` with merge recommendations (fuzzy matching via entity resolution)
 - Mini graph preview (Three.js ReviewGraphCanvas) or overlay on main graph
 - Inline editing, add/remove nodes/edges, undo/redo

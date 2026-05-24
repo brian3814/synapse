@@ -3,7 +3,9 @@
 **Status:** Accepted  
 **Date:** 2026-04-11  
 **Context:** Notes are stored redundantly in SQLite (`nodes.properties` and `source_content`), with poor FTS quality and unnecessary DB round-trips for reads. The native host roadmap requires notes to be file-shaped artifacts.  
-**Supersedes:** The implicit convention that all content lives in SQLite as the single source of truth (see `adr-native-host-local-files.md`). That principle remains true for entities and resources; notes are the exception, with OPFS files as the canonical store and SQLite retaining metadata + search index only.
+**Supersedes:** The implicit convention that all content lives in SQLite as the single source of truth. That principle remains true for entities and resources; notes are the exception, with files as the canonical store and SQLite retaining metadata + search index only.
+
+> **Platform note:** This ADR was written for the Chrome extension, where note files are stored in OPFS (Origin Private File System). In the Electron desktop app — now the primary platform — notes are stored as real `.md` files on the local filesystem via `electron/notes-backend.ts`. The same principle holds: note content lives in files, metadata + FTS index in SQLite. The Chrome extension is now deprecated (maintenance mode only).
 
 ---
 

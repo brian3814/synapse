@@ -16,13 +16,13 @@ Renderer → IPC (embedding:*) → EmbeddingService → sqlite-vec (KNN) + Provi
 ## Chrome Isolation Constraints
 
 - `src/embeddings/types.ts` must contain ONLY TypeScript types. No runtime imports from `@huggingface/transformers`, `sqlite-vec`, or Node.js modules.
-- Both platform `index.ts` files export `embedding`. Chrome export is a frozen no-op.
-- The `semantic_search` chat tool is dynamically appended in `chat-agent-loop.ts` when `platformId === 'electron'`. Never added to the shared `CHAT_AGENT_TOOLS` constant.
+- Both platform `index.ts` files export `embedding`. Chrome export is a no-op stub class.
+- The `semantic_search` chat tool is defined in the shared `CHAT_AGENT_TOOLS` constant (`src/shared/chat-agent-tools.ts`). On Chrome, it is a no-op since `PlatformEmbedding` returns empty results.
 
 ## What Embeddings Are Good For (and Not)
 
 Embeddings work well for **rich text content** — notes, resources, multi-word queries:
-- RAG retrieval: RRF blending of FTS5 + vector search in `rag-commands.ts`
+- RAG retrieval: RRF blending of FTS5 + vector search in `src/commands/rag-commands.ts`
 - Search bar: semantic fallback for 3+ word queries with few FTS hits
 - `semantic_search` chat tool: agent self-serves semantic retrieval
 - Context chip auto-suggest: related nodes when attaching context to chat

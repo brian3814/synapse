@@ -5,8 +5,8 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 ```
 ┌─────────────────────────────────────────────────┐
 │  UI / React Layer (platform-agnostic)            │
-│  All I/O via: import { storage, db, notes, llm,  │
-│               browser, vault } from '@platform'  │
+│  All I/O via: import { storage, db, notes, vault, │
+│    files, llm, browser, embedding } from '@platform'│
 ├─────────────────────────────────────────────────┤
 │  @platform (build-time alias)                    │
 │  Chrome: src/platform/chrome/  (chrome.* APIs)   │
@@ -21,7 +21,7 @@ The app runs on two platforms from one codebase. UI code imports `@platform` (Vi
 └─────────────────────────────────────────────────┘
 ```
 
-## Seven Platform Interfaces
+## Eight Platform Interfaces
 
 Defined in `src/platform/types.ts`:
 
@@ -30,6 +30,7 @@ Defined in `src/platform/types.ts`:
 | `PlatformStorage` | `chrome.storage.local` | IPC → JSON config file |
 | `PlatformDB` | SharedWorker/DedicatedWorker + wa-sqlite | IPC → better-sqlite3 in vault `.kg/graph.db` |
 | `PlatformNotes` | OPFS async API | IPC → vault `notes/` directory (human-readable filenames) |
+| `PlatformFiles` | OPFS-based file storage | IPC → filesystem read/write in vault |
 | `PlatformLLM` | Message-based streaming via SW/offscreen | Dedicated IPC channels (`llm:stream-extraction`, `llm:run-agent`, `llm:stream-chat`) |
 | `PlatformBrowser` | `chrome.tabs`, content scripts | Companion extension dispatch or no-op |
 | `PlatformEmbedding` | No-op stub (returns empty arrays) | IPC → EmbeddingService in main process (sqlite-vec + ONNX/OpenAI) |

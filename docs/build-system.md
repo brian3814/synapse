@@ -12,6 +12,8 @@ npm run build:electron-main      # esbuild main process → dist-electron/main/
 npm run build:electron-renderer  # Vite renderer build → dist-electron/renderer/
 npm run build:electron           # Both main + renderer
 npm run dist:mac                 # Package macOS app via electron-builder
+npm run dist:win                 # Package Windows app via electron-builder
+npm run dist:linux               # Package Linux app via electron-builder
 
 # Companion extension
 npm run build:companion          # Vite build → dist-companion/
@@ -45,7 +47,7 @@ Key config: `base: ''` (chrome-extension:// relative paths), `modulePreload: fal
 
 ### Electron Main Process
 
-Built separately via `esbuild` (not Vite): `electron/main.ts` + `electron/preload.ts` → `dist-electron/main/`.
+Built separately via `esbuild` (not Vite): `electron/main.ts` + `electron/preload.ts` + `electron/embeddings/onnx-worker.ts` → `dist-electron/main/`.
 
 ## Important Constraints
 

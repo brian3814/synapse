@@ -23,7 +23,7 @@ SearchPanel (UI)
             │   3. try/catch → fall through on failure
             │
             └─ LIKE fallback
-                WHERE label LIKE ? OR type LIKE ?
+                WHERE name LIKE ? OR type LIKE ?
 ```
 
 ## FTS5 Query Sanitization
@@ -59,8 +59,8 @@ When FTS5 is unavailable or the query fails FTS5 parsing:
 
 ```sql
 SELECT * FROM nodes
-WHERE label LIKE ? OR type LIKE ?
-ORDER BY label
+WHERE name LIKE ? OR type LIKE ?
+ORDER BY name
 LIMIT ?;
 ```
 
@@ -82,7 +82,7 @@ Without debounce, every keystroke fires a DB query that serializes through the s
 
 ### No `allNodes` subscription
 
-The previous implementation subscribed to `graph-store.nodes` for an in-memory fallback filter. This caused `handleSearch` to be recreated on every graph mutation (node add/delete/update), which is unnecessary since the DB layer handles all fallback logic internally.
+The previous implementation subscribed to `graph-store.nodes` for an in-memory fallback filter. This caused `handleInputChange` to be recreated on every graph mutation (node add/delete/update), which is unnecessary since the DB layer handles all fallback logic internally.
 
 ## Key Files
 

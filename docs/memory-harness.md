@@ -11,6 +11,10 @@ Extended frontmatter on memory files (`{type}_{name}.md`):
 name: prefers-concise-answers
 description: User wants short, direct responses
 type: preference          # preference | fact | instruction | episodic
+                          # Note: the manage_memory tool schema exposes only
+                          # preference | fact | instruction to the LLM.
+                          # Episodic is supported by the backend but created
+                          # programmatically by memory-extractor.ts.
 tags: [communication, response-style]
 superseded_by:            # filename of replacement (null if current)
 valid: true               # false = superseded
@@ -27,7 +31,7 @@ All new fields are optional with backward-compatible defaults. Existing files wo
 
 **Inline self-governance:** The agent's system prompt includes Memory Guidelines (appended by `assembleSystemPrompt`). Before calling `manage_memory`, the agent checks for contradictions/duplicates. The `manage_memory` tool accepts `tags` (retrieval keywords) and `supersedes` (filename to replace). When `supersedes` is provided, `governance.ts:markSuperseded()` sets `valid: false` and `superseded_by` on the old file.
 
-**Episodic unification:** Session summaries now write to files (`episodic_{date}-{slug}.md`) instead of the `memory_episodic` DB table. `memory-extractor.ts` uses a richer LLM prompt that returns JSON with `summary`, `tags`, and `slug`.
+**Episodic unification:** Session summaries now write to files (`episodic_{date}-{slug}.md`) alongside the `memory_episodic` DB table (both paths coexist). `memory-extractor.ts` uses a richer LLM prompt that returns JSON with `summary`, `tags`, and `slug`.
 
 ## Read Path: Retrieval Pipeline
 

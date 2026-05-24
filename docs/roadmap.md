@@ -22,12 +22,12 @@
 
 ### Our Differentiators Today
 
-1. **Truly local-first** — wa-sqlite + OPFS, zero cloud dependency for storage
+1. **Truly local-first** — SQLite persistence (better-sqlite3 on Electron, wa-sqlite + OPFS on Chrome), zero cloud dependency for storage
 2. **Agentic page extraction** — content script tools that intelligently navigate page structure (tables, structured data, links, metadata)
 3. **Entity resolution + review flow** — fuzzy matching, diff view, undo/redo, convert-to-property
 4. **Custom Three.js renderer** — InstancedMesh for 10k+ node performance
-5. **Chrome Side Panel native** — purpose-built for side panel UX
-6. **API key security** — keys never leave the service worker context
+5. **Electron desktop app** — purpose-built desktop experience (Chrome extension now deprecated)
+6. **API key security** — keys stored in encrypted app settings via `electron/storage-backend.ts`
 
 ---
 
@@ -49,6 +49,12 @@
 | Graph algorithms (clustering, centrality) | graph-algorithms.ts |
 | Markdown folder sync (import) | indexed-file-queries.ts |
 | NL query + DSL query engine | query-engine/, QueryBuilder |
+| MCP server + client (stdio CLI, HTTP bridge, ToolRegistry) | packages/synapse-mcp/, electron/mcp/ |
+| Vault system (user-chosen directory, graph DB, notes, files) | electron/vault/ |
+| Companion browser extension | packages/companion/ |
+| Vector embeddings (sqlite-vec + ONNX/OpenAI) | electron/embeddings/ |
+| Memory harness (governed agent memory, retrieval pipeline) | src/memory/ |
+| Agent settings (prompt config, tool toggles, vault sandboxing) | src/shared/agent-settings-types.ts |
 
 ---
 
@@ -58,10 +64,10 @@
 
 **Goal:** Without cost transparency and privacy controls, users won't trust the tool enough to use it regularly. Gates any feature that spends tokens without explicit user action.
 
-- **Cost estimation**: show "Estimated cost: ~$0.003" before extraction, "up to $X" for agent mode
-- **Usage tracking & budget cap**: service worker logs tokens/cost, monthly budget with enforcement
-- **Tiered extraction**: Quick Extract (single call, ~$0.002) vs Deep Extract (agent loop, ~$0.02), auto-suggest based on page complexity
-- **Privacy disclosure**: one-time modal before first extraction, per-extraction "Sending to [provider]" indicator
+- ~~**Cost estimation**~~ **[SHIPPED]**: `src/shared/cost-estimator.ts` — shows estimated cost before extraction
+- ~~**Usage tracking & budget cap**~~ **[SHIPPED]**: `src/service-worker/usage-tracker.ts`, `src/core/usage.ts` — token/cost logging
+- **Tiered extraction** **[PARTIAL]**: Quick Extract vs Agent (deep) modes exist; auto-suggest based on complexity not yet implemented
+- ~~**Privacy disclosure**~~ **[SHIPPED]**: `src/ui/components/llm/PrivacyDisclosure.tsx` — one-time modal + per-extraction provider indicator
 
 ---
 
@@ -81,6 +87,8 @@ Chat answers are ephemeral — the user learns something, then it disappears. "P
 #### 1.2 Research Sessions
 
 Upgrade chat sessions from throwaway conversations to named research threads that persist as searchable, revisitable trails.
+
+> **[PARTIAL]**: Chat session persistence is shipped (`chat_sessions` and `chat_messages` tables). Named sessions with create/rename exist. Session summary and cross-session search remain unimplemented.
 
 - Name/rename sessions (auto-suggest from first query topic)
 - Cross-session search: "What did I research about X?" queries past Q&A, not just extracted knowledge

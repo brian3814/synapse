@@ -1,5 +1,7 @@
 # KG Extension — Architecture Deep Dive
 
+> **Note:** Sections 1–10 describe the Chrome extension architecture, which is now in maintenance mode. For the current Electron desktop architecture, see [`architecture-visualization.html`](architecture-visualization.html).
+
 Chrome Manifest V3 knowledge graph extension: local-first SQLite (wa-sqlite + OPFS), Three.js graph rendering, LLM-powered entity extraction with agentic tool use.
 
 ---
@@ -273,7 +275,7 @@ Every database operation follows this path:
 
 ## 6. Zustand Store Architecture
 
-Five primary stores in `src/graph/store/`, plus viewport, auth, tag, and reading-list stores:
+Ten stores in `src/graph/store/` and related modules:
 
 | Store | Key State | Key Actions |
 |-------|-----------|-------------|
@@ -283,6 +285,10 @@ Five primary stores in `src/graph/store/`, plus viewport, auth, tag, and reading
 | **extraction-review-store** | `ReviewNode[]`, `ReviewEdge[]`, `ReviewNote[]`, `undoStack`, `redoStack`, `pendingConversion` | `initialize()`, `editNode()`, `removeEdge()`, `convertEdgeToProperty()`, `undo()/redo()` |
 | **node-type-store** | `types: NodeType[]` (structural + entity labels) | `loadTypes()`, `createType()`, `getColorForNode()` |
 | **viewport-store** | `zoomLevel`, `frustumBounds`, `visibleNodes/Edges`, `clusterNodes/Edges` | `setFrustumBounds()`, `invalidateClusterCache()` |
+| **auth-store** | `user`, `session`, `provider` | `login()`, `logout()`, `checkSession()` |
+| **chat-context-store** | `contextNodes`, `contextNotes`, `contextMode` | `setContext()`, `clearContext()`, `addContextNode()` |
+| **reading-list-store** | `items: ReadingListItem[]`, `extractionQueue`, `processing` | `loadItems()`, `queueExtraction()`, `markProcessed()` |
+| **tag-store** | `tags: string[]`, `tagCounts` | `loadTags()`, `addTag()`, `removeTag()` |
 
 ### LLM Store State Machine
 
@@ -768,7 +774,7 @@ External client → HTTP POST 127.0.0.1:19876/mcp → McpServerBridge → ToolRe
 
 ```
 src/shared/chat-agent-tools.ts          — 16 core tool definitions (CHAT_AGENT_TOOLS)
-src/commands/tools/                     — 15 extended tools in 4 modules
+src/commands/tools/                     — 16 extended tools in 4 modules
   ├── note-tools.ts                     — read_note, create_note, update_note, list_notes, search_notes
   ├── edge-tools.ts                     — update_edge, delete_edge, get_edges_between
   ├── graph-tools.ts                    — get_graph_overview, get_subgraph, get_nodes_by_type
