@@ -62,8 +62,6 @@ jobs:
             dist: dist:mac
           - os: windows-latest
             dist: dist:win
-          - os: ubuntu-latest
-            dist: dist:linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -87,8 +85,6 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.exe
-            release/*.AppImage
-            release/*.deb
           if-no-files-found: error
 
   release:
