@@ -5,8 +5,10 @@ set -euo pipefail
 # Excludes internal directories and dev-config files.
 # Usage: ./publish.sh "v0.2: agent extraction pipeline"
 
-EXCLUDE_DIRS=(docs plans .agents .github)
+EXCLUDE_DIRS=(plans .agents .github)
 EXCLUDE_FILES=(.mcp.json publish.sh skills-lock.json)
+# Only include docs/images in the public repo (exclude all other docs content)
+DOCS_INCLUDE=(images)
 
 if [ $# -eq 0 ]; then
   echo "Usage: ./publish.sh \"<milestone message>\""
@@ -27,9 +29,22 @@ fi
 MESSAGE="$1"
 
 PATTERN="$(IFS='|'; echo "${EXCLUDE_DIRS[*]}|${EXCLUDE_FILES[*]}")"
+
+# Build a filtered docs/ subtree containing only DOCS_INCLUDE entries
+DOCS_TREE=$(git ls-tree HEAD -- docs/)
+if [ -n "$DOCS_TREE" ]; then
+  INCLUDE_PATTERN="$(IFS='|'; echo "${DOCS_INCLUDE[*]}")"
+  FILTERED_DOCS_TREE=$(
+    git ls-tree HEAD:docs \
+      | grep -E $'\t'"(${INCLUDE_PATTERN})$" \
+      | git mktree
+  )
+fi
+
 FILTERED_TREE=$(
   git ls-tree HEAD \
-    | grep -v -E $'\t'"(${PATTERN})$" \
+    | grep -v -E $'\t'"(${PATTERN}|docs)$" \
+    | { cat; [ -n "${FILTERED_DOCS_TREE:-}" ] && echo "040000 tree ${FILTERED_DOCS_TREE}	docs"; } \
     | git mktree
 )
 
