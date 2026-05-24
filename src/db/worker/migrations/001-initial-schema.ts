@@ -86,15 +86,6 @@ INSERT OR IGNORE INTO ontology_node_types (type, description, color, category) V
     ('entity', 'A domain object (concept, person, technology, etc.)', '#7C3AED', 'structural'),
     ('note', 'A granular prose unit about entities', '#0EA5E9', 'structural');
 
-INSERT OR IGNORE INTO ontology_node_types (type, description, color, category, is_default) VALUES
-    ('concept', 'Abstract idea, topic, field, or theory', '#7C3AED', 'entity_label', 1),
-    ('person', 'Named individual', '#4F46E5', 'entity_label', 0),
-    ('organization', 'Company, institution, or research group', '#D97706', 'entity_label', 0),
-    ('technology', 'Tool, framework, language, or protocol', '#DC2626', 'entity_label', 0),
-    ('event', 'Dated occurrence, release, or discovery', '#0891B2', 'entity_label', 0),
-    ('place', 'Geographic location', '#65A30D', 'entity_label', 0),
-    ('methodology', 'Process, workflow, or design pattern', '#DB2777', 'entity_label', 0);
-
 CREATE TABLE IF NOT EXISTS ontology_edge_types (
     type              TEXT PRIMARY KEY,
     description       TEXT,

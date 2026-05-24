@@ -3,7 +3,37 @@
  * Canonical source — both Chrome offscreen and Electron main import from here.
  */
 
-export function getAgentSystemPrompt(notesEnabled: boolean, customInstructions?: string): string {
+import type { ExtractionGraphContext } from '../shared/quick-extract-prompt';
+
+function buildEntityLabelBlock(ctx?: ExtractionGraphContext): string {
+  if (ctx && ctx.entityLabels.length > 0) {
+    const list = ctx.entityLabels.join(', ');
+    return `- Use the "label" field on each node to categorize it semantically.
+  STRONGLY PREFER reusing an existing label. Only create a new label if none of the existing ones adequately describe the entity.
+  Existing entity labels in this graph: ${list}
+  If you must create a new label, use a short lowercase snake_case term.`;
+  }
+  return `- Use the "label" field on each node to categorize it semantically (e.g. concept, person, organization, technology).
+  Use short lowercase snake_case labels.`;
+}
+
+function buildEdgeLabelBlock(ctx?: ExtractionGraphContext): string {
+  if (ctx && ctx.edgeLabels.length > 0) {
+    const list = ctx.edgeLabels.join(', ');
+    return `- Leverage markdown structure (headings, tables, links) to identify relationships more accurately.
+- STRONGLY PREFER reusing an existing relationship label. Only create a new label if none of the existing ones adequately describe the relationship.
+- Existing relationship labels in this graph: ${list}
+- If you must create a new label, use consistent lowercase snake_case (e.g. "works_at", "located_in").`;
+  }
+  return `- Leverage markdown structure (headings, tables, links) to identify relationships more accurately.
+- Use consistent, lowercase snake_case relationship labels (e.g. "created_by", "part_of", "used_in", "works_at").`;
+}
+
+export function getAgentSystemPrompt(
+  notesEnabled: boolean,
+  customInstructions?: string,
+  graphContext?: ExtractionGraphContext,
+): string {
   const notesRules = notesEnabled
     ? `
 
@@ -33,17 +63,13 @@ Workflow:
 
 Rules for NODES:
 - Do NOT output resource nodes. The system automatically creates a resource node for the source URL. Every node you emit is an entity.
-- Use the "label" field on each node to categorize it semantically. Allowed labels:
-  concept, person, organization, technology, event, place, methodology.
-- If no label fits, default to "concept".
+${buildEntityLabelBlock(graphContext)}
 - Include relevant properties as key-value pairs on nodes (dates, versions, metrics, identifiers).
 - Include a "tags" array for domain annotations (e.g. ["technology", "ai"]).
 - The system performs fuzzy matching against existing graph entities during review — don't worry about exact deduplication, but use canonical names when possible.
 
 Rules for EDGES:
-- Leverage markdown structure (headings, tables, links) to identify relationships more accurately.
-- Prefer these seed relationship labels when applicable: subfield_of, part_of, instance_of, created_by, affiliated_with, used_in, builds_on, enables, contradicts, alternative_to, preceded_by.
-- Otherwise use consistent, lowercase snake_case labels (e.g., "works_at", "located_in").
+${buildEdgeLabelBlock(graphContext)}
 - Ensure all edges reference entities that exist in your nodes array by their exact name.
 - Call save_entities exactly once when done — it is the terminal tool.${notesRules}
 

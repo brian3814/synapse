@@ -49,6 +49,16 @@ export async function createNodeType(input: {
   return toNodeType(rows[0]);
 }
 
+export async function getDistinctEntityLabels(): Promise<string[]> {
+  const { rows } = await executeQuery<{ label: string }>(
+    `SELECT type AS label FROM ontology_node_types WHERE category = 'entity_label'
+     UNION
+     SELECT DISTINCT label FROM nodes WHERE type = 'entity' AND label IS NOT NULL
+     ORDER BY label;`
+  );
+  return rows.map(r => r.label);
+}
+
 export async function deleteNodeType(type: string): Promise<boolean> {
   const { changes } = await executeExec(
     'DELETE FROM ontology_node_types WHERE type = ?;',

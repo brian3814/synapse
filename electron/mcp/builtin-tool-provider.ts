@@ -1,17 +1,24 @@
 import type { ToolProvider, ToolDefinition, ToolResult } from './types';
 import type { CommandContext } from '../../src/commands/types';
-import { CHAT_AGENT_TOOLS } from '../../src/shared/chat-agent-tools';
+import { ALL_CHAT_AGENT_TOOLS } from '../../src/shared/chat-agent-tools';
 import { executeTool } from '../../src/commands/chat-tool-executor';
 
 const READ_TOOLS = new Set([
   'search_knowledge', 'search_nodes', 'get_node_details',
   'get_neighbors', 'get_edges_for_node', 'search_sources',
-  'get_source_content', 'semantic_search',
+  'get_source_content', 'semantic_search', 'get_nodes_batch',
+  'read_note', 'list_notes', 'search_notes',
+  'get_edges_between',
+  'get_graph_overview', 'get_subgraph', 'get_nodes_by_type',
+  'find_similar_entities', 'get_aliases', 'get_node_tags',
 ]);
 
 const WRITE_TOOLS = new Set([
   'create_node', 'update_node', 'create_edge',
-  'delete_node', 'merge_nodes',
+  'delete_node', 'delete_nodes_batch', 'merge_nodes',
+  'create_note', 'update_note',
+  'update_edge', 'delete_edge',
+  'add_alias', 'tag_node',
 ]);
 
 export class BuiltinToolProvider implements ToolProvider {
@@ -21,7 +28,7 @@ export class BuiltinToolProvider implements ToolProvider {
   constructor(private ctx: CommandContext) {}
 
   listTools(): ToolDefinition[] {
-    return CHAT_AGENT_TOOLS.map((t) => ({
+    return ALL_CHAT_AGENT_TOOLS.map((t) => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,

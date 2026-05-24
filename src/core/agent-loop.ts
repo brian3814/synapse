@@ -25,6 +25,7 @@ export interface AgentLoopConfig {
   notesEnabled?: boolean;
   customInstructions?: string;
   disabledTools?: string[];
+  graphContext?: { entityLabels: string[]; edgeLabels: string[] };
 }
 
 export async function runAgentLoop(
@@ -34,7 +35,7 @@ export async function runAgentLoop(
   onProgress: (event: AgentProgressEvent) => void,
 ): Promise<void> {
   const maxIter = config.maxIterations ?? MAX_ITERATIONS;
-  const systemPrompt = getAgentSystemPrompt(config.notesEnabled ?? false, config.customInstructions);
+  const systemPrompt = getAgentSystemPrompt(config.notesEnabled ?? false, config.customInstructions, config.graphContext);
   const filteredTools = config.disabledTools?.length
     ? AGENT_TOOLS.filter((t) => t.name === 'save_entities' || !config.disabledTools!.includes(t.name))
     : AGENT_TOOLS;

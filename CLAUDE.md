@@ -48,7 +48,7 @@ UI (React + Zustand) → @platform (build-time alias) → Background Service →
 - **`@platform` alias** must exist in EVERY `resolve.alias` block across all Vite build configs.
 - **Shared core** (`src/core/`): Zero imports from `@platform`; all dependencies injected via `CommandContext`.
 - **LLM provider abstraction**: `electron/llm-backend.ts` — provider factory with `registerStreamFn()`. Renderer never knows which provider is active.
-- **State management**: Five independent Zustand stores in `src/graph/store/` (graph, ui, llm, node-type, extraction-review).
+- **State management**: Ten independent Zustand stores in `src/graph/store/` (graph, ui, llm, node-type, extraction-review).
 - **Note storage**: `.md` files on disk, NOT in SQLite. Access via `import { notes } from '@platform'`. See [`docs/adr-opfs-note-storage.md`](docs/adr-opfs-note-storage.md).
 - **Graph store sync**: Subscribes to both BroadcastChannel and IPC for real-time cross-source updates.
 
@@ -73,7 +73,7 @@ UI (React + Zustand) → @platform (build-time alias) → Background Service →
 | Doc | Content |
 |---|---|
 | [`docs/vault-architecture.md`](docs/vault-architecture.md) | Vault layout, event bus, file watcher, reconciliation, multi-vault |
-| [`docs/platform-layer.md`](docs/platform-layer.md) | Seven interfaces, Chrome/Electron contexts, API key security |
+| [`docs/platform-layer.md`](docs/platform-layer.md) | Eight interfaces, Chrome/Electron contexts, API key security |
 | [`docs/build-system.md`](docs/build-system.md) | Vite configs, esbuild, CSP constraints, outputs |
 | [`docs/database-layer.md`](docs/database-layer.md) | DataStore interface, migrations, note storage, state management |
 | [`docs/graph-renderer.md`](docs/graph-renderer.md) | Three.js renderer, layout worker, pitfalls #14–#23 |

@@ -401,6 +401,8 @@ const EXTRA_COLUMNS: [string, string, string][] = [
   ['nodes', 'source_content', 'TEXT'],
   ['nodes', 'vault_path', 'TEXT'],
   ['nodes', 'content_type', 'TEXT'],
+  ['nodes', 'file_mtime', 'INTEGER'],
+  ['nodes', 'file_size', 'INTEGER'],
   ['entity_sources', 'location', 'TEXT'],
   ['edge_sources', 'location', 'TEXT'],
 ];

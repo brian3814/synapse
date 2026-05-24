@@ -73,6 +73,7 @@ export interface AgentRequest {
   notesEnabled: boolean;
   customInstructions?: string;
   disabledTools?: string[];
+  graphContext?: { entityLabels: string[]; edgeLabels: string[] };
 }
 
 export interface ChatRequest {
