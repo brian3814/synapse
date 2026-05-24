@@ -29,7 +29,7 @@ jobs:
         run: |
           git remote add public https://github.com/brian3814/synapse.git
           git fetch public main --depth=1 2>/dev/null || true
-          git fetch public refs/tags/public/latest:refs/tags/public/latest 2>/dev/null || true
+          git fetch origin refs/tags/public/latest:refs/tags/public/latest 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
 
@@ -50,8 +50,10 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           ./publish.sh "${TAG} release"
 
-      - name: Push publish branch to private repo
-        run: git push origin publish --force
+      - name: Push publish state to private repo
+        run: |
+          git push origin publish --force
+          git push origin refs/tags/public/latest --force
 
   build:
     needs: publish
