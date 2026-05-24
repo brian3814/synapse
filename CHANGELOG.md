@@ -2,7 +2,7 @@
 
 All notable changes to Synapse will be documented in this file.
 
-## [Unreleased]
+## [0.1.1] - 2025-05-24
 
 ### Fixed
 - Package `sqlite-vec` as production dependency so it loads in the built app
