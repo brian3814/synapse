@@ -5,7 +5,7 @@ set -euo pipefail
 # Excludes internal directories and dev-config files.
 # Usage: ./publish.sh "v0.2: agent extraction pipeline"
 
-EXCLUDE_DIRS=(docs plans .agents)
+EXCLUDE_DIRS=(docs plans .agents .github)
 EXCLUDE_FILES=(.mcp.json publish.sh skills-lock.json)
 
 if [ $# -eq 0 ]; then
