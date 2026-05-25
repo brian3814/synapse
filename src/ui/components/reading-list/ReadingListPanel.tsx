@@ -5,7 +5,8 @@ import { ReadingListItemCard } from './ReadingListItemCard';
 import { PanelHeader } from '../shared/PanelHeader';
 import { platformId, vaultWorkspace } from '@platform';
 import type { ReadingListItem } from '../../../shared/types';
-import type { RecentVault, VaultStatus } from '@platform/vault-workspace';
+import type { VaultStatus } from '@platform/vault-workspace';
+import { AddUrlModal } from './AddUrlModal';
 
 type Tab = 'pending' | 'processing' | 'ready';
 
@@ -18,22 +19,19 @@ function getDomain(url: string): string {
 }
 
 export function ReadingListPanel() {
-  const { items, loading, selectedUrl, selectItem, selectedUrls, toggleSelectUrl, selectAllPending, clearSelection, startBatchExtraction, addItem } = useReadingListStore();
+  const { items, loading, selectedUrl, selectItem, selectedUrls, toggleSelectUrl, selectAllPending, clearSelection, startBatchExtraction } = useReadingListStore();
   const { startMerge } = useReadingListMerge();
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [filterText, setFilterText] = useState('');
   const [mergingUrl, setMergingUrl] = useState<string | null>(null);
   const [expandedUrls, setExpandedUrls] = useState<string[]>([]);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
 
-  // Vault info for filtering + add form
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
-  const [recentVaults, setRecentVaults] = useState<RecentVault[]>([]);
   useEffect(() => {
     if (platformId !== 'electron') return;
     vaultWorkspace.getStatus().then(setVaultStatus);
-    vaultWorkspace.getRecent().then(setRecentVaults);
   }, []);
 
   useEffect(() => {
@@ -101,7 +99,7 @@ export function ReadingListPanel() {
       <div className="px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
         <PanelHeader title="Reading List">
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
+            onClick={() => setShowAddModal(true)}
             className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
           >
             + Add URL
@@ -109,18 +107,9 @@ export function ReadingListPanel() {
         </PanelHeader>
       </div>
 
-      {/* Add URL form */}
-      {showAddForm && (
-        <AddUrlForm
-          currentVaultPath={currentVaultPath ?? ''}
-          currentVaultName={vaultStatus?.name ?? ''}
-          recentVaults={recentVaults}
-          onAdd={(url, title, vaultPath, vaultName) => {
-            addItem(url, title, vaultPath, vaultName);
-            setShowAddForm(false);
-          }}
-          onCancel={() => setShowAddForm(false)}
-        />
+      {/* Add URL modal */}
+      {showAddModal && (
+        <AddUrlModal onClose={() => setShowAddModal(false)} />
       )}
 
       {/* Tabs */}
@@ -235,96 +224,6 @@ export function ReadingListPanel() {
             />
           ))
         )}
-      </div>
-    </div>
-  );
-}
-
-function AddUrlForm({
-  currentVaultPath,
-  currentVaultName,
-  recentVaults,
-  onAdd,
-  onCancel,
-}: {
-  currentVaultPath: string;
-  currentVaultName: string;
-  recentVaults: RecentVault[];
-  onAdd: (url: string, title: string, vaultPath: string, vaultName: string) => void;
-  onCancel: () => void;
-}) {
-  const [url, setUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [selectedVault, setSelectedVault] = useState(currentVaultPath);
-
-  const vaultOptions = recentVaults.length > 0
-    ? recentVaults
-    : currentVaultPath
-      ? [{ path: currentVaultPath, name: currentVaultName, lastOpened: '' }]
-      : [];
-
-  const selectedVaultName = vaultOptions.find((v) => v.path === selectedVault)?.name ?? currentVaultName;
-
-  const handleSubmit = () => {
-    if (!url.trim()) return;
-    let normalized = url.trim();
-    if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
-    onAdd(normalized, title || normalized, selectedVault, selectedVaultName);
-  };
-
-  return (
-    <div className="px-3 py-3 border-b border-zinc-700/50 space-y-2 bg-zinc-850 flex-shrink-0" style={{ backgroundColor: '#1a1a1e' }}>
-      <input
-        type="text"
-        placeholder="URL..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-        autoFocus
-        className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-indigo-500"
-      />
-      <input
-        type="text"
-        placeholder="Title (optional)"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-        className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-indigo-500"
-      />
-      {vaultOptions.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500 shrink-0">Vault:</span>
-          <select
-            value={selectedVault}
-            onChange={(e) => setSelectedVault(e.target.value)}
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500"
-          >
-            {vaultOptions.map((v) => (
-              <option key={v.path} value={v.path}>{v.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      {vaultOptions.length === 1 && (
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <span>Vault:</span>
-          <span className="text-zinc-300">{selectedVaultName}</span>
-        </div>
-      )}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={onCancel}
-          className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={!url.trim()}
-          className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors disabled:opacity-50"
-        >
-          Add
-        </button>
       </div>
     </div>
   );

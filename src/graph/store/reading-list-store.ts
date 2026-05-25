@@ -16,7 +16,7 @@ interface ReadingListStore {
   toggleSelectUrl: (url: string) => void;
   selectAllPending: () => void;
   clearSelection: () => void;
-  addItem: (url: string, title: string, vaultPath?: string, vaultName?: string) => Promise<void>;
+  addItem: (url: string, title: string) => Promise<void>;
   fetchTitles: (urls: string[]) => Promise<void>;
   startBatchExtraction: () => void;
   retryExtraction: (url: string) => Promise<void>;
