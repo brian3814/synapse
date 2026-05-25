@@ -7,11 +7,16 @@ interface DropZoneProps {
   onIngest: (source: IngestionSource, mode: ProcessingMode) => void;
 }
 
+function isOverVaultExplorer(e: DragEvent): boolean {
+  return !!(e.target as HTMLElement)?.closest?.('[data-vault-explorer]');
+}
+
 export function DropZone({ onIngest }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
+    if (isOverVaultExplorer(e)) return;
     e.preventDefault();
     e.stopPropagation();
     dragCounter.current += 1;
@@ -21,6 +26,7 @@ export function DropZone({ onIngest }: DropZoneProps) {
   }, []);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
+    if (isOverVaultExplorer(e)) return;
     e.preventDefault();
     e.stopPropagation();
     dragCounter.current -= 1;
@@ -31,12 +37,14 @@ export function DropZone({ onIngest }: DropZoneProps) {
   }, []);
 
   const handleDragOver = useCallback((e: DragEvent) => {
+    if (isOverVaultExplorer(e)) return;
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
   const handleDrop = useCallback(
     async (e: DragEvent) => {
+      if (isOverVaultExplorer(e)) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter.current = 0;

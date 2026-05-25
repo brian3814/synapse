@@ -171,6 +171,8 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
 
       <ReadingListSettings />
 
+      <ImportBehaviorSection />
+
       <StressTest />
 
       <DangerZone />
@@ -505,6 +507,44 @@ function ReadingListSettings() {
         </div>
         <p className="text-[10px] text-zinc-500 mt-1">
           Number of reading list items to extract simultaneously (1-10).
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ImportBehaviorSection() {
+  const PREF_KEY = 'vault-import-delete-original';
+  const [value, setValue] = useState<string>(localStorage.getItem(PREF_KEY) ?? 'ask');
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    setValue(next);
+    if (next === 'ask') {
+      localStorage.removeItem(PREF_KEY);
+    } else {
+      localStorage.setItem(PREF_KEY, next);
+    }
+  };
+
+  return (
+    <div className="space-y-3 border-t border-zinc-800 pt-5 mt-5">
+      <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">File Import</h3>
+      <div>
+        <label className="text-xs font-medium text-zinc-400 block mb-1">
+          After importing files
+        </label>
+        <select
+          value={value}
+          onChange={handleChange}
+          className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 w-48"
+        >
+          <option value="ask">Ask on import</option>
+          <option value="keep">Keep original</option>
+          <option value="delete">Delete original</option>
+        </select>
+        <p className="text-[10px] text-zinc-500 mt-1">
+          Controls whether original files are kept or deleted after importing into the vault.
         </p>
       </div>
     </div>

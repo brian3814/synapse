@@ -1,4 +1,4 @@
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo, useState, useEffect } from 'react';
 import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { Header } from '../components/Header';
@@ -11,7 +11,10 @@ import { ContentTabBar } from '../components/ContentTabBar';
 import { ColumnDropZone } from '../components/ColumnDropZone';
 import { NoteEditor } from '../components/notes/NoteEditor';
 import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
+import { VaultDrawer } from '../components/layout/VaultDrawer';
+import { ViewerTab } from '../components/tabs/ViewerTab';
 import { useUIStore } from '../../graph/store/ui-store';
+import { vaultWorkspace } from '@platform';
 import type { ContentColumn } from '../../graph/store/ui-store';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
@@ -32,6 +35,32 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
   const reorderContentTabs = useUIStore((s) => s.reorderContentTabs);
   const setColumnFlex = useUIStore((s) => s.setColumnFlex);
   const showChatSidebar = chatOpen && chatDisplayMode === 'sidebar';
+
+  const [vaultPath, setVaultPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    vaultWorkspace.getStatus().then((status) => {
+      if (status.open && status.path) setVaultPath(status.path);
+    });
+  }, []);
+
+  const handleOpenFile = useCallback((filePath: string, fileType: string) => {
+    const fileName = filePath.split('/').pop() ?? filePath;
+    if (fileType === 'note' && vaultPath) {
+      // Only match notes in the vault's own notes/ directory, not /notes/ anywhere in the path
+      const notesPrefix = `${vaultPath}/notes/`;
+      if (filePath.startsWith(notesPrefix) && filePath.endsWith('.md')) {
+        const noteId = filePath.slice(notesPrefix.length, -3);
+        useUIStore.getState().openContentTab({ kind: 'noteEditor', noteId }, fileName);
+        return;
+      }
+    }
+    if (fileType === 'note' || fileType === 'image' || fileType === 'pdf') {
+      useUIStore.getState().openContentTab({ kind: 'viewer', filePath }, fileName);
+    } else {
+      (window as any).electronIPC.invoke('vault-explorer:open-external', filePath);
+    }
+  }, [vaultPath]);
 
   const snapshot = useRef(contentColumns);
   const columnsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -88,6 +117,9 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
       <Header onIngest={onIngest} />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex-1 flex overflow-hidden min-h-0" ref={columnsContainerRef}>
+          {vaultPath && (
+            <VaultDrawer rootPath={vaultPath} onOpenFile={handleOpenFile} />
+          )}
           {contentColumns.map((col, i) => (
             <ColumnWithDropZones
               key={col.id}
@@ -215,6 +247,8 @@ function ColumnWithDropZones({
                 <KnowledgeGraph />
               ) : tab.type.kind === 'extractionReview' ? (
                 <ExtractionReviewTab />
+              ) : tab.type.kind === 'viewer' ? (
+                <ViewerTab filePath={tab.type.filePath} />
               ) : (
                 <div className="h-full overflow-y-auto bg-zinc-900">
                   <NoteEditor nodeId={tab.type.noteId} isTab />

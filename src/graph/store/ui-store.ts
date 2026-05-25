@@ -8,7 +8,8 @@ type ChatDisplayMode = 'float' | 'sidebar';
 export type ContentTabType =
   | { kind: 'graph' }
   | { kind: 'noteEditor'; noteId: string }
-  | { kind: 'extractionReview' };
+  | { kind: 'extractionReview' }
+  | { kind: 'viewer'; filePath: string };
 
 export interface ContentTab {
   id: string;
@@ -26,7 +27,9 @@ export interface ContentColumn {
 function contentTabId(type: ContentTabType): string {
   if (type.kind === 'graph') return 'graph';
   if (type.kind === 'extractionReview') return 'extraction-review';
-  return `note-${type.noteId}`;
+  if (type.kind === 'noteEditor') return `note-${type.noteId}`;
+  if (type.kind === 'viewer') return `viewer-${type.filePath}`;
+  return 'unknown';
 }
 
 let columnCounter = 0;
@@ -88,6 +91,13 @@ interface UIStore {
   pendingEditNoteId: string | null;
   setPendingEditNoteId: (id: string | null) => void;
 
+  vaultDrawerOpen: boolean;
+  vaultDrawerWidth: number;
+  vaultDrawerExpandedPaths: string[];
+  toggleVaultDrawer: () => void;
+  setVaultDrawerWidth: (width: number) => void;
+  setVaultDrawerExpandedPaths: (paths: string[]) => void;
+
   contentColumns: ContentColumn[];
   activeColumnId: string;
   openContentTab: (type: ContentTabType, title: string) => void;
@@ -115,6 +125,25 @@ export const useUIStore = create<UIStore>((set) => ({
   llmModalOpen: false,
   visibleLayers: { entity: true, note: false, resource: false },
   pendingEditNoteId: null,
+
+  vaultDrawerOpen: JSON.parse(localStorage.getItem('vault-drawer-open') ?? 'false'),
+  vaultDrawerWidth: JSON.parse(localStorage.getItem('vault-drawer-width') ?? '240'),
+  vaultDrawerExpandedPaths: JSON.parse(localStorage.getItem('vault-drawer-expanded') ?? '[]'),
+
+  toggleVaultDrawer: () => set((state) => {
+    const next = !state.vaultDrawerOpen;
+    localStorage.setItem('vault-drawer-open', JSON.stringify(next));
+    return { vaultDrawerOpen: next };
+  }),
+  setVaultDrawerWidth: (width) => set(() => {
+    const clamped = Math.min(400, Math.max(180, width));
+    localStorage.setItem('vault-drawer-width', JSON.stringify(clamped));
+    return { vaultDrawerWidth: clamped };
+  }),
+  setVaultDrawerExpandedPaths: (paths) => set(() => {
+    localStorage.setItem('vault-drawer-expanded', JSON.stringify(paths));
+    return { vaultDrawerExpandedPaths: paths };
+  }),
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),

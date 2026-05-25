@@ -339,6 +339,91 @@ app.whenReady().then(() => {
     return { bytes, fileCount };
   });
 
+  // ── Vault Explorer — filesystem operations ──────────────────────────────
+  function readDirTree(dirPath: string, depth: number): any[] {
+    let entries;
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return entries
+      .filter(e => e.name !== '.DS_Store' && e.name !== 'Thumbs.db')
+      .map(e => ({
+        id: path.join(dirPath, e.name),
+        name: e.name,
+        isFolder: e.isDirectory(),
+        children: e.isDirectory() && depth < 10 ? readDirTree(path.join(dirPath, e.name), depth + 1) : e.isDirectory() ? [] : undefined,
+      }))
+      .sort((a: any, b: any) => {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  }
+
+  ipcMain.handle('vault-explorer:read-tree', async (_event, rootDir: string) => {
+    return readDirTree(rootDir, 0);
+  });
+
+  ipcMain.handle('vault-explorer:create-file', async (_event, dirPath: string, name: string) => {
+    const fullPath = path.join(dirPath, name);
+    fs.writeFileSync(fullPath, '', { flag: 'wx' });
+  });
+
+  ipcMain.handle('vault-explorer:create-folder', async (_event, dirPath: string, name: string) => {
+    fs.mkdirSync(path.join(dirPath, name));
+  });
+
+  ipcMain.handle('vault-explorer:rename', async (_event, oldPath: string, newPath: string) => {
+    fs.renameSync(oldPath, newPath);
+  });
+
+  ipcMain.handle('vault-explorer:delete', async (_event, targetPath: string) => {
+    await shell.trashItem(targetPath);
+  });
+
+  ipcMain.handle('vault-explorer:move', async (_event, sourcePath: string, destDir: string) => {
+    const name = path.basename(sourcePath);
+    let destPath = path.join(destDir, name);
+    let counter = 1;
+    while (fs.existsSync(destPath)) {
+      const ext = path.extname(name);
+      const base = name.slice(0, name.length - ext.length);
+      destPath = path.join(destDir, `${base} (${counter})${ext}`);
+      counter++;
+    }
+    fs.renameSync(sourcePath, destPath);
+  });
+
+  ipcMain.handle('vault-explorer:import-files', async (_event, filePaths: string[], destDir: string) => {
+    for (const srcPath of filePaths) {
+      const name = path.basename(srcPath);
+      let destPath = path.join(destDir, name);
+      let counter = 1;
+      while (fs.existsSync(destPath)) {
+        const ext = path.extname(name);
+        const base = name.slice(0, name.length - ext.length);
+        destPath = path.join(destDir, `${base} (${counter})${ext}`);
+        counter++;
+      }
+      fs.copyFileSync(srcPath, destPath);
+    }
+  });
+
+  ipcMain.handle('vault-explorer:read-file', async (_event, filePath: string) => {
+    return Array.from(fs.readFileSync(filePath));
+  });
+
+  ipcMain.handle('vault-explorer:delete-files', async (_event, filePaths: string[]) => {
+    for (const p of filePaths) {
+      await shell.trashItem(p);
+    }
+  });
+
+  ipcMain.handle('vault-explorer:open-external', async (_event, filePath: string) => {
+    await shell.openPath(filePath);
+  });
+
   ipcMain.handle('files:read', (_event, filePath: string) => {
     return filesBackend.readFile(filePath);
   });
@@ -440,6 +525,18 @@ app.whenReady().then(() => {
     // Start file watcher for live changes
     fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
     fileWatcher.start();
+
+    // Forward file-watcher events to renderer for vault explorer
+    ctx.eventBus.on('file:added', () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'added' });
+      }
+    });
+    ctx.eventBus.on('file:removed', () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'removed' });
+      }
+    });
 
     // Initialize tool registry with BuiltinToolProvider
     const mainCtx = createMainProcessContext({
