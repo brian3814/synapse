@@ -22,6 +22,12 @@ export class StandaloneGraphProvider {
   private embeddingService: EmbeddingService | null = null;
 
   async initEmbeddings(config: Partial<EmbeddingConfig>): Promise<void> {
+    // Set worker path for ONNX provider to find the bundled worker file
+    if (!process.env.SYNAPSE_ONNX_WORKER_PATH) {
+      process.env.SYNAPSE_ONNX_WORKER_PATH = path.join(
+        path.dirname(new URL(import.meta.url).pathname), 'onnx-worker.cjs'
+      );
+    }
     try {
       this.embeddingService = new EmbeddingService(
         () => this.db,
