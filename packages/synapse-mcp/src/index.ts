@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
+import type { EmbeddingConfig } from '../../../src/embeddings/types';
 
 function notifyApp(): void {
   const req = http.request(
@@ -104,6 +105,59 @@ function discoverVaultPaths(): string[] {
   }
 
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// Embedding config: read from desktop app's storage.json
+// ---------------------------------------------------------------------------
+
+function loadEmbeddingConfig(): Partial<EmbeddingConfig> | null {
+  const candidates = [
+    path.join(os.homedir(), 'Library', 'Application Support', 'kg-extension', 'storage.json'),
+    path.join(os.homedir(), '.config', 'kg-extension', 'storage.json'),
+    path.join(os.homedir(), 'AppData', 'Roaming', 'kg-extension', 'storage.json'),
+  ];
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+      const config = data.embeddingConfig as Partial<EmbeddingConfig> | undefined;
+      if (!config?.enabled) return null;
+
+      if (config.providerId?.startsWith('openai')) {
+        const envKey = process.env.OPENAI_API_KEY;
+        if (envKey) {
+          config.openaiApiKey = envKey;
+        }
+        if (!config.openaiApiKey) {
+          console.warn(
+            'OpenAI embeddings configured but no API key found. '
+            + 'Set OPENAI_API_KEY env var in your MCP client config.'
+          );
+          return null;
+        }
+      }
+
+      if (config.providerId?.startsWith('onnx')) {
+        const cacheDir = process.env.SYNAPSE_MODELS_DIR
+          || path.join(os.homedir(), '.synapse', 'models');
+        const modelDir = path.join(cacheDir, 'Xenova', 'all-MiniLM-L6-v2');
+        if (!fs.existsSync(modelDir)) {
+          console.warn(
+            'ONNX model not cached. Open the Synapse desktop app and enable '
+            + 'embeddings to download the model.'
+          );
+          return null;
+        }
+      }
+
+      return config;
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
