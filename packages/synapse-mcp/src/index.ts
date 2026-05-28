@@ -1,3 +1,11 @@
+// MCP stdio transport uses stdout exclusively for JSON-RPC.
+// Redirect all logging to stderr to prevent protocol corruption.
+// See: docs/pitfalls/mcp-stdio-stdout-corruption.md
+console.log = (...args: unknown[]) => { process.stderr.write(args.join(' ') + '\n'); };
+console.warn = (...args: unknown[]) => { process.stderr.write('[WARN] ' + args.join(' ') + '\n'); };
+console.error = (...args: unknown[]) => { process.stderr.write('[ERROR] ' + args.join(' ') + '\n'); };
+console.debug = (...args: unknown[]) => { process.stderr.write('[DEBUG] ' + args.join(' ') + '\n'); };
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -432,6 +440,20 @@ const TOOL_MERGE_NODES = {
   },
 };
 
+const TOOL_SEMANTIC_SEARCH = {
+  name: 'semantic_search',
+  description: 'Find nodes semantically similar to a query using vector embeddings, even without keyword overlap. Requires embeddings to be enabled in the Synapse desktop app and OPENAI_API_KEY env var for standalone MCP mode.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      query: { type: 'string', description: 'Natural language search query.' },
+      limit: { type: 'number', description: 'Max results (default 5).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: ['query'],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -495,6 +517,7 @@ async function main(): Promise<void> {
     TOOL_SEARCH_NODES, TOOL_GET_NODE_DETAILS, TOOL_GET_NEIGHBORS,
     TOOL_GET_GRAPH_OVERVIEW, TOOL_GET_SUBGRAPH, TOOL_GET_NODES_BY_TYPE,
     TOOL_READ_NOTE, TOOL_LIST_NOTES, TOOL_SEARCH_NOTES, TOOL_FIND_SIMILAR_ENTITIES,
+    TOOL_SEMANTIC_SEARCH,
   ];
   const writeTools = [
     TOOL_CREATE_NODE, TOOL_UPDATE_NODE, TOOL_DELETE_NODE,
@@ -779,6 +802,16 @@ async function main(): Promise<void> {
         if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
         const { result, isError } = vault.provider.mergeNodes(primaryId, secondaryId);
         if (!isError) notifyApp();
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'semantic_search': {
+        const query = getString(toolArgs, 'query');
+        if (!query) return { content: [{ type: 'text', text: JSON.stringify({ error: 'query is required' }) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 5;
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const { result, isError } = await vault.provider.semanticSearch(query, limit);
         return { content: [{ type: 'text', text: result }], isError };
       }
 
