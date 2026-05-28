@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { EmbeddingService } from '../../../electron/embeddings/embedding-service';
+import type { EmbeddingConfig } from '../../../src/embeddings/types';
 
 export interface StandaloneToolResult {
   result: string;
@@ -9,10 +11,36 @@ export interface StandaloneToolResult {
 
 export class StandaloneGraphProvider {
   private db: Database.Database;
+  private vaultPath: string;
 
   constructor(vaultPath: string, readonly: boolean = true) {
+    this.vaultPath = vaultPath;
     const dbPath = path.join(vaultPath, '.kg', 'graph.db');
     this.db = new Database(dbPath, { readonly });
+  }
+
+  private embeddingService: EmbeddingService | null = null;
+
+  async initEmbeddings(config: Partial<EmbeddingConfig>): Promise<void> {
+    try {
+      this.embeddingService = new EmbeddingService(
+        () => this.db,
+        (nodeId: string) => {
+          const node = this.db.prepare('SELECT vault_path FROM nodes WHERE id = ?')
+            .get(nodeId) as { vault_path: string | null } | undefined;
+          if (node?.vault_path) {
+            const absPath = path.join(this.vaultPath, node.vault_path);
+            if (fs.existsSync(absPath)) return fs.readFileSync(absPath, 'utf-8');
+          }
+          return null;
+        },
+      );
+      await this.embeddingService.initialize(config);
+      console.log(`[embeddings] Initialized for vault (provider: ${config.providerId})`);
+    } catch (e) {
+      console.warn(`[embeddings] Failed to initialize: ${e instanceof Error ? e.message : e}`);
+      this.embeddingService = null;
+    }
   }
 
   static initVault(vaultPath: string): void {
@@ -392,7 +420,40 @@ export class StandaloneGraphProvider {
     }
   }
 
+  async semanticSearch(query: string, limit = 5): Promise<StandaloneToolResult> {
+    if (!this.embeddingService?.isEnabled()) {
+      return {
+        result: JSON.stringify({
+          message: 'Embeddings not available. Ensure embeddings are enabled in the Synapse desktop app '
+            + 'and the model is cached (ONNX) or OPENAI_API_KEY is set.',
+        }),
+      };
+    }
+
+    try {
+      const results = await this.embeddingService.searchSimilar(query, limit);
+      if (results.length === 0) {
+        return { result: JSON.stringify({ message: 'No semantic matches found.' }) };
+      }
+
+      const nodeDetails = [];
+      for (const r of results) {
+        const node = this.db.prepare(
+          'SELECT id, name, type, label FROM nodes WHERE id = ?'
+        ).get(r.nodeId) as { id: string; name: string; type: string; label: string | null } | undefined;
+        if (node) {
+          nodeDetails.push({ ...node, similarity: r.score.toFixed(3) });
+        }
+      }
+      return { result: JSON.stringify(nodeDetails) };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
   close(): void {
+    this.embeddingService?.dispose().catch(() => {});
     this.db.close();
   }
 }
