@@ -69,7 +69,13 @@ export class EmbeddingService {
     const { providerId, onnxModelQuality, openaiApiKey, openaiModel } = this.config;
 
     if (providerId.startsWith('onnx')) {
-      return new OnnxProvider(onnxModelQuality);
+      try {
+        const { app } = require('electron');
+        const cacheDir = require('path').join(app.getPath('userData'), 'models');
+        return new OnnxProvider(onnxModelQuality, cacheDir);
+      } catch {
+        return new OnnxProvider(onnxModelQuality);
+      }
     }
     if (providerId.startsWith('openai') && openaiApiKey) {
       return new OpenAIProvider(openaiApiKey, openaiModel ?? 'text-embedding-3-small');
@@ -86,6 +92,7 @@ export class EmbeddingService {
       || oldConfig.onnxModelQuality !== this.config.onnxModelQuality
       || oldConfig.openaiApiKey !== this.config.openaiApiKey
       || oldConfig.openaiModel !== this.config.openaiModel;
+    const strategyChanged = oldConfig.embeddingStrategy !== this.config.embeddingStrategy;
 
     if (!this.config.enabled) {
       if (this.provider) {
@@ -96,13 +103,13 @@ export class EmbeddingService {
       return;
     }
 
-    if (!oldConfig.enabled || providerChanged) {
+    if (!oldConfig.enabled || providerChanged || strategyChanged) {
       if (this.provider) {
         await this.provider.dispose();
         this.provider = null;
         this.queue = null;
       }
-      if (providerChanged && this.vecAvailable) {
+      if ((providerChanged || strategyChanged) && this.vecAvailable) {
         dropVecTable(this.db);
         this.db.prepare('DELETE FROM embedding_metadata').run();
       }
@@ -122,7 +129,7 @@ export class EmbeddingService {
 
     const items = nodes.map((n) => ({
       id: n.id,
-      text: buildEmbeddingText(n, this.db, this.readNote),
+      text: buildEmbeddingText(n, this.db, this.readNote, this.config.embeddingStrategy),
     }));
 
     console.log(`[EmbeddingService] Starting batch embed of ${items.length} nodes`);
@@ -134,7 +141,7 @@ export class EmbeddingService {
     console.log('[EmbeddingService] Batch embed complete');
   }
 
-  async handleNodeMutation(nodeId: string): Promise<void> {
+  async handleNodeMutation(nodeId: string, cascade = true): Promise<void> {
     if (!this.config.enabled || !this.config.autoEmbed || !this.queue) return;
 
     const node = this.db.prepare('SELECT id, name, type, label, summary FROM nodes WHERE id = ?').get(nodeId) as {
@@ -143,17 +150,45 @@ export class EmbeddingService {
 
     if (!node) return;
 
-    const text = buildEmbeddingText(node, this.db, this.readNote);
+    const text = buildEmbeddingText(node, this.db, this.readNote, this.config.embeddingStrategy);
     const hash = computeTextHash(text);
 
     const existing = this.db.prepare('SELECT text_hash FROM embedding_metadata WHERE node_id = ?').get(nodeId) as { text_hash: string } | undefined;
-    if (existing?.text_hash === hash) return;
+    const hashChanged = !existing || existing.text_hash !== hash;
+    if (!hashChanged) return;
 
     this.queue.enqueue(nodeId, text);
+
+    if (cascade && this.config.embeddingStrategy === 'graph-aware') {
+      const neighborIds = this.db.prepare(
+        `SELECT DISTINCT CASE WHEN source_id = ? THEN target_id ELSE source_id END AS nid
+         FROM edges WHERE source_id = ? OR target_id = ?`
+      ).all(nodeId, nodeId, nodeId).map((r: any) => r.nid as string);
+      for (const nid of neighborIds) {
+        await this.handleNodeMutation(nid, false);
+      }
+    }
   }
 
   handleNodeDeleted(nodeId: string): void {
     this.queue?.handleNodeDeleted(nodeId);
+  }
+
+  async handleEdgeMutation(sourceId: string, targetId: string): Promise<void> {
+    if (!this.config.enabled || !this.config.autoEmbed || !this.queue) return;
+    if (this.config.embeddingStrategy !== 'graph-aware') return;
+    await this.handleNodeMutation(sourceId, false);
+    await this.handleNodeMutation(targetId, false);
+  }
+
+  async handleNodeMutationBatch(nodeIds: string[]): Promise<void> {
+    if (!this.config.enabled || !this.config.autoEmbed || !this.queue) return;
+    const seen = new Set<string>();
+    for (const nodeId of nodeIds) {
+      if (seen.has(nodeId)) continue;
+      seen.add(nodeId);
+      await this.handleNodeMutation(nodeId, false);
+    }
   }
 
   async searchSimilar(queryText: string, topK = 5): Promise<SemanticSearchResult[]> {

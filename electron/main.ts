@@ -67,6 +67,10 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Ensure model cache dir is set for both Electron and standalone contexts
+  process.env.SYNAPSE_MODELS_DIR = process.env.SYNAPSE_MODELS_DIR
+    || path.join(app.getPath('userData'), 'models');
+
   // Serve renderer files from dist-electron/renderer/ via app:// protocol
   protocol.handle('app', (request) => {
     const url = new URL(request.url);
@@ -124,6 +128,16 @@ app.whenReady().then(() => {
       } catch { /* DB may not be ready */ }
     }
 
+    // Pre-lookup edge endpoints before deletion (edge is gone after action)
+    let deletedEdgeEndpoints: { source_id: string; target_id: string } | undefined;
+    if (action === 'edges.delete') {
+      try {
+        deletedEdgeEndpoints = getDb().prepare(
+          'SELECT source_id, target_id FROM edges WHERE id = ?'
+        ).get(params as string) as { source_id: string; target_id: string } | undefined;
+      } catch { /* DB may not be ready */ }
+    }
+
     const outcome = await dbHandleAction(action, params);
     if (outcome.syncEvent) {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -157,7 +171,7 @@ app.whenReady().then(() => {
       }
     }
 
-    // Notify embedding service of node mutations
+    // Notify embedding service of node and edge mutations
     if (outcome.syncEvent && embeddingService) {
       const eventType = (outcome.syncEvent as any).type;
       if (eventType === 'node_created' || eventType === 'node_updated') {
@@ -166,7 +180,21 @@ app.whenReady().then(() => {
       } else if (eventType === 'node_deleted') {
         const nodeId = (outcome.syncEvent as any).id;
         if (nodeId) embeddingService.handleNodeDeleted(nodeId);
+      } else if (eventType === 'edge_created' || eventType === 'edge_updated') {
+        const edge = (outcome.syncEvent as any).edge;
+        if (edge) embeddingService.handleEdgeMutation(edge.source_id, edge.target_id).catch(() => {});
+      } else if (eventType === 'edge_deleted' && deletedEdgeEndpoints) {
+        embeddingService.handleEdgeMutation(deletedEdgeEndpoints.source_id, deletedEdgeEndpoints.target_id).catch(() => {});
       }
+    }
+
+    // Handle batch mutations (mutation.execute doesn't emit syncEvents)
+    if (action === 'mutation.execute' && embeddingService && outcome.result) {
+      const mutResult = outcome.result as { results?: Array<{ action: string; node?: { id?: string } }> };
+      const nodeIds = (mutResult.results ?? [])
+        .filter((r) => (r.action === 'created' || r.action === 'merged') && r.node?.id)
+        .map((r) => r.node!.id as string);
+      if (nodeIds.length > 0) embeddingService.handleNodeMutationBatch(nodeIds).catch(() => {});
     }
 
     // Emit vault events for handlers (NoteFileHandler, etc.)
@@ -228,10 +256,12 @@ app.whenReady().then(() => {
         const stat = fs.statSync(absPath);
         getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ? WHERE id = ?')
           .run(Math.floor(stat.mtimeMs), stat.size, nodeId);
+        if (embeddingService) embeddingService.handleNodeMutation(nodeId).catch(() => {});
         return;
       }
     }
     notesBackend.writeNote(nodeId, markdown);
+    if (embeddingService) embeddingService.handleNodeMutation(nodeId).catch(() => {});
   });
 
   ipcMain.handle('notes:remove', (_event, nodeId: string) => {
@@ -585,11 +615,23 @@ app.whenReady().then(() => {
       mcpServerBridge = new McpServerBridge({
         registry: toolRegistry,
         config: { ...serverConfig, enabled: true },
-        onGraphMutated: () => {
+        onGraphMutated: (nodeIds?: string[], edgeIds?: string[]) => {
           const windows = BrowserWindow.getAllWindows();
           console.log(`[MCP] Graph mutated, broadcasting reset to ${windows.length} window(s)`);
           for (const win of windows) {
             win.webContents.send('db:sync', { type: 'reset' });
+          }
+          if (embeddingService && nodeIds?.length) {
+            embeddingService.handleNodeMutationBatch(nodeIds).catch(() => {});
+          }
+          if (embeddingService && edgeIds?.length) {
+            for (const edgeId of edgeIds) {
+              try {
+                const edge = getDb().prepare('SELECT source_id, target_id FROM edges WHERE id = ?')
+                  .get(edgeId) as { source_id: string; target_id: string } | undefined;
+                if (edge) embeddingService.handleEdgeMutation(edge.source_id, edge.target_id).catch(() => {});
+              } catch { /* edge may already be deleted */ }
+            }
           }
         },
       });
