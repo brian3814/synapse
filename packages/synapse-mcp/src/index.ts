@@ -172,6 +172,8 @@ interface VaultEntry {
 
 function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): VaultEntry[] {
   const entries: VaultEntry[] = [];
+  const embeddingConfig = loadEmbeddingConfig();
+
   for (const vaultPath of vaultPaths) {
     if (init) {
       StandaloneGraphProvider.initVault(vaultPath);
@@ -183,11 +185,14 @@ function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): V
       continue;
     }
     const name = path.basename(vaultPath);
-    entries.push({
-      name,
-      vaultPath,
-      provider: new StandaloneGraphProvider(vaultPath, !allowWrite),
-    });
+    const provider = new StandaloneGraphProvider(vaultPath, !allowWrite);
+    entries.push({ name, vaultPath, provider });
+
+    if (embeddingConfig) {
+      provider.initEmbeddings(embeddingConfig).catch((e) => {
+        process.stderr.write(`[${name}] Embedding init failed: ${e}\n`);
+      });
+    }
   }
   return entries;
 }
