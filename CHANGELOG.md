@@ -2,6 +2,24 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [0.1.2] - 2026-05-29
+
+### Added
+- Vault explorer drawer with filesystem tree, file viewer, and drag-and-drop import
+- Reading list: multi-URL paste modal with live validation preview (duplicate, HTTP, invalid detection)
+- Reading list: async title extraction from page `<title>` with LLM fallback for missing titles
+- Reading list: enhanced relative time display (weeks, months, years) with "Added X ago" format
+- Reading list: HTTP insecure connection indicator on item cards
+- MCP server: vector embeddings support (ONNX provider made Electron-free, per-vault initialization)
+
+### Changed
+- Reading list `addItem` auto-resolves vault internally (removed vault selection from add flow)
+- MCP ONNX provider refactored with configurable `cacheDir`/`workerPath` for standalone use
+
+### Fixed
+- MCP stdio: redirect console output to stderr to avoid corrupting JSON-RPC protocol
+- Publish: include `docs/images` in public repo
+
 ## [0.1.1] - 2025-05-24
 
 ### Fixed
