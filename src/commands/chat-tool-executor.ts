@@ -3,6 +3,7 @@ import { retrieveRAGContext, formatRAGPrompt } from './rag-commands';
 import { parseMarkdown } from '../notes/markdown-utils';
 import * as graphCommands from './graph-commands';
 import * as memoryCommands from './memory-commands';
+import { executeExtendedTool } from './tools';
 
 export interface ToolExecResult {
   result: string;
@@ -285,7 +286,10 @@ export async function executeTool(
       return { result: JSON.stringify(nodeDetails), collectedNodeIds: nodeDetails.map((n) => n.id) };
     }
 
-    default:
+    default: {
+      const extended = await executeExtendedTool(ctx, name, input);
+      if (extended) return extended;
       return { result: JSON.stringify({ error: `Unknown tool: ${name}` }) };
+    }
   }
 }

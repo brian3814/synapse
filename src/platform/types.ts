@@ -29,6 +29,7 @@ export interface PlatformNotes {
   remove(nodeId: string): Promise<void>;
   list(): Promise<string[]>;
   exists(nodeId: string): Promise<boolean>;
+  onExternalChange?(cb: (nodeId: string) => void): () => void;
 }
 
 export interface PlatformVault {
@@ -73,6 +74,7 @@ export interface AgentRequest {
   notesEnabled: boolean;
   customInstructions?: string;
   disabledTools?: string[];
+  graphContext?: { entityLabels: string[]; edgeLabels: string[] };
 }
 
 export interface ChatRequest {

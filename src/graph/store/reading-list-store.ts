@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ReadingListItem } from '../../shared/types';
-import { storage, browser, platformId, llm } from '@platform';
+import { storage, browser, platformId, llm, vaultWorkspace } from '@platform';
 import { readingListExtractionSchema } from '../../shared/schema';
 
 interface ReadingListStore {
@@ -16,7 +16,8 @@ interface ReadingListStore {
   toggleSelectUrl: (url: string) => void;
   selectAllPending: () => void;
   clearSelection: () => void;
-  addItem: (url: string, title: string, vaultPath: string, vaultName: string) => Promise<void>;
+  addItem: (url: string, title: string) => Promise<void>;
+  fetchTitles: (urls: string[]) => Promise<void>;
   startBatchExtraction: () => void;
   retryExtraction: (url: string) => Promise<void>;
   markComplete: (url: string) => void;
@@ -113,20 +114,95 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
   clearSelection: () => set({ selectedUrls: [] }),
 
-  addItem: async (url, title, vaultPath, vaultName) => {
+  addItem: async (url, title) => {
     const normalized = url.trim();
     if (!normalized) return;
     if (get().items[normalized]) return;
+
+    let targetVaultPath: string | undefined;
+    let targetVaultName: string | undefined;
+    if (platformId === 'electron') {
+      try {
+        const status = await vaultWorkspace.getStatus();
+        if (status.open) {
+          targetVaultPath = status.path;
+          targetVaultName = status.name;
+        }
+      } catch {}
+    }
+
     const item: ReadingListItem = {
       url: normalized,
       title: title.trim() || normalized,
       addedAt: Date.now(),
       status: 'pending',
-      targetVaultPath: vaultPath,
-      targetVaultName: vaultName,
+      targetVaultPath,
+      targetVaultName,
     };
     set((state) => ({ items: { ...state.items, [normalized]: item } }));
     await storage.set({ readingListItems: get().items });
+  },
+
+  fetchTitles: async (urls) => {
+    if (platformId !== 'electron') return;
+
+    const ipc = (window as any).electronIPC;
+    const BAD_TITLES = ['404', 'page not found', 'access denied', 'forbidden', 'not found', 'error', 'untitled'];
+
+    for (const url of urls) {
+      const item = get().items[url];
+      if (!item || item.pageTitle) continue;
+
+      try {
+        const { html } = await ipc.invoke('fetch-url-content', url);
+        if (!html) continue;
+
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const rawTitle = doc.querySelector('title')?.textContent?.trim() ?? '';
+
+        const domain = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return ''; } })();
+        const isUsable = rawTitle
+          && rawTitle.toLowerCase() !== domain.toLowerCase()
+          && !BAD_TITLES.some(bad => rawTitle.toLowerCase().includes(bad));
+
+        let resolvedTitle = '';
+
+        if (isUsable) {
+          resolvedTitle = rawTitle;
+        } else {
+          try {
+            const configResult = await storage.get('llmConfig') as Record<string, any>;
+            const config = configResult.llmConfig;
+            if (config?.apiKey) {
+              const textContent = doc.body?.textContent?.slice(0, 2000) ?? '';
+              if (textContent.trim()) {
+                const result = await llm.streamChat({
+                  requestId: crypto.randomUUID(),
+                  model: config.model,
+                  systemPrompt: 'Generate a concise title (about 5-8 words) for this web page content. Return only the title text, nothing else.',
+                  messages: [{ role: 'user', content: textContent }],
+                }, () => {});
+                resolvedTitle = result.textContent.trim();
+              }
+            }
+          } catch {}
+        }
+
+        if (resolvedTitle) {
+          set((state) => ({
+            items: {
+              ...state.items,
+              [url]: { ...state.items[url], pageTitle: resolvedTitle },
+            },
+          }));
+          await storage.set({ readingListItems: get().items });
+        }
+      } catch {}
+
+      if (urls.indexOf(url) < urls.length - 1) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
   },
 
   startBatchExtraction: async () => {

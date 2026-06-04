@@ -1,3 +1,11 @@
+// MCP stdio transport uses stdout exclusively for JSON-RPC.
+// Redirect all logging to stderr to prevent protocol corruption.
+// See: docs/pitfalls/mcp-stdio-stdout-corruption.md
+console.log = (...args: unknown[]) => { process.stderr.write(args.join(' ') + '\n'); };
+console.warn = (...args: unknown[]) => { process.stderr.write('[WARN] ' + args.join(' ') + '\n'); };
+console.error = (...args: unknown[]) => { process.stderr.write('[ERROR] ' + args.join(' ') + '\n'); };
+console.debug = (...args: unknown[]) => { process.stderr.write('[DEBUG] ' + args.join(' ') + '\n'); };
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -6,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
+import type { EmbeddingConfig } from '../../../src/embeddings/types';
 
 function notifyApp(): void {
   const req = http.request(
@@ -99,6 +108,59 @@ function discoverVaultPaths(): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Embedding config: read from desktop app's storage.json
+// ---------------------------------------------------------------------------
+
+function loadEmbeddingConfig(): Partial<EmbeddingConfig> | null {
+  const candidates = [
+    path.join(os.homedir(), 'Library', 'Application Support', 'kg-extension', 'storage.json'),
+    path.join(os.homedir(), '.config', 'kg-extension', 'storage.json'),
+    path.join(os.homedir(), 'AppData', 'Roaming', 'kg-extension', 'storage.json'),
+  ];
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+      const config = data.embeddingConfig as Partial<EmbeddingConfig> | undefined;
+      if (!config?.enabled) return null;
+
+      if (config.providerId?.startsWith('openai')) {
+        const envKey = process.env.OPENAI_API_KEY;
+        if (envKey) {
+          config.openaiApiKey = envKey;
+        }
+        if (!config.openaiApiKey) {
+          console.warn(
+            'OpenAI embeddings configured but no API key found. '
+            + 'Set OPENAI_API_KEY env var in your MCP client config.'
+          );
+          return null;
+        }
+      }
+
+      if (config.providerId?.startsWith('onnx')) {
+        const cacheDir = process.env.SYNAPSE_MODELS_DIR
+          || path.join(os.homedir(), '.synapse', 'models');
+        const modelDir = path.join(cacheDir, 'Xenova', 'all-MiniLM-L6-v2');
+        if (!fs.existsSync(modelDir)) {
+          console.warn(
+            'ONNX model not cached. Open the Synapse desktop app and enable '
+            + 'embeddings to download the model.'
+          );
+          return null;
+        }
+      }
+
+      return config;
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Vault registry
 // ---------------------------------------------------------------------------
 
@@ -110,6 +172,8 @@ interface VaultEntry {
 
 function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): VaultEntry[] {
   const entries: VaultEntry[] = [];
+  const embeddingConfig = loadEmbeddingConfig();
+
   for (const vaultPath of vaultPaths) {
     if (init) {
       StandaloneGraphProvider.initVault(vaultPath);
@@ -121,11 +185,14 @@ function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): V
       continue;
     }
     const name = path.basename(vaultPath);
-    entries.push({
-      name,
-      vaultPath,
-      provider: new StandaloneGraphProvider(vaultPath, !allowWrite),
-    });
+    const provider = new StandaloneGraphProvider(vaultPath, !allowWrite);
+    entries.push({ name, vaultPath, provider });
+
+    if (embeddingConfig) {
+      provider.initEmbeddings(embeddingConfig).catch((e) => {
+        process.stderr.write(`[${name}] Embedding init failed: ${e}\n`);
+      });
+    }
   }
   return entries;
 }
@@ -432,6 +499,20 @@ const TOOL_MERGE_NODES = {
   },
 };
 
+const TOOL_SEMANTIC_SEARCH = {
+  name: 'semantic_search',
+  description: 'Find nodes semantically similar to a query using vector embeddings, even without keyword overlap. Requires embeddings to be enabled in the Synapse desktop app and OPENAI_API_KEY env var for standalone MCP mode.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      query: { type: 'string', description: 'Natural language search query.' },
+      limit: { type: 'number', description: 'Max results (default 5).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: ['query'],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -495,6 +576,7 @@ async function main(): Promise<void> {
     TOOL_SEARCH_NODES, TOOL_GET_NODE_DETAILS, TOOL_GET_NEIGHBORS,
     TOOL_GET_GRAPH_OVERVIEW, TOOL_GET_SUBGRAPH, TOOL_GET_NODES_BY_TYPE,
     TOOL_READ_NOTE, TOOL_LIST_NOTES, TOOL_SEARCH_NOTES, TOOL_FIND_SIMILAR_ENTITIES,
+    TOOL_SEMANTIC_SEARCH,
   ];
   const writeTools = [
     TOOL_CREATE_NODE, TOOL_UPDATE_NODE, TOOL_DELETE_NODE,
@@ -779,6 +861,16 @@ async function main(): Promise<void> {
         if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
         const { result, isError } = vault.provider.mergeNodes(primaryId, secondaryId);
         if (!isError) notifyApp();
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'semantic_search': {
+        const query = getString(toolArgs, 'query');
+        if (!query) return { content: [{ type: 'text', text: JSON.stringify({ error: 'query is required' }) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 5;
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const { result, isError } = await vault.provider.semanticSearch(query, limit);
         return { content: [{ type: 'text', text: result }], isError };
       }
 

@@ -309,7 +309,7 @@ export async function handleStreamExtraction(payload: any, send: SendFn): Promis
 }
 
 export async function handleRunAgent(payload: any, send: SendFn): Promise<void> {
-  const { runId, userPrompt, model, notesEnabled, customInstructions, disabledTools } = payload;
+  const { runId, userPrompt, model, notesEnabled, customInstructions, disabledTools, graphContext } = payload;
   try {
     const { apiKey, provider } = getLLMConfig();
     const streamFn = getStreamFn(provider);
@@ -332,7 +332,7 @@ export async function handleRunAgent(payload: any, send: SendFn): Promise<void> 
     };
 
     await coreRunAgentLoop(
-      { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false, customInstructions, disabledTools },
+      { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false, customInstructions, disabledTools, graphContext },
       streamFn,
       toolExecutor,
       (event: AgentProgressEvent) => {

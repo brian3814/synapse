@@ -1,7 +1,10 @@
 import { Worker } from 'worker_threads';
-import { app } from 'electron';
 import { join } from 'path';
+import { homedir } from 'os';
 import type { EmbeddingProvider } from '../../src/embeddings/types';
+
+const DEFAULT_CACHE_DIR = process.env.SYNAPSE_MODELS_DIR
+  || join(homedir(), '.synapse', 'models');
 
 export class OnnxProvider implements EmbeddingProvider {
   readonly id: string;
@@ -12,15 +15,22 @@ export class OnnxProvider implements EmbeddingProvider {
   private worker: Worker | null = null;
   private pendingRequests = new Map<string, { resolve: (v: Float32Array[]) => void; reject: (e: Error) => void }>();
   private modelQuality: 'quantized' | 'full';
+  private cacheDir: string;
+  private workerPath: string;
 
-  constructor(modelQuality: 'quantized' | 'full' = 'quantized') {
+  constructor(
+    modelQuality: 'quantized' | 'full' = 'quantized',
+    cacheDir?: string,
+    workerPath?: string,
+  ) {
     this.modelQuality = modelQuality;
     this.id = modelQuality === 'full' ? 'onnx-minilm-full' : 'onnx-minilm';
+    this.cacheDir = cacheDir || DEFAULT_CACHE_DIR;
+    this.workerPath = workerPath || process.env.SYNAPSE_ONNX_WORKER_PATH || join(__dirname, 'embeddings', 'onnx-worker.cjs');
   }
 
   async initialize(): Promise<void> {
-    const workerPath = join(__dirname, 'embeddings', 'onnx-worker.cjs');
-    this.worker = new Worker(workerPath);
+    this.worker = new Worker(this.workerPath);
 
     this.worker.on('error', (e) => {
       console.error('[onnx-worker] Thread error:', e);
@@ -36,7 +46,6 @@ export class OnnxProvider implements EmbeddingProvider {
       }
     });
 
-    const cacheDir = join(app.getPath('userData'), 'models');
     await new Promise<void>((resolve, reject) => {
       const onMsg = (msg: { type: string; error?: string }) => {
         if (msg.type === 'ready') {
@@ -48,7 +57,7 @@ export class OnnxProvider implements EmbeddingProvider {
         }
       };
       this.worker!.on('message', onMsg);
-      this.worker!.postMessage({ type: 'load', modelQuality: this.modelQuality, cacheDir });
+      this.worker!.postMessage({ type: 'load', modelQuality: this.modelQuality, cacheDir: this.cacheDir });
     });
   }
 

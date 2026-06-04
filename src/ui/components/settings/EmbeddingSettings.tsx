@@ -10,6 +10,7 @@ export function EmbeddingSettings() {
   const [status, setStatus] = useState<EmbeddingStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmSwitch, setConfirmSwitch] = useState(false);
+  const [confirmStrategySwitch, setConfirmStrategySwitch] = useState<'basic' | 'graph-aware' | null>(null);
 
   useEffect(() => {
     storage.get(STORAGE_KEY).then((result: any) => {
@@ -129,6 +130,34 @@ export function EmbeddingSettings() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Embedding Strategy</div>
+
+            <label className={`flex items-start gap-2 p-2 rounded border cursor-pointer hover:border-zinc-500 transition-colors ${config.embeddingStrategy === 'basic' ? 'border-indigo-600' : 'border-zinc-700'}`}>
+              <input type="radio" name="strategy" checked={config.embeddingStrategy === 'basic'}
+                onChange={() => {
+                  if (config.embeddingStrategy !== 'basic') setConfirmStrategySwitch('basic');
+                }}
+                className="mt-1" />
+              <div>
+                <div className="text-sm text-zinc-200">Standard</div>
+                <div className="text-xs text-zinc-500">Embeds each node using its name, label, and summary.</div>
+              </div>
+            </label>
+
+            <label className={`flex items-start gap-2 p-2 rounded border cursor-pointer hover:border-zinc-500 transition-colors ${config.embeddingStrategy === 'graph-aware' ? 'border-indigo-600' : 'border-zinc-700'}`}>
+              <input type="radio" name="strategy" checked={config.embeddingStrategy === 'graph-aware'}
+                onChange={() => {
+                  if (config.embeddingStrategy !== 'graph-aware') setConfirmStrategySwitch('graph-aware');
+                }}
+                className="mt-1" />
+              <div>
+                <div className="text-sm text-zinc-200">Graph-Aware</div>
+                <div className="text-xs text-zinc-500">Includes neighbor names and edge labels. Better for relationship-based queries.</div>
+              </div>
+            </label>
+          </div>
+
           <div className="flex items-center gap-2 text-xs">
             <span className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-amber-400 animate-pulse' : status?.embeddedNodes ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
             <span className="text-zinc-400">
@@ -150,6 +179,22 @@ export function EmbeddingSettings() {
           </button>
           <div className="text-[10px] text-zinc-600">Recomputes all embeddings. Required after changing provider or model.</div>
         </>
+      )}
+
+      {confirmStrategySwitch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-4 max-w-sm">
+            <div className="text-sm text-zinc-200 mb-2">Switch embedding strategy?</div>
+            <div className="text-xs text-zinc-400 mb-4">All embeddings will be recomputed. This may take a few minutes.</div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmStrategySwitch(null)} className="text-xs px-3 py-1 rounded border border-zinc-600 text-zinc-400">Cancel</button>
+              <button onClick={() => {
+                handleSave({ embeddingStrategy: confirmStrategySwitch });
+                setConfirmStrategySwitch(null);
+              }} className="text-xs px-3 py-1 rounded bg-indigo-600 text-white">Switch</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmSwitch && (

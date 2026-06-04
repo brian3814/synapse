@@ -18,6 +18,7 @@ export interface EmbeddingConfig {
   openaiApiKey?: string;
   openaiModel?: string;
   autoEmbed: boolean;
+  embeddingStrategy: 'basic' | 'graph-aware';
 }
 
 export const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfig = {
@@ -25,6 +26,7 @@ export const DEFAULT_EMBEDDING_CONFIG: EmbeddingConfig = {
   providerId: 'onnx-minilm',
   onnxModelQuality: 'quantized',
   autoEmbed: true,
+  embeddingStrategy: 'basic',
 };
 
 export interface EmbeddingStatus {

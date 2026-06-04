@@ -10,6 +10,7 @@ interface QueueItem {
 
 export class EmbeddingQueue {
   private queue: QueueItem[] = [];
+  private pendingIds = new Set<string>();
   private processing = false;
   private idleDelay = 50;
   private getDb: () => Database.Database;
@@ -24,6 +25,12 @@ export class EmbeddingQueue {
   }
 
   enqueue(nodeId: string, text: string): void {
+    if (this.pendingIds.has(nodeId)) {
+      const idx = this.queue.findIndex((q) => q.nodeId === nodeId);
+      if (idx !== -1) this.queue[idx].text = text;
+      return;
+    }
+    this.pendingIds.add(nodeId);
     this.queue.push({ nodeId, text });
     if (!this.processing) {
       this.drain();
@@ -71,6 +78,7 @@ export class EmbeddingQueue {
 
     while (this.queue.length > 0) {
       const item = this.queue.shift()!;
+      this.pendingIds.delete(item.nodeId);
       try {
         const vec = await this.provider.embed(item.text);
         this.storeEmbedding(item.nodeId, item.text, vec);
@@ -95,6 +103,9 @@ export class EmbeddingQueue {
   }
 
   handleNodeDeleted(nodeId: string): void {
+    this.pendingIds.delete(nodeId);
+    const idx = this.queue.findIndex((q) => q.nodeId === nodeId);
+    if (idx !== -1) this.queue.splice(idx, 1);
     deleteEmbedding(this.db, nodeId);
     this.db.prepare('DELETE FROM embedding_metadata WHERE node_id = ?').run(nodeId);
   }

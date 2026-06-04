@@ -2,6 +2,7 @@
 description: Automatically stages all changes and creates a git commit with an AI-generated message.
 allowed-tools: Bash(git add:*, git commit:*)
 ---
+
 # Task: Automate Git Commit
 Stage all modified and new files to git using `git add .`.
 Then, create a clear and concise one-line commit message using semantic commit notation.

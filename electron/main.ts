@@ -20,6 +20,7 @@ import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
 import { VaultFileWatcher } from './vault/file-watcher';
 import { reconcileVault } from './vault/reconciliation';
+import { computeFileHash } from './vault/content-hash';
 import { registerToolIpcHandlers, registerMcpClientIpcHandlers, broadcastToolsChanged } from './mcp/mcp-ipc';
 import { ToolRegistry } from './mcp/tool-registry';
 import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
@@ -67,6 +68,10 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Ensure model cache dir is set for both Electron and standalone contexts
+  process.env.SYNAPSE_MODELS_DIR = process.env.SYNAPSE_MODELS_DIR
+    || path.join(app.getPath('userData'), 'models');
+
   // Serve renderer files from dist-electron/renderer/ via app:// protocol
   protocol.handle('app', (request) => {
     const url = new URL(request.url);
@@ -124,6 +129,16 @@ app.whenReady().then(() => {
       } catch { /* DB may not be ready */ }
     }
 
+    // Pre-lookup edge endpoints before deletion (edge is gone after action)
+    let deletedEdgeEndpoints: { source_id: string; target_id: string } | undefined;
+    if (action === 'edges.delete') {
+      try {
+        deletedEdgeEndpoints = getDb().prepare(
+          'SELECT source_id, target_id FROM edges WHERE id = ?'
+        ).get(params as string) as { source_id: string; target_id: string } | undefined;
+      } catch { /* DB may not be ready */ }
+    }
+
     const outcome = await dbHandleAction(action, params);
     if (outcome.syncEvent) {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -157,7 +172,7 @@ app.whenReady().then(() => {
       }
     }
 
-    // Notify embedding service of node mutations
+    // Notify embedding service of node and edge mutations
     if (outcome.syncEvent && embeddingService) {
       const eventType = (outcome.syncEvent as any).type;
       if (eventType === 'node_created' || eventType === 'node_updated') {
@@ -166,7 +181,21 @@ app.whenReady().then(() => {
       } else if (eventType === 'node_deleted') {
         const nodeId = (outcome.syncEvent as any).id;
         if (nodeId) embeddingService.handleNodeDeleted(nodeId);
+      } else if (eventType === 'edge_created' || eventType === 'edge_updated') {
+        const edge = (outcome.syncEvent as any).edge;
+        if (edge) embeddingService.handleEdgeMutation(edge.source_id, edge.target_id).catch(() => {});
+      } else if (eventType === 'edge_deleted' && deletedEdgeEndpoints) {
+        embeddingService.handleEdgeMutation(deletedEdgeEndpoints.source_id, deletedEdgeEndpoints.target_id).catch(() => {});
       }
+    }
+
+    // Handle batch mutations (mutation.execute doesn't emit syncEvents)
+    if (action === 'mutation.execute' && embeddingService && outcome.result) {
+      const mutResult = outcome.result as { results?: Array<{ action: string; node?: { id?: string } }> };
+      const nodeIds = (mutResult.results ?? [])
+        .filter((r) => (r.action === 'created' || r.action === 'merged') && r.node?.id)
+        .map((r) => r.node!.id as string);
+      if (nodeIds.length > 0) embeddingService.handleNodeMutationBatch(nodeIds).catch(() => {});
     }
 
     // Emit vault events for handlers (NoteFileHandler, etc.)
@@ -223,15 +252,19 @@ app.whenReady().then(() => {
         .get(nodeId) as { vault_path: string | null } | undefined;
       if (row?.vault_path) {
         const absPath = path.join(ctx.path, row.vault_path);
+        fileWatcher?.markAsAppWritten(row.vault_path);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, markdown, 'utf-8');
         const stat = fs.statSync(absPath);
-        getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ? WHERE id = ?')
-          .run(Math.floor(stat.mtimeMs), stat.size, nodeId);
+        const hash = computeFileHash(absPath);
+        getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?')
+          .run(Math.floor(stat.mtimeMs), stat.size, hash, nodeId);
+        if (embeddingService) embeddingService.handleNodeMutation(nodeId).catch(() => {});
         return;
       }
     }
     notesBackend.writeNote(nodeId, markdown);
+    if (embeddingService) embeddingService.handleNodeMutation(nodeId).catch(() => {});
   });
 
   ipcMain.handle('notes:remove', (_event, nodeId: string) => {
@@ -339,6 +372,91 @@ app.whenReady().then(() => {
     return { bytes, fileCount };
   });
 
+  // ── Vault Explorer — filesystem operations ──────────────────────────────
+  function readDirTree(dirPath: string, depth: number): any[] {
+    let entries;
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return entries
+      .filter(e => e.name !== '.DS_Store' && e.name !== 'Thumbs.db')
+      .map(e => ({
+        id: path.join(dirPath, e.name),
+        name: e.name,
+        isFolder: e.isDirectory(),
+        children: e.isDirectory() && depth < 10 ? readDirTree(path.join(dirPath, e.name), depth + 1) : e.isDirectory() ? [] : undefined,
+      }))
+      .sort((a: any, b: any) => {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  }
+
+  ipcMain.handle('vault-explorer:read-tree', async (_event, rootDir: string) => {
+    return readDirTree(rootDir, 0);
+  });
+
+  ipcMain.handle('vault-explorer:create-file', async (_event, dirPath: string, name: string) => {
+    const fullPath = path.join(dirPath, name);
+    fs.writeFileSync(fullPath, '', { flag: 'wx' });
+  });
+
+  ipcMain.handle('vault-explorer:create-folder', async (_event, dirPath: string, name: string) => {
+    fs.mkdirSync(path.join(dirPath, name));
+  });
+
+  ipcMain.handle('vault-explorer:rename', async (_event, oldPath: string, newPath: string) => {
+    fs.renameSync(oldPath, newPath);
+  });
+
+  ipcMain.handle('vault-explorer:delete', async (_event, targetPath: string) => {
+    await shell.trashItem(targetPath);
+  });
+
+  ipcMain.handle('vault-explorer:move', async (_event, sourcePath: string, destDir: string) => {
+    const name = path.basename(sourcePath);
+    let destPath = path.join(destDir, name);
+    let counter = 1;
+    while (fs.existsSync(destPath)) {
+      const ext = path.extname(name);
+      const base = name.slice(0, name.length - ext.length);
+      destPath = path.join(destDir, `${base} (${counter})${ext}`);
+      counter++;
+    }
+    fs.renameSync(sourcePath, destPath);
+  });
+
+  ipcMain.handle('vault-explorer:import-files', async (_event, filePaths: string[], destDir: string) => {
+    for (const srcPath of filePaths) {
+      const name = path.basename(srcPath);
+      let destPath = path.join(destDir, name);
+      let counter = 1;
+      while (fs.existsSync(destPath)) {
+        const ext = path.extname(name);
+        const base = name.slice(0, name.length - ext.length);
+        destPath = path.join(destDir, `${base} (${counter})${ext}`);
+        counter++;
+      }
+      fs.copyFileSync(srcPath, destPath);
+    }
+  });
+
+  ipcMain.handle('vault-explorer:read-file', async (_event, filePath: string) => {
+    return Array.from(fs.readFileSync(filePath));
+  });
+
+  ipcMain.handle('vault-explorer:delete-files', async (_event, filePaths: string[]) => {
+    for (const p of filePaths) {
+      await shell.trashItem(p);
+    }
+  });
+
+  ipcMain.handle('vault-explorer:open-external', async (_event, filePath: string) => {
+    await shell.openPath(filePath);
+  });
+
   ipcMain.handle('files:read', (_event, filePath: string) => {
     return filesBackend.readFile(filePath);
   });
@@ -405,12 +523,11 @@ app.whenReady().then(() => {
 
   // Auto-open vault from --vault CLI arg (used by relaunch for multi-vault)
   const vaultArgIdx = process.argv.indexOf('--vault');
-  if (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1]) {
-    const vaultPath = process.argv[vaultArgIdx + 1];
-    vaultManager.open(vaultPath)
-      .then(() => registerVaultHandlers())
-      .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e));
-  }
+  const vaultReadyPromise = (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1])
+    ? vaultManager.open(process.argv[vaultArgIdx + 1])
+        .then(() => registerVaultHandlers())
+        .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e))
+    : Promise.resolve();
   let noteFileHandler: NoteFileHandler | null = null;
   let syncBroadcastHandler: SyncBroadcastHandler | null = null;
   let resourceDetectionHandler: ResourceDetectionHandler | null = null;
@@ -441,6 +558,37 @@ app.whenReady().then(() => {
     // Start file watcher for live changes
     fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
     fileWatcher.start();
+
+    // Forward file-watcher events to renderer for vault explorer
+    ctx.eventBus.on('file:added', () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'added' });
+      }
+    });
+    ctx.eventBus.on('file:removed', () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'removed' });
+      }
+    });
+    ctx.eventBus.on('file:changed', (event) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'changed' });
+      }
+      if (embeddingService) {
+        const row = ctx.db.prepare('SELECT id FROM nodes WHERE vault_path = ?')
+          .get(event.relativePath) as { id: string } | undefined;
+        if (row) embeddingService.handleNodeMutation(row.id).catch(() => {});
+      }
+      if (event.relativePath.startsWith('notes/')) {
+        const row = ctx.db.prepare('SELECT id FROM nodes WHERE vault_path = ?')
+          .get(event.relativePath) as { id: string } | undefined;
+        if (row) {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('note:external-change', { nodeId: row.id });
+          }
+        }
+      }
+    });
 
     // Initialize tool registry with BuiltinToolProvider
     const mainCtx = createMainProcessContext({
@@ -489,11 +637,23 @@ app.whenReady().then(() => {
       mcpServerBridge = new McpServerBridge({
         registry: toolRegistry,
         config: { ...serverConfig, enabled: true },
-        onGraphMutated: () => {
+        onGraphMutated: (nodeIds?: string[], edgeIds?: string[]) => {
           const windows = BrowserWindow.getAllWindows();
           console.log(`[MCP] Graph mutated, broadcasting reset to ${windows.length} window(s)`);
           for (const win of windows) {
             win.webContents.send('db:sync', { type: 'reset' });
+          }
+          if (embeddingService && nodeIds?.length) {
+            embeddingService.handleNodeMutationBatch(nodeIds).catch(() => {});
+          }
+          if (embeddingService && edgeIds?.length) {
+            for (const edgeId of edgeIds) {
+              try {
+                const edge = getDb().prepare('SELECT source_id, target_id FROM edges WHERE id = ?')
+                  .get(edgeId) as { source_id: string; target_id: string } | undefined;
+                if (edge) embeddingService.handleEdgeMutation(edge.source_id, edge.target_id).catch(() => {});
+              } catch { /* edge may already be deleted */ }
+            }
           }
         },
       });
@@ -617,7 +777,7 @@ app.whenReady().then(() => {
     spawnVaultProcess(result.filePaths[0]);
   });
 
-  createWindow();
+  vaultReadyPromise.then(() => createWindow());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

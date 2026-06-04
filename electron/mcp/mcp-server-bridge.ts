@@ -7,7 +7,7 @@ import type { IToolRegistry, McpServerExposedConfig, ToolFilter } from './types'
 export interface McpBridgeOptions {
   registry: IToolRegistry;
   config: McpServerExposedConfig;
-  onGraphMutated?: () => void;
+  onGraphMutated?: (nodeIds?: string[], edgeIds?: string[]) => void;
 }
 
 const WRITE_TOOL_NAMES = new Set([
@@ -21,7 +21,7 @@ const WRITE_TOOL_NAMES = new Set([
 export class McpServerBridge {
   private config: McpServerExposedConfig;
   private registry: IToolRegistry;
-  private onGraphMutated?: () => void;
+  private onGraphMutated?: (nodeIds?: string[], edgeIds?: string[]) => void;
 
   constructor(opts: McpBridgeOptions) {
     this.registry = opts.registry;
@@ -81,7 +81,7 @@ export class McpServerBridge {
         const result = await this.registry.executeTool(name, (args ?? {}) as Record<string, unknown>);
 
         if (!result.isError && WRITE_TOOL_NAMES.has(name)) {
-          this.onGraphMutated?.();
+          this.onGraphMutated?.(result.collectedNodeIds, result.collectedEdgeIds);
         }
 
         return {

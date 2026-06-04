@@ -110,16 +110,29 @@ export function startCompanionServer(options: CompanionServerOptions | StorageBa
       return;
     }
 
+    if (req.url === '/api/graph-changed' && req.method === 'POST') {
+      console.log('[Companion] Graph change notification received');
+      const windows = BrowserWindow.getAllWindows();
+      for (const win of windows) {
+        win.webContents.send('db:sync', { type: 'reset' });
+      }
+      json(res, 200, { reloaded: true, windows: windows.length });
+      return;
+    }
+
     if (req.url?.startsWith('/mcp') && opts.getMcpHandler) {
       const handler = opts.getMcpHandler();
       if (handler) {
+        console.log(`[Companion] MCP request: ${req.method} ${req.url}`);
         try {
           await handler(req, res);
         } catch (e: any) {
+          console.error('[Companion] MCP handler error:', e.message);
           json(res, 500, { error: e.message });
         }
         return;
       }
+      console.warn('[Companion] MCP request but handler not ready');
       json(res, 503, { error: 'MCP server not ready (vault not open)' });
       return;
     }

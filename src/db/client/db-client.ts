@@ -70,6 +70,12 @@ export const edges = {
   getTypes: () => sendRequest('edges.getTypes') as Promise<string[]>,
   search: (query: string, limit?: number) =>
     sendRequest('edges.search', { query, limit }, 30_000) as Promise<any[]>,
+  getOntologyEdgeTypes: () =>
+    sendRequest('edges.getOntologyEdgeTypes') as Promise<{ type: string; description: string | null; category: string }[]>,
+  getDistinctEdgeLabels: () =>
+    sendRequest('edges.getDistinctEdgeLabels') as Promise<string[]>,
+  createOntologyEdgeType: (input: { type: string; description?: string; category?: string }) =>
+    sendRequest('edges.createOntologyEdgeType', input) as Promise<boolean>,
 };
 
 // Node type operations
@@ -82,6 +88,8 @@ export const nodeTypes = {
     category?: 'structural' | 'entity_label';
   }) => sendRequest('nodeTypes.create', input) as Promise<any>,
   delete: (type: string) => sendRequest('nodeTypes.delete', type) as Promise<boolean>,
+  getDistinctEntityLabels: () =>
+    sendRequest('nodeTypes.getDistinctEntityLabels') as Promise<string[]>,
 };
 
 // Source content operations

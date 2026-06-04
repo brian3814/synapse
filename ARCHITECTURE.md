@@ -211,7 +211,8 @@ kg_extension/
 │   │   │   ├── llm-store.ts             # Zustand: extraction pipeline state machine
 │   │   │   ├── node-type-store.ts       # Node type definitions + auto-assigned colors
 │   │   │   ├── viewport-store.ts        # Viewport windowing: zoom level, visible/cluster data
-│   │   │   └── extraction-review-store.ts # Ephemeral review session with undo/redo
+│   │   │   ├── extraction-review-store.ts # Ephemeral review session with undo/redo
+│   │   │   └── reading-list-store.ts    # Zustand: reading list items, addItem (auto vault), fetchTitles, batch extraction
 │   │   └── transforms/
 │   │       └── cluster-to-render.ts     # Cluster summaries → RenderNode/RenderEdge for far zoom
 │   ├── core/
@@ -260,6 +261,11 @@ kg_extension/
 │       │   │   ├── DiffView.tsx          # Entity diff review before merge
 │       │   │   ├── ExtractionSummary.tsx # Summary of extracted entities
 │       │   │   └── StreamingOutput.tsx   # Streaming LLM output display
+│       │   ├── reading-list/
+│       │   │   ├── ReadingListPanel.tsx    # Tab view (pending/processing/ready), batch select, filter
+│       │   │   ├── ReadingListItemCard.tsx # Item card with timeAgo, HTTP indicator, merge actions
+│       │   │   ├── ReadingListHistory.tsx  # Merged items history view
+│       │   │   └── AddUrlModal.tsx         # Multi-URL paste modal with live validation preview
 │       │   ├── chat/
 │       │   │   ├── ChatBot.tsx            # Chat container: float/sidebar, input history, node link click handler
 │       │   │   └── ChatMessage.tsx        # Message bubble: markdown, copy button, node: link rendering
@@ -595,6 +601,73 @@ The RAG prompt includes node IDs in entity listings (`(id:abc-123)`) and instruc
 | `useInputHistory.ts` | Ref-based input history (max 50), no re-renders |
 | `rag-pipeline.ts` | Search → expand → fetch sources → format prompt |
 | `ui-store.focusNodeCallback` | Bridge: chat node clicks → graph canvas select + zoom |
+
+---
+
+## Reading List
+
+A URL-based ingestion pipeline for web content. Users add URLs → content is extracted → entities are reviewed and merged into the knowledge graph.
+
+### Data Flow
+
+```
+Add URLs (modal)
+  → items stored in PlatformStorage with status 'pending'
+  → async title fetch: HTML <title> parse, LLM fallback for missing/bad titles
+  → user triggers extraction (single or batch)
+  → fetch page HTML via IPC → LLM extracts summary + entities + relationships
+  → item moves to 'ready' status
+  → user reviews extracted entities via DiffView
+  → merge into graph DB
+  → item marked 'complete', appears in history
+```
+
+### Add URL Modal
+
+`AddUrlModal` supports multi-URL paste (one per line) with live validation:
+- URL parsing: auto-prepend `https://`, validate via `new URL()`, detect `http://` (insecure)
+- Duplicate detection: exact match against existing items in store + within-batch dedup
+- Live preview: per-URL status indicators (valid, insecure, duplicate, invalid)
+- Submit: adds items with domain as placeholder title, kicks off `fetchTitles()` in background
+
+### Async Title Extraction
+
+After adding URLs, `fetchTitles()` processes each URL sequentially (~500ms delay between):
+1. Fetch HTML via `electronIPC.invoke('fetch-url-content', url)`
+2. Parse `<title>` tag via `DOMParser`
+3. Quality check: reject empty, domain-matching, or generic error titles ("404", "page not found", etc.)
+4. LLM fallback: generate ~5-8 word title from first 2000 chars of page content
+5. Store resolved title in `item.pageTitle`, persist to storage
+
+### Vault Resolution
+
+The store's `addItem(url, title)` resolves the vault internally via `vaultWorkspace.getStatus()`. No vault selection in the UI — the app is vault-gated (`App.tsx`), so a vault is always open when the reading list is reachable.
+
+### Companion Extension Path
+
+The Chrome companion extension adds URLs via HTTP POST to `127.0.0.1:19876/api/reading-queue`. The companion server broadcasts to renderer windows via IPC. `useCompanionCapture` hook writes items directly to storage (bypasses `addItem`). Title comes from `document.title` in Chrome — no async title extraction.
+
+### Item States
+
+| Status | Meaning |
+|---|---|
+| `pending` | Added, awaiting extraction |
+| `processing` / `fetching` / `extracting` | Extraction in progress |
+| `ready` / `extracted` | Extraction complete, awaiting review |
+| `failed` | Extraction error (retryable) |
+| `complete` | Merged into graph, shown in history |
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `src/graph/store/reading-list-store.ts` | Zustand store: items, addItem (auto vault), fetchTitles, batch extraction |
+| `src/ui/components/reading-list/AddUrlModal.tsx` | Multi-URL paste modal with live validation preview |
+| `src/ui/components/reading-list/ReadingListPanel.tsx` | Tab view (pending/processing/ready), batch select, filter |
+| `src/ui/components/reading-list/ReadingListItemCard.tsx` | Item card: timeAgo (weeks/months), HTTP indicator, merge actions |
+| `src/ui/components/reading-list/ReadingListHistory.tsx` | Merged items history |
+| `src/ui/hooks/useReadingListMerge.ts` | Merge extracted entities into graph DB |
+| `src/ui/hooks/useCompanionCapture.ts` | IPC listener for companion extension URL adds |
 
 ---
 

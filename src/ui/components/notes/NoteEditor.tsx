@@ -27,10 +27,13 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>(isNewNote ? 'write' : 'preview');
   const [uploading, setUploading] = useState(false);
+  const [showConflictModal, setShowConflictModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const graphStore = useGraphStore();
   // Track the effective note ID (may be created on-the-fly for image uploads)
   const effectiveNodeIdRef = useRef<string | null>(nodeId);
+  const lastSavedTitleRef = useRef('');
+  const lastSavedContentRef = useRef('');
 
   // Load existing note
   useEffect(() => {
@@ -39,12 +42,13 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
     const node = graphStore.nodes.find((n) => n.id === nodeId);
     if (node) {
       setTitle(node.name);
+      lastSavedTitleRef.current = node.name;
     }
-    // Read content from OPFS (canonical source)
     notes.read(nodeId).then((md) => {
       if (md) {
         const parsed = parseMarkdown(md);
         setContent(parsed.content);
+        lastSavedContentRef.current = parsed.content;
       }
     }).catch(() => {});
   }, [nodeId]);
@@ -66,6 +70,32 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
     return () => channel.close();
   }, [nodeId]);
 
+  // External file change detection (e.g. edited in another app while Synapse is running)
+  useEffect(() => {
+    if (!nodeId || !notes.onExternalChange) return;
+    return notes.onExternalChange((changedNodeId) => {
+      if (changedNodeId !== nodeId) return;
+      const isDirty = title !== lastSavedTitleRef.current || content !== lastSavedContentRef.current;
+      if (isDirty) {
+        setShowConflictModal(true);
+      } else {
+        reloadFromDisk(nodeId);
+      }
+    });
+  }, [nodeId, title, content]);
+
+  const reloadFromDisk = useCallback((nid: string) => {
+    notes.read(nid).then((md) => {
+      if (md) {
+        const parsed = parseMarkdown(md);
+        setTitle(parsed.title ?? title);
+        setContent(parsed.content);
+        lastSavedTitleRef.current = parsed.title ?? title;
+        lastSavedContentRef.current = parsed.content;
+      }
+    }).catch(() => {});
+    setShowConflictModal(false);
+  }, [title]);
 
   // Auto-focus textarea
   useEffect(() => {
@@ -125,6 +155,8 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
         // Folder not connected or permission denied — that's fine
       }
 
+      lastSavedTitleRef.current = title;
+      lastSavedContentRef.current = content;
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
 
@@ -331,6 +363,31 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
       >
         {nodeId ? 'Save Note' : 'Create Note'} <span className="text-xs opacity-60">Ctrl+S</span>
       </button>
+
+      {showConflictModal && nodeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-5 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-sm font-medium text-zinc-100 mb-2">Note modified externally</h3>
+            <p className="text-xs text-zinc-400 mb-4">
+              This note was changed outside Synapse. You have unsaved edits.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => reloadFromDisk(nodeId)}
+                className="flex-1 text-xs px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-500"
+              >
+                Load external changes
+              </button>
+              <button
+                onClick={() => setShowConflictModal(false)}
+                className="flex-1 text-xs px-3 py-2 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
+              >
+                Keep my version
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

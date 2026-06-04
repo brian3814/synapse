@@ -1,6 +1,6 @@
 {
   "name": "kg-extension",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/main.cjs",
@@ -12,22 +12,31 @@
     "build:electron-main": "esbuild electron/main.ts electron/preload.ts electron/embeddings/onnx-worker.ts --bundle --platform=node --outdir=dist-electron/main --format=cjs --out-extension:.js=.cjs --external:electron --packages=external",
     "build:electron-renderer": "vite build --config vite.config.electron.ts",
     "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
-    "dev:electron": "npm run build:electron && electron .",
+    "rebuild:electron": "npx @electron/rebuild -f",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "dev:electron": "npm run rebuild:electron && npm run build:electron && electron .",
+    "dev:electron:test": "npm run rebuild:electron && npm run build:electron && electron . --remote-debugging-port=9222",
     "build:companion": "vite build --config packages/companion/vite.config.ts",
     "build:mcp": "cd packages/synapse-mcp && npm run build",
     "dist:mac": "npm run build:electron && electron-builder --mac",
     "dist:win": "npm run build:electron && electron-builder --win",
-    "dist:linux": "npm run build:electron && electron-builder --linux"
+    "dist:linux": "npm run build:electron && electron-builder --linux",
+    "test": "npm run rebuild:node && vitest run",
+    "test:watch": "npm run rebuild:node && vitest"
   },
   "build": {
-    "appId": "com.kg-desktop.app",
-    "productName": "KG Desktop",
+    "appId": "com.synapse.app",
+    "productName": "Synapse",
     "directories": {
       "output": "release",
       "buildResources": "build-resources"
     },
     "files": [
       "dist-electron/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/sqlite-vec-*/**",
+      "node_modules/better-sqlite3/**"
     ],
     "mac": {
       "target": [
@@ -58,10 +67,13 @@
     "better-sqlite3": "^12.9.0",
     "pdfjs-dist": "^5.7.284",
     "react": "^19.2.4",
+    "react-arborist": "^3.7.0",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
+    "react-window": "^2.2.7",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
+    "sqlite-vec": "^0.1.9",
     "three": "^0.183.2",
     "turndown": "^7.2.2",
     "turndown-plugin-gfm": "^1.0.2",
@@ -70,20 +82,23 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.75",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.2.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/chrome": "^0.1.37",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/react-window": "^1.8.8",
     "@types/three": "^0.183.1",
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
-    "sqlite-vec": "^0.1.9",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.8"
   }
 }

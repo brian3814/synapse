@@ -16,13 +16,23 @@ import { VaultSandboxSection } from './VaultSandboxSection';
 
 const CHAT_TOOL_CATEGORIES: Record<string, { tools: string[]; variant?: 'destructive' }> = {
   Read: {
-    tools: ['search_knowledge', 'search_nodes', 'get_node_details', 'get_neighbors', 'get_edges_for_node', 'search_sources', 'get_source_content'],
+    tools: [
+      'search_knowledge', 'search_nodes', 'get_node_details', 'get_neighbors',
+      'get_edges_for_node', 'search_sources', 'get_source_content', 'semantic_search',
+      'get_nodes_batch', 'get_graph_overview', 'get_subgraph', 'get_nodes_by_type',
+      'read_note', 'list_notes', 'search_notes', 'get_edges_between',
+      'find_similar_entities', 'get_aliases', 'get_node_tags',
+    ],
   },
   Write: {
-    tools: ['create_node', 'update_node', 'create_edge', 'manage_memory'],
+    tools: [
+      'create_node', 'update_node', 'create_edge', 'manage_memory',
+      'create_note', 'update_note', 'update_edge',
+      'add_alias', 'tag_node',
+    ],
   },
   Destructive: {
-    tools: ['delete_node', 'merge_nodes'],
+    tools: ['delete_node', 'delete_nodes_batch', 'merge_nodes', 'delete_edge'],
     variant: 'destructive',
   },
 };

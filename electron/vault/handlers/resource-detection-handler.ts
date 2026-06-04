@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import type { VaultContext } from '../vault-context';
 import type { VaultEventBus } from '../event-bus';
 import type { VaultSandboxConfig } from '../../../src/shared/agent-settings-types';
+import { computeFileHash } from '../content-hash';
 
 const MIME_MAP: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -41,6 +42,9 @@ export class ResourceDetectionHandler {
       eventBus.on('file:removed', (event) => {
         this.handleFileRemoved(event.relativePath);
       }),
+      eventBus.on('file:changed', (event) => {
+        this.handleFileChanged(event.relativePath);
+      }),
     );
   }
 
@@ -65,8 +69,8 @@ export class ResourceDetectionHandler {
     ).get(relativePath) as { id: string } | undefined;
 
     if (existing) {
-      // File was modified — update mtime/size
       this.updateFileMeta(existing.id, relativePath);
+      this.ctx.eventBus.emit({ type: 'file:changed', relativePath });
       return;
     }
 
@@ -83,10 +87,11 @@ export class ResourceDetectionHandler {
     const contentType = MIME_MAP[ext] ?? null;
     const id = randomUUID();
     const now = new Date().toISOString();
+    const hash = computeFileHash(absolutePath);
 
     this.ctx.db.prepare(`
-      INSERT INTO nodes (id, identifier, name, type, label, summary, folder_path, properties, x, y, z, color, size, source_url, vault_path, content_type, file_mtime, file_size, created_at, updated_at)
-      VALUES (?, ?, ?, 'resource', NULL, NULL, '', ?, NULL, NULL, NULL, NULL, 1, NULL, ?, ?, ?, ?, ?, ?)
+      INSERT INTO nodes (id, identifier, name, type, label, summary, folder_path, properties, x, y, z, color, size, source_url, vault_path, content_type, file_mtime, file_size, content_hash, created_at, updated_at)
+      VALUES (?, ?, ?, 'resource', NULL, NULL, '', ?, NULL, NULL, NULL, NULL, 1, NULL, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       id,
@@ -96,6 +101,7 @@ export class ResourceDetectionHandler {
       contentType,
       Math.floor(stat.mtimeMs),
       stat.size,
+      hash,
       now,
       now,
     );
@@ -120,13 +126,28 @@ export class ResourceDetectionHandler {
     ).run(new Date().toISOString(), existing.id);
   }
 
+  private handleFileChanged(relativePath: string): void {
+    const existing = this.ctx.db.prepare(
+      'SELECT * FROM nodes WHERE vault_path = ?'
+    ).get(relativePath) as Record<string, unknown> | undefined;
+
+    if (existing) {
+      this.ctx.eventBus.emit({
+        type: 'node:updated',
+        node: existing as any,
+        changes: ['content'],
+      });
+    }
+  }
+
   private updateFileMeta(nodeId: string, relativePath: string): void {
     const absolutePath = this.ctx.resolve(relativePath);
     try {
       const stat = statSync(absolutePath);
+      const hash = computeFileHash(absolutePath);
       this.ctx.db.prepare(
-        'UPDATE nodes SET file_mtime = ?, file_size = ?, updated_at = ? WHERE id = ?'
-      ).run(Math.floor(stat.mtimeMs), stat.size, new Date().toISOString(), nodeId);
+        'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ?, updated_at = ? WHERE id = ?'
+      ).run(Math.floor(stat.mtimeMs), stat.size, hash, new Date().toISOString(), nodeId);
     } catch {
       // File may have been removed between events
     }

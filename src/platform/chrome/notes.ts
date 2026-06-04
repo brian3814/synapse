@@ -59,4 +59,8 @@ export class ChromeNotes implements PlatformNotes {
       return false;
     }
   }
+
+  onExternalChange(_cb: (nodeId: string) => void): () => void {
+    return () => {};
+  }
 }
