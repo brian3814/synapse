@@ -12,13 +12,17 @@
     "build:electron-main": "esbuild electron/main.ts electron/preload.ts electron/embeddings/onnx-worker.ts --bundle --platform=node --outdir=dist-electron/main --format=cjs --out-extension:.js=.cjs --external:electron --packages=external",
     "build:electron-renderer": "vite build --config vite.config.electron.ts",
     "build:electron": "npm run build:electron-main && npm run build:electron-renderer",
-    "dev:electron": "npm run build:electron && electron .",
-    "dev:electron:test": "npm run build:electron && electron . --remote-debugging-port=9222",
+    "rebuild:electron": "npx @electron/rebuild -f",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "dev:electron": "npm run rebuild:electron && npm run build:electron && electron .",
+    "dev:electron:test": "npm run rebuild:electron && npm run build:electron && electron . --remote-debugging-port=9222",
     "build:companion": "vite build --config packages/companion/vite.config.ts",
     "build:mcp": "cd packages/synapse-mcp && npm run build",
     "dist:mac": "npm run build:electron && electron-builder --mac",
     "dist:win": "npm run build:electron && electron-builder --win",
-    "dist:linux": "npm run build:electron && electron-builder --linux"
+    "dist:linux": "npm run build:electron && electron-builder --linux",
+    "test": "npm run rebuild:node && vitest run",
+    "test:watch": "npm run rebuild:node && vitest"
   },
   "build": {
     "appId": "com.synapse.app",
@@ -94,6 +98,7 @@
     "esbuild": "^0.28.0",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.8"
   }
 }
