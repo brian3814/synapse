@@ -29,6 +29,7 @@ export interface PlatformNotes {
   remove(nodeId: string): Promise<void>;
   list(): Promise<string[]>;
   exists(nodeId: string): Promise<boolean>;
+  onExternalChange?(cb: (nodeId: string) => void): () => void;
 }
 
 export interface PlatformVault {

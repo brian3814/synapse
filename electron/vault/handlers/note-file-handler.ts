@@ -37,12 +37,13 @@ export class NoteFileHandler {
   }
 
   private handleNoteCreated(nodeId: string, name: string): void {
-    const relativePath = this.deriveNotePath(name);
+    const row = this.ctx.db.prepare(
+      'SELECT vault_path FROM nodes WHERE id = ?'
+    ).get(nodeId) as { vault_path: string | null } | undefined;
 
-    // Only set vault_path in the DB — do NOT create an empty placeholder file.
-    // The actual file will be created by notes:write with full content.
-    // Creating an empty file here causes a race condition: if notes:write
-    // hasn't run yet, readers see a 0-byte file.
+    if (row?.vault_path) return;
+
+    const relativePath = this.deriveNotePath(name);
     this.ctx.db.prepare(
       'UPDATE nodes SET vault_path = ? WHERE id = ?'
     ).run(relativePath, nodeId);

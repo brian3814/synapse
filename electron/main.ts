@@ -20,6 +20,7 @@ import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
 import { VaultFileWatcher } from './vault/file-watcher';
 import { reconcileVault } from './vault/reconciliation';
+import { computeFileHash } from './vault/content-hash';
 import { registerToolIpcHandlers, registerMcpClientIpcHandlers, broadcastToolsChanged } from './mcp/mcp-ipc';
 import { ToolRegistry } from './mcp/tool-registry';
 import { BuiltinToolProvider } from './mcp/builtin-tool-provider';
@@ -251,11 +252,13 @@ app.whenReady().then(() => {
         .get(nodeId) as { vault_path: string | null } | undefined;
       if (row?.vault_path) {
         const absPath = path.join(ctx.path, row.vault_path);
+        fileWatcher?.markAsAppWritten(row.vault_path);
         fs.mkdirSync(path.dirname(absPath), { recursive: true });
         fs.writeFileSync(absPath, markdown, 'utf-8');
         const stat = fs.statSync(absPath);
-        getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ? WHERE id = ?')
-          .run(Math.floor(stat.mtimeMs), stat.size, nodeId);
+        const hash = computeFileHash(absPath);
+        getDb().prepare('UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?')
+          .run(Math.floor(stat.mtimeMs), stat.size, hash, nodeId);
         if (embeddingService) embeddingService.handleNodeMutation(nodeId).catch(() => {});
         return;
       }
@@ -565,6 +568,25 @@ app.whenReady().then(() => {
     ctx.eventBus.on('file:removed', () => {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('vault-explorer:fs-changed', { type: 'removed' });
+      }
+    });
+    ctx.eventBus.on('file:changed', (event) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('vault-explorer:fs-changed', { type: 'changed' });
+      }
+      if (embeddingService) {
+        const row = ctx.db.prepare('SELECT id FROM nodes WHERE vault_path = ?')
+          .get(event.relativePath) as { id: string } | undefined;
+        if (row) embeddingService.handleNodeMutation(row.id).catch(() => {});
+      }
+      if (event.relativePath.startsWith('notes/')) {
+        const row = ctx.db.prepare('SELECT id FROM nodes WHERE vault_path = ?')
+          .get(event.relativePath) as { id: string } | undefined;
+        if (row) {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('note:external-change', { nodeId: row.id });
+          }
+        }
       }
     });
 

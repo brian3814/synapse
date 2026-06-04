@@ -32,6 +32,13 @@ export class ElectronNotes implements PlatformNotes {
     return window.electronIPC.invoke('notes:exists', nodeId) as Promise<boolean>;
   }
 
+  onExternalChange(cb: (nodeId: string) => void): () => void {
+    return window.electronIPC.on('note:external-change', (data: unknown) => {
+      const payload = data as { nodeId: string };
+      if (payload?.nodeId) cb(payload.nodeId);
+    });
+  }
+
   getStoragePath(): Promise<string> {
     return window.electronIPC.invoke('notes:getPath') as Promise<string>;
   }

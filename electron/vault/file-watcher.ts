@@ -103,9 +103,6 @@ export class VaultFileWatcher {
       if (IGNORE_DIRS.has(part)) return true;
     }
 
-    // Ignore files in notes/ (app-managed by NoteFileHandler)
-    if (parts[0] === 'notes') return true;
-
     // Ignore specific filenames
     const filename = parts[parts.length - 1];
     if (IGNORE_FILES.has(filename)) return true;
