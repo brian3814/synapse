@@ -2,6 +2,24 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [0.2.0] - 2026-06-05
+
+### Added
+- Content-hash-based rename detection: files moved via Finder while the app is off are matched by SHA-256 hash, preserving node identity, edges, and metadata
+- Bidirectional note reconciliation: `.md` files added to `notes/` while offline are auto-imported as note nodes with FTS indexing
+- Live external note change detection: edits made in external editors while Synapse is running trigger re-indexing and re-embedding
+- NoteEditor conflict prompt: modal dialog when external changes conflict with unsaved edits ("Load external changes" / "Keep my version")
+- `file:changed` event: modified files now trigger re-embedding and renderer notification (previously only mtime/size were updated silently)
+- Hash backfill: first startup after upgrade hashes all tracked files for future rename detection
+- Graph-aware embedding strategy: neighbor context (node names + edge labels) included in embedding text for richer semantic search
+- Embedding strategy toggle in Settings UI
+- Test infrastructure: vitest with 30 integration tests covering reconciliation, rename detection, note creation, and handler behavior
+- `npm test` / `npm run dev:electron` auto-rebuild native modules for the correct runtime
+
+### Changed
+- Vault reconciliation rewritten as 6-phase algorithm (walk, classify, orphan, rename-match, new files, modified + backfill)
+- MCP bridge `onGraphMutated` passes affected node/edge IDs for targeted cascade re-embedding
+
 ## [0.1.2] - 2026-05-29
 
 ### Added
