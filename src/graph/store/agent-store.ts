@@ -247,4 +247,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 }));
 
+// Eagerly load agents on store creation so subscribers don't trigger async loads during render
+useAgentStore.getState().loadAgents().catch(() => {});
+
 export { getActiveAgent, getActiveToolFilter, getEnabledChatAgents };

@@ -1,21 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAgentStore } from '../../../graph/store/agent-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 
 export function AgentPicker() {
-  const allAgents = useAgentStore((s) => s.agents);
-  const agents = useMemo(() => allAgents.filter(a => a.kind === 'chat' && a.enabled), [allAgents]);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
-  const loaded = useAgentStore((s) => s.loaded);
-  const loadAgents = useAgentStore((s) => s.loadAgents);
   const setLeftPanel = useUIStore((s) => s.setLeftPanel);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!loaded) loadAgents();
-  }, [loaded, loadAgents]);
 
   useEffect(() => {
     if (!open) return;
@@ -28,6 +20,7 @@ export function AgentPicker() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
+  const agents = useAgentStore.getState().agents.filter(a => a.kind === 'chat' && a.enabled);
   const activeAgent = agents.find(a => a.id === activeAgentId) ?? agents[0];
   if (!activeAgent) return null;
 

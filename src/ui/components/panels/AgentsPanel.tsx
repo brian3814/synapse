@@ -1,16 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAgentStore } from '../../../graph/store/agent-store';
 import { AgentListView } from './AgentListView';
 import { AgentDetailView } from './AgentDetailView';
 
 export function AgentsPanel() {
   const loaded = useAgentStore((s) => s.loaded);
-  const loadAgents = useAgentStore((s) => s.loadAgents);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!loaded) loadAgents();
-  }, [loaded, loadAgents]);
 
   if (!loaded) {
     return (
