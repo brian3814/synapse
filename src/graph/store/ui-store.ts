@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
 type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'notes' | 'intelligence' | 'readingList';
+export type LeftPanel = 'none' | 'explorer' | 'agents';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 
@@ -91,11 +92,11 @@ interface UIStore {
   pendingEditNoteId: string | null;
   setPendingEditNoteId: (id: string | null) => void;
 
-  vaultDrawerOpen: boolean;
-  vaultDrawerWidth: number;
+  leftPanel: LeftPanel;
+  leftPanelWidth: number;
   vaultDrawerExpandedPaths: string[];
-  toggleVaultDrawer: () => void;
-  setVaultDrawerWidth: (width: number) => void;
+  setLeftPanel: (panel: LeftPanel) => void;
+  setLeftPanelWidth: (width: number) => void;
   setVaultDrawerExpandedPaths: (paths: string[]) => void;
 
   contentColumns: ContentColumn[];
@@ -126,24 +127,26 @@ export const useUIStore = create<UIStore>((set) => ({
   visibleLayers: { entity: true, note: false, resource: false },
   pendingEditNoteId: null,
 
-  vaultDrawerOpen: JSON.parse(localStorage.getItem('vault-drawer-open') ?? 'false'),
-  vaultDrawerWidth: JSON.parse(localStorage.getItem('vault-drawer-width') ?? '240'),
+  leftPanel: (localStorage.getItem('vault-drawer-open') === 'true' ? 'explorer' : 'none') as LeftPanel,
+  leftPanelWidth: JSON.parse(localStorage.getItem('vault-drawer-width') ?? '240'),
   vaultDrawerExpandedPaths: JSON.parse(localStorage.getItem('vault-drawer-expanded') ?? '[]'),
 
-  toggleVaultDrawer: () => set((state) => {
-    const next = !state.vaultDrawerOpen;
-    localStorage.setItem('vault-drawer-open', JSON.stringify(next));
-    return { vaultDrawerOpen: next };
+  setLeftPanel: (panel) => set((state) => {
+    const next = state.leftPanel === panel ? 'none' : panel;
+    localStorage.setItem('vault-drawer-open', JSON.stringify(next !== 'none'));
+    localStorage.setItem('left-panel', next);
+    return { leftPanel: next };
   }),
-  setVaultDrawerWidth: (width) => set(() => {
+  setLeftPanelWidth: (width) => set(() => {
     const clamped = Math.min(400, Math.max(180, width));
     localStorage.setItem('vault-drawer-width', JSON.stringify(clamped));
-    return { vaultDrawerWidth: clamped };
+    return { leftPanelWidth: clamped };
   }),
   setVaultDrawerExpandedPaths: (paths) => set(() => {
     localStorage.setItem('vault-drawer-expanded', JSON.stringify(paths));
     return { vaultDrawerExpandedPaths: paths };
   }),
+
 
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),

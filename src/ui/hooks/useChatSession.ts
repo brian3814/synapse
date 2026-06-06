@@ -3,7 +3,6 @@ import { chat, noteSearch, sourceContent } from '../../db/client/db-client';
 import { type AttachedNode } from '../../graph/store/chat-context-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { serializeAttachedContext } from '../utils/chat-context-serializer';
-import { storage } from '@platform';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
 import { runChatAgent, type ChatAgentTurn, type ChatAgentProgress, type ChatSubgraphData } from './chat-agent-loop';
 import { assembleSystemPrompt } from '../../core/prompt-assembler';
@@ -14,7 +13,7 @@ import { retrieveMemories } from '../../memory/pipeline';
 import { createMetadataRetriever } from '../../memory/retrievers/metadata-retriever';
 import { createRRFFuser } from '../../memory/fusers/rrf-fuser';
 import { createAnnotatedFormatter } from '../../memory/formatters/annotated-formatter';
-import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
+import { useAgentStore, getActiveAgent, getActiveToolFilter } from '../../graph/store/agent-store';
 
 type MessageStatus = 'complete' | 'streaming' | 'executing' | 'error';
 
@@ -154,16 +153,11 @@ export function useChatSession() {
       updateMessage(assistantId, { content: '', status: 'executing' });
       const { config } = await fetchLLMConfigAndTypes();
 
-      // Assemble system prompt with harness context
-      const storageData = await storage.get(['agentPromptConfig', 'agentToolConfig', 'harnessPresets', 'harnessActivePresetId']);
-      const promptConfig = (storageData as any).agentPromptConfig as AgentPromptConfig | undefined;
-      const toolConfig = (storageData as any).agentToolConfig as AgentToolConfig | undefined;
-      const globalInstructions = promptConfig?.chatInstructions || null;
-      const presets = (storageData as any).harnessPresets ?? [];
-      const activePresetId = (storageData as any).harnessActivePresetId ?? null;
-      const activePreset = activePresetId
-        ? presets.find((p: any) => p.id === activePresetId)
-        : null;
+      // Resolve active agent configuration
+      const agentState = useAgentStore.getState();
+      const activeAgent = getActiveAgent(agentState);
+      const toolFilter = getActiveToolFilter(agentState);
+      const globalInstructions = activeAgent.customInstructions || null;
 
       const memCtx = createUICommandContext();
       let allMemories: Awaited<ReturnType<typeof loadValidMemories>> = [];
@@ -191,8 +185,8 @@ export function useChatSession() {
 
       const systemPrompt = assembleSystemPrompt({
         globalInstructions,
-        presetPrompt: activePreset?.prompt ?? null,
-        presetName: activePreset?.name ?? null,
+        presetPrompt: null,
+        presetName: activeAgent.name !== 'chat-agent' ? activeAgent.name : null,
         memoryContext,
         recentSessionSummaries: episodicMemories.map((m) => ({
           summary: m.content,
@@ -210,8 +204,8 @@ export function useChatSession() {
         provider: config.provider,
         model: config.model,
         systemPrompt,
-        disabledTools: toolConfig?.disabledChatTools,
-        maxIterations: toolConfig?.chatMaxIterations,
+        toolFilter,
+        maxIterations: activeAgent.maxIterations,
         onProgress: (event: ChatAgentProgress) => {
           switch (event.type) {
             case 'text_chunk':

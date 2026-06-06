@@ -5,7 +5,7 @@ import { useChatSession } from '../../hooks/useChatSession';
 import { useInputHistory } from '../../hooks/useInputHistory';
 import { ChatMessage } from './ChatMessage';
 import { SessionPicker } from './SessionPicker';
-import { PresetPicker } from './PresetPicker';
+import { AgentPicker } from './AgentPicker';
 import { ContextChipBar } from './ContextChipBar';
 import { NodeAutocomplete } from './NodeAutocomplete';
 import { useChatContextStore } from '../../../graph/store/chat-context-store';
@@ -161,7 +161,7 @@ function ChatHeader({
             onClose={() => setPickerOpen(false)}
           />
         )}
-        <PresetPicker />
+        <AgentPicker />
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <button

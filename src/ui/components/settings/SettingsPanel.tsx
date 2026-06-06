@@ -7,7 +7,7 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { stressTest } from '../../../db/client/db-client';
 import { MemorySection } from './MemorySection';
 import { EmbeddingSettings } from './EmbeddingSettings';
-import { AgentSettingsTab } from './AgentSettingsTab';
+import { VaultSandboxSection } from './VaultSandboxSection';
 import type { SettingsTab } from './SettingsModal';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
@@ -50,10 +50,6 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   };
 
   const models = LLM_MODELS[provider] ?? [];
-
-  if (activeTab === 'agent') {
-    return <AgentSettingsTab />;
-  }
 
   if (activeTab === 'model') {
     return (
@@ -172,6 +168,8 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       <ReadingListSettings />
 
       <ImportBehaviorSection />
+
+      <VaultSandboxSection />
 
       <StressTest />
 

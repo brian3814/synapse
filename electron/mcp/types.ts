@@ -14,6 +14,7 @@ export interface ToolResult {
 
 export interface ToolFilter {
   disabledTools?: string[];
+  allowedTools?: string[];
   providerIds?: string[];
   capabilities?: ('read' | 'write' | 'execute')[];
 }
