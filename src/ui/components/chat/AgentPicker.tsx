@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAgentStore, getEnabledChatAgents } from '../../../graph/store/agent-store';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useAgentStore } from '../../../graph/store/agent-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 
 export function AgentPicker() {
-  const agents = useAgentStore((s) => getEnabledChatAgents(s));
+  const allAgents = useAgentStore((s) => s.agents);
+  const agents = useMemo(() => allAgents.filter(a => a.kind === 'chat' && a.enabled), [allAgents]);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
   const setActiveAgent = useAgentStore((s) => s.setActiveAgent);
   const loaded = useAgentStore((s) => s.loaded);
