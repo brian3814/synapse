@@ -280,7 +280,6 @@ async function execute(ctx: CommandContext, name: string, input: Record<string, 
       const bridges = findBridgeNodes(map, nodes, clusters);
 
       const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-      const clusterMap = new Map(clusters.map((c) => [c.id, c]));
 
       const result = bridges.slice(0, limit).map((b) => {
         const n = nodeMap.get(b.nodeId);
