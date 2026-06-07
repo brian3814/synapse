@@ -9,7 +9,6 @@ import {
   connectedComponents,
   labelPropagation,
   findConnectionSuggestions,
-  findOrphans,
   findBridgeNodes,
   computeGraphHealth,
   bfsPathWithEdges,
