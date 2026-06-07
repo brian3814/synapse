@@ -4,10 +4,11 @@ import { noteTools } from './note-tools';
 import { edgeTools } from './edge-tools';
 import { graphTools } from './graph-tools';
 import { entityTools } from './entity-tools';
+import { intelligenceTools } from './intelligence-tools';
 
 export type { ToolModule, ToolExecResult };
 
-const ALL_MODULES: ToolModule[] = [noteTools, edgeTools, graphTools, entityTools];
+const ALL_MODULES: ToolModule[] = [noteTools, edgeTools, graphTools, entityTools, intelligenceTools];
 
 export const EXTENDED_TOOL_DEFINITIONS: ChatToolDefinition[] =
   ALL_MODULES.flatMap((m) => m.definitions);
