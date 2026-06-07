@@ -513,6 +513,104 @@ const TOOL_SEMANTIC_SEARCH = {
   },
 };
 
+// --- Intelligence tools (read-only) ---
+
+const TOOL_GET_CENTRALITY_RANKING = {
+  name: 'get_centrality_ranking',
+  description: 'Rank nodes by degree centrality — how connected they are relative to the rest of the graph. Useful for identifying the most important or influential entities.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'number', description: 'Maximum number of nodes to return (default 10).' },
+      node_type: { type: 'string', description: 'Filter to a specific node type (optional).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_GET_ORPHAN_NODES = {
+  name: 'get_orphan_nodes',
+  description: 'Find nodes with no connections. Orphans are candidates for enrichment or deletion.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'number', description: 'Maximum number of orphans to return (default 50).' },
+      node_type: { type: 'string', description: 'Filter to a specific node type (optional).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_GET_CLUSTERS = {
+  name: 'get_clusters',
+  description: 'Detect communities/clusters in the graph using label propagation. Returns natural groupings of tightly connected nodes.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      min_size: { type: 'number', description: 'Minimum cluster size to include (default 2).' },
+      include_members: { type: 'boolean', description: 'Include cluster member details (id, name, type) in results (default false).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_GET_BRIDGE_NODES = {
+  name: 'get_bridge_nodes',
+  description: 'Find nodes that connect multiple clusters. Bridge nodes are critical cross-domain connectors whose removal would fragment the graph.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'number', description: 'Maximum number of bridge nodes to return (default 10).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_GET_CONNECTION_SUGGESTIONS = {
+  name: 'get_connection_suggestions',
+  description: 'Suggest potential new edges between nodes that share multiple common neighbors but are not yet directly connected. Helps discover implicit relationships.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'number', description: 'Maximum suggestions to return (default 10).' },
+      min_shared: { type: 'number', description: 'Minimum shared neighbors required to suggest a connection (default 2).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_GET_GRAPH_HEALTH = {
+  name: 'get_graph_health',
+  description: 'Compute overall graph health metrics: node/edge counts, orphan rate, density, average degree, cluster count, and connected component stats.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: [],
+  },
+};
+
+const TOOL_FIND_SHORTEST_PATH = {
+  name: 'find_shortest_path',
+  description: 'Find the shortest path between two nodes using BFS. Returns the sequence of nodes and edges connecting them.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      source_id: { type: 'string', description: 'Starting node ID.' },
+      target_id: { type: 'string', description: 'Destination node ID.' },
+      max_hops: { type: 'number', description: 'Maximum path length in hops (default 6).' },
+      vault: { type: 'string', description: 'Vault name (when multiple vaults loaded).' },
+    },
+    required: ['source_id', 'target_id'],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -577,6 +675,9 @@ async function main(): Promise<void> {
     TOOL_GET_GRAPH_OVERVIEW, TOOL_GET_SUBGRAPH, TOOL_GET_NODES_BY_TYPE,
     TOOL_READ_NOTE, TOOL_LIST_NOTES, TOOL_SEARCH_NOTES, TOOL_FIND_SIMILAR_ENTITIES,
     TOOL_SEMANTIC_SEARCH,
+    TOOL_GET_CENTRALITY_RANKING, TOOL_GET_ORPHAN_NODES, TOOL_GET_CLUSTERS,
+    TOOL_GET_BRIDGE_NODES, TOOL_GET_CONNECTION_SUGGESTIONS,
+    TOOL_GET_GRAPH_HEALTH, TOOL_FIND_SHORTEST_PATH,
   ];
   const writeTools = [
     TOOL_CREATE_NODE, TOOL_UPDATE_NODE, TOOL_DELETE_NODE,
@@ -871,6 +972,68 @@ async function main(): Promise<void> {
         const vault = resolveVault(toolArgs);
         if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
         const { result, isError } = await vault.provider.semanticSearch(query, limit);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_centrality_ranking': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 10;
+        const nodeType = getString(toolArgs, 'node_type');
+        const { result, isError } = vault.provider.getCentralityRanking(limit, nodeType);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_orphan_nodes': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 50;
+        const nodeType = getString(toolArgs, 'node_type');
+        const { result, isError } = vault.provider.getOrphanNodes(limit, nodeType);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_clusters': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const minSize = getNumber(toolArgs, 'min_size') ?? 2;
+        const includeMembers = toolArgs.include_members === true;
+        const { result, isError } = vault.provider.getClusters(minSize, includeMembers);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_bridge_nodes': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 10;
+        const { result, isError } = vault.provider.getBridgeNodes(limit);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_connection_suggestions': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const limit = getNumber(toolArgs, 'limit') ?? 10;
+        const minShared = getNumber(toolArgs, 'min_shared') ?? 2;
+        const { result, isError } = vault.provider.getConnectionSuggestions(limit, minShared);
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'get_graph_health': {
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const { result, isError } = vault.provider.getGraphHealth();
+        return { content: [{ type: 'text', text: result }], isError };
+      }
+
+      case 'find_shortest_path': {
+        const sourceId = getString(toolArgs, 'source_id');
+        const targetId = getString(toolArgs, 'target_id');
+        if (!sourceId || !targetId) return { content: [{ type: 'text', text: JSON.stringify({ error: 'source_id and target_id are required' }) }], isError: true };
+        const vault = resolveVault(toolArgs);
+        if ('error' in vault) return { content: [{ type: 'text', text: JSON.stringify(vault) }], isError: true };
+        const maxHops = getNumber(toolArgs, 'max_hops') ?? 6;
+        const { result, isError } = vault.provider.findShortestPath(sourceId, targetId, maxHops);
         return { content: [{ type: 'text', text: result }], isError };
       }
 

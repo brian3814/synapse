@@ -3,6 +3,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EmbeddingService } from '../../../electron/embeddings/embedding-service';
 import type { EmbeddingConfig } from '../../../src/embeddings/types';
+import { buildAdjacencyMap } from '../../../src/graph/algorithms/adjacency';
+import {
+  degreeCentrality,
+  connectedComponents,
+  labelPropagation,
+  findConnectionSuggestions,
+  findOrphans,
+  findBridgeNodes,
+  computeGraphHealth,
+  bfsPathWithEdges,
+} from '../../../src/graph/algorithms/graph-algorithms';
+import type { GraphNode, GraphEdge } from '../../../src/shared/types';
 
 export interface StandaloneToolResult {
   result: string;
@@ -426,6 +438,264 @@ export class StandaloneGraphProvider {
     }
   }
 
+  // ---- Intelligence tools ----
+
+  getCentralityRanking(limit = 10, nodeType?: string): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const centrality = degreeCentrality(map, nodes);
+
+      let filtered = nodes;
+      if (nodeType) {
+        filtered = nodes.filter((n) => n.type === nodeType || n.label === nodeType);
+      }
+
+      const totalDegrees = filtered.reduce((sum, n) => sum + (map.get(n.id)?.length ?? 0), 0);
+      const avgDegree = filtered.length > 0 ? totalDegrees / filtered.length : 0;
+
+      const rankings = filtered
+        .map((n) => ({
+          nodeId: n.id,
+          name: n.name,
+          type: n.type,
+          label: n.label,
+          degree: map.get(n.id)?.length ?? 0,
+          centrality: centrality.get(n.id) ?? 0,
+        }))
+        .sort((a, b) => b.centrality - a.centrality)
+        .slice(0, limit);
+
+      return {
+        result: JSON.stringify({
+          rankings,
+          totalNodes: filtered.length,
+          avgDegree: Math.round(avgDegree * 100) / 100,
+        }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  getOrphanNodes(limit = 50, nodeType?: string): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare(`
+        SELECT n.id, n.name, n.type, n.label, n.created_at
+        FROM nodes n
+        WHERE NOT EXISTS (SELECT 1 FROM edges e WHERE e.source_id = n.id OR e.target_id = n.id)
+      `).all() as Array<{ id: string; name: string; type: string; label: string | null; created_at: string }>;
+
+      let filtered = dbNodes;
+      if (nodeType) {
+        filtered = dbNodes.filter((n) => n.type === nodeType || n.label === nodeType);
+      }
+
+      const totalNodes = (this.db.prepare('SELECT COUNT(*) as c FROM nodes').get() as any).c;
+      const orphanCount = filtered.length;
+      const sliced = filtered.slice(0, limit).map((n) => ({
+        nodeId: n.id,
+        name: n.name,
+        type: n.type,
+        label: n.label,
+        createdAt: n.created_at,
+      }));
+
+      return {
+        result: JSON.stringify({
+          orphans: sliced,
+          orphanCount,
+          orphanRate: totalNodes > 0 ? Math.round((orphanCount / totalNodes) * 1000) / 1000 : 0,
+          totalNodes,
+        }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  getClusters(minSize = 2, includeMembers = false): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const clusters = labelPropagation(map, nodes);
+
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+      const filtered = clusters.filter((c) => c.size >= minSize);
+
+      const singletonCount = nodes.length - clusters.reduce((sum, c) => sum + c.size, 0);
+      const nodesInClusters = filtered.reduce((sum, c) => sum + c.size, 0);
+
+      const result = filtered.map((c) => {
+        const entry: Record<string, unknown> = {
+          id: c.id,
+          label: c.label,
+          size: c.size,
+        };
+        if (includeMembers) {
+          entry.members = c.nodeIds.map((id) => {
+            const n = nodeMap.get(id);
+            return { id, name: n?.name ?? id, type: n?.type ?? 'unknown' };
+          });
+        }
+        return entry;
+      });
+
+      return {
+        result: JSON.stringify({
+          clusters: result,
+          clusterCount: filtered.length,
+          nodesInClusters,
+          singletonCount: Math.max(singletonCount, 0),
+        }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  getBridgeNodes(limit = 10): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const clusters = labelPropagation(map, nodes);
+      const bridges = findBridgeNodes(map, nodes, clusters);
+
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+      const result = bridges.slice(0, limit).map((b) => {
+        const n = nodeMap.get(b.nodeId);
+        return {
+          nodeId: b.nodeId,
+          name: n?.name ?? b.nodeId,
+          type: n?.type ?? 'unknown',
+          label: n?.label,
+          clustersConnected: b.clustersConnected,
+          clusterCount: b.clustersConnected.length,
+        };
+      });
+
+      return {
+        result: JSON.stringify({ bridges: result }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  getConnectionSuggestions(limit = 10, minShared = 2): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const suggestions = findConnectionSuggestions(map, nodes, minShared, limit);
+
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+      const result = suggestions.map((s) => ({
+        nodeA: { id: s.nodeA, name: nodeMap.get(s.nodeA)?.name ?? s.nodeA },
+        nodeB: { id: s.nodeB, name: nodeMap.get(s.nodeB)?.name ?? s.nodeB },
+        sharedNeighborCount: s.sharedNeighbors.length,
+        score: s.score,
+      }));
+
+      return {
+        result: JSON.stringify({ suggestions: result }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  getGraphHealth(): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const clusters = labelPropagation(map, nodes);
+      const components = connectedComponents(map, nodes);
+      const health = computeGraphHealth(nodes, edges, map, clusters, components);
+
+      return {
+        result: JSON.stringify({
+          ...health,
+          orphanRate: Math.round(health.orphanRate * 1000) / 1000,
+          density: Math.round(health.density * 10000) / 10000,
+          avgDegree: Math.round(health.avgDegree * 100) / 100,
+          largestComponentRatio: Math.round(health.largestComponentRatio * 1000) / 1000,
+        }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
+  findShortestPath(sourceId: string, targetId: string, maxHops = 6): StandaloneToolResult {
+    try {
+      const dbNodes = this.db.prepare('SELECT id, name, type, label FROM nodes').all() as Array<{ id: string; name: string; type: string; label: string | null }>;
+      const dbEdges = this.db.prepare('SELECT id, source_id, target_id, label, type FROM edges').all() as Array<{ id: string; source_id: string; target_id: string; label: string; type: string }>;
+      const nodes = dbNodes.map(toGraphNode);
+      const edges = dbEdges.map(toGraphEdge);
+      const map = buildAdjacencyMap(edges);
+      const pathResult = bfsPathWithEdges(map, sourceId, targetId, maxHops);
+
+      if (!pathResult) {
+        return {
+          result: JSON.stringify({ found: false, pathLength: 0, nodes: [], edges: [] }),
+        };
+      }
+
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+      const edgeMap = new Map(edges.map((e) => [e.id, e]));
+
+      const pathNodes = pathResult.nodeIds.map((id) => {
+        const n = nodeMap.get(id);
+        return { id, name: n?.name ?? id, type: n?.type ?? 'unknown' };
+      });
+
+      const pathEdges = pathResult.edgeIds.map((id) => {
+        const e = edgeMap.get(id);
+        return {
+          id,
+          label: e?.label ?? '',
+          sourceId: e?.sourceId ?? '',
+          targetId: e?.targetId ?? '',
+        };
+      });
+
+      return {
+        result: JSON.stringify({
+          found: true,
+          pathLength: pathResult.nodeIds.length - 1,
+          nodes: pathNodes,
+          edges: pathEdges,
+        }),
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { result: JSON.stringify({ error: msg }), isError: true };
+    }
+  }
+
   async semanticSearch(query: string, limit = 5): Promise<StandaloneToolResult> {
     if (!this.embeddingService?.isEnabled()) {
       return {
@@ -462,6 +732,14 @@ export class StandaloneGraphProvider {
     this.embeddingService?.dispose().catch(() => {});
     this.db.close();
   }
+}
+
+function toGraphNode(row: { id: string; name: string; type: string; label: string | null }): GraphNode {
+  return { id: row.id, identifier: null, name: row.name, type: row.type, label: row.label, folderPath: '', properties: {}, size: 1, createdAt: '', updatedAt: '' };
+}
+
+function toGraphEdge(row: { id: string; source_id: string; target_id: string; label: string; type: string }): GraphEdge {
+  return { id: row.id, sourceId: row.source_id, targetId: row.target_id, label: row.label, type: row.type, properties: {}, weight: 1, directed: false, createdAt: '', updatedAt: '' };
 }
 
 const EXTRA_COLUMNS: [string, string, string][] = [
