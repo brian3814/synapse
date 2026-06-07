@@ -507,3 +507,81 @@ export function detectPatterns(
 
   return insights;
 }
+
+export function findOrphans(map: AdjacencyMap, nodes: GraphNode[]): GraphNode[] {
+  return nodes.filter(n => (map.get(n.id)?.length ?? 0) === 0);
+}
+
+export interface BridgeNode {
+  nodeId: string;
+  clustersConnected: number[];
+}
+
+export function findBridgeNodes(
+  map: AdjacencyMap,
+  nodes: GraphNode[],
+  clusters: Cluster[]
+): BridgeNode[] {
+  const clusterOf = new Map<string, number>();
+  for (const c of clusters) {
+    for (const id of c.nodeIds) clusterOf.set(id, c.id);
+  }
+
+  const bridges: BridgeNode[] = [];
+  for (const node of nodes) {
+    const neighborClusters = new Set<number>();
+    for (const entry of map.get(node.id) ?? []) {
+      const c = clusterOf.get(entry.nodeId);
+      if (c !== undefined) neighborClusters.add(c);
+    }
+    if (neighborClusters.size >= 2) {
+      bridges.push({ nodeId: node.id, clustersConnected: [...neighborClusters] });
+    }
+  }
+
+  return bridges.sort((a, b) => b.clustersConnected.length - a.clustersConnected.length);
+}
+
+export interface GraphHealthMetrics {
+  nodeCount: number;
+  edgeCount: number;
+  orphanCount: number;
+  orphanRate: number;
+  density: number;
+  avgDegree: number;
+  maxDegree: number;
+  clusterCount: number;
+  componentCount: number;
+  largestComponentSize: number;
+  largestComponentRatio: number;
+}
+
+export function computeGraphHealth(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  map: AdjacencyMap,
+  clusters: Cluster[],
+  components: Set<string>[]
+): GraphHealthMetrics {
+  const n = nodes.length;
+  const orphanCount = nodes.filter(nd => (map.get(nd.id)?.length ?? 0) === 0).length;
+  const degrees = nodes.map(nd => map.get(nd.id)?.length ?? 0);
+  const maxDegree = degrees.length > 0 ? Math.max(...degrees) : 0;
+  const avgDegree = n > 0 ? degrees.reduce((a, b) => a + b, 0) / n : 0;
+  const density = n > 1 ? (2 * edges.length) / (n * (n - 1)) : 0;
+  const largestComponentSize = components.reduce((max, c) => Math.max(max, c.size), 0);
+
+  return {
+    nodeCount: n,
+    edgeCount: edges.length,
+    orphanCount,
+    orphanRate: n > 0 ? orphanCount / n : 0,
+    density,
+    avgDegree,
+    maxDegree,
+    clusterCount: clusters.length,
+    componentCount: components.length,
+    largestComponentSize,
+    largestComponentRatio: n > 0 ? largestComponentSize / n : 0,
+  };
+}
