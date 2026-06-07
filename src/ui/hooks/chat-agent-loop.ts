@@ -22,10 +22,11 @@ export interface ChatAgentProgress {
 }
 
 import { DEFAULT_CHAT_MAX_ITERATIONS } from '../../shared/agent-settings-types';
+import type { AgentToolFilter } from '../../shared/agent-definition-types';
 
-async function getToolDefs(disabledTools?: string[]): Promise<Array<{ name: string; description: string; input_schema: Record<string, unknown> }>> {
+async function getToolDefs(filter?: AgentToolFilter): Promise<Array<{ name: string; description: string; input_schema: Record<string, unknown> }>> {
   if (platformId === 'electron') {
-    const toolDefs = await (window as any).electronIPC.invoke('tools:list', { disabledTools: disabledTools ?? [] });
+    const toolDefs = await (window as any).electronIPC.invoke('tools:list', filter ?? {});
     return toolDefs.map((t: any) => ({
       name: t.name,
       description: t.description,
@@ -34,8 +35,11 @@ async function getToolDefs(disabledTools?: string[]): Promise<Array<{ name: stri
   }
   // Chrome fallback
   let defs = [...CHAT_AGENT_TOOLS];
-  if (disabledTools?.length) {
-    defs = defs.filter((t) => !disabledTools.includes(t.name));
+  if (filter?.disabledTools?.length) {
+    defs = defs.filter((t) => !filter.disabledTools!.includes(t.name));
+  }
+  if (filter?.allowedTools?.length) {
+    defs = defs.filter((t) => filter.allowedTools!.includes(t.name));
   }
   return toAnthropicChatTools(defs);
 }
@@ -51,7 +55,7 @@ interface RunChatAgentParams {
   provider: string;
   model: string;
   systemPrompt: string;
-  disabledTools?: string[];
+  toolFilter?: AgentToolFilter;
   maxIterations?: number;
   onProgress: (event: ChatAgentProgress) => void;
 }
@@ -63,7 +67,7 @@ export async function runChatAgent({
   provider,
   model,
   systemPrompt,
-  disabledTools,
+  toolFilter,
   maxIterations,
   onProgress,
 }: RunChatAgentParams): Promise<string> {
@@ -85,7 +89,7 @@ export async function runChatAgent({
   const collectedNodeIds = new Set<string>();
   const collectedEdgeIds = new Set<string>();
   const ctx = platformId !== 'electron' ? createUICommandContext() : null;
-  const tools = await getToolDefs(disabledTools);
+  const tools = await getToolDefs(toolFilter);
 
   for (let i = 0; i < iterLimit; i++) {
     // Send one LLM call with tools

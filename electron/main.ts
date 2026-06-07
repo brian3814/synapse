@@ -13,6 +13,7 @@ import { EmbeddingService } from './embeddings/embedding-service';
 import { registerEmbeddingHandlers, setupProgressBroadcast } from './embeddings/ipc-handlers';
 import { readNote } from './notes-backend';
 import { VaultManager } from './vault/vault-manager';
+import { parseAgentFile } from '../src/shared/agent-definition-types';
 import { scaffoldVault } from './vault/vault-context';
 import type { VaultSandboxConfig } from '../src/shared/agent-settings-types';
 import { NoteFileHandler } from './vault/handlers/note-file-handler';
@@ -482,6 +483,22 @@ app.whenReady().then(() => {
       }
     });
     return result;
+  });
+
+  ipcMain.handle('agents:list-vault', async () => {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return [];
+    const agentsDir = path.join(ctx.kgPath, 'agents');
+    if (!fs.existsSync(agentsDir)) return [];
+    try {
+      const files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
+      return files.map(file => {
+        const content = fs.readFileSync(path.join(agentsDir, file), 'utf-8');
+        return parseAgentFile(content, file, 'vault');
+      });
+    } catch {
+      return [];
+    }
   });
 
   // Dedicated LLM IPC handlers — send directly to requesting renderer

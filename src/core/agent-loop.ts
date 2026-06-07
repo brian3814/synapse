@@ -3,7 +3,7 @@
  * and Electron main process invoke with platform-specific dependencies injected.
  */
 
-import { AGENT_TOOLS, toAnthropicTools } from '../shared/agent-tools';
+import { AGENT_TOOLS, toAnthropicTools, type ToolDefinition as AgentToolDefinition } from '../shared/agent-tools';
 import type { AgentProgressEvent, ExtractionResult, ToolCall } from '../shared/types';
 import type { LLMMessage, ContentBlock, LLMStreamResult, StreamFn } from './llm-protocol';
 import { getAgentSystemPrompt } from './system-prompts';
@@ -25,6 +25,7 @@ export interface AgentLoopConfig {
   notesEnabled?: boolean;
   customInstructions?: string;
   disabledTools?: string[];
+  tools?: AgentToolDefinition[];
   graphContext?: { entityLabels: string[]; edgeLabels: string[] };
 }
 
@@ -36,9 +37,10 @@ export async function runAgentLoop(
 ): Promise<void> {
   const maxIter = config.maxIterations ?? MAX_ITERATIONS;
   const systemPrompt = getAgentSystemPrompt(config.notesEnabled ?? false, config.customInstructions, config.graphContext);
+  const baseTools = config.tools ?? AGENT_TOOLS;
   const filteredTools = config.disabledTools?.length
-    ? AGENT_TOOLS.filter((t) => t.name === 'save_entities' || !config.disabledTools!.includes(t.name))
-    : AGENT_TOOLS;
+    ? baseTools.filter((t) => t.name === 'save_entities' || !config.disabledTools!.includes(t.name))
+    : baseTools;
   const anthropicTools = toAnthropicTools(filteredTools);
   const messages: LLMMessage[] = [{ role: 'user', content: config.userPrompt }];
 

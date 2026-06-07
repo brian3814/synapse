@@ -92,10 +92,6 @@ export async function handleRuntimeMessage(
       handleLLMRequest({ ...message.payload, requestId: message.requestId }, broadcast);
       return null;
 
-    case 'AGENT_RUN_START':
-      handleAgentRun({ ...message.payload, runId: message.payload?.runId }, broadcast);
-      return null;
-
     case 'CHAT_LLM_REQUEST':
       handleChatRequest({ ...message.payload, requestId: message.payload?.requestId }, broadcast);
       return null;
@@ -222,46 +218,6 @@ async function handleChatRequest(payload: any, broadcast: BroadcastFn): Promise<
       type: 'CHAT_LLM_STREAM',
       payload: { requestId, done: true, textContent: '', toolCalls: [], error: e.message },
     });
-  }
-}
-
-async function handleAgentRun(payload: any, broadcast: BroadcastFn): Promise<void> {
-  const { runId, userPrompt, model, notesEnabled } = payload;
-  try {
-    const { apiKey, provider } = getLLMConfig();
-    const streamFn = getStreamFn(provider);
-
-    const toolExecutor: ToolExecutor = {
-      async execute(tc) {
-        const toolDef = AGENT_TOOLS.find((t) => t.name === tc.name);
-        if (!toolDef) return { result: '', error: `Unknown tool: ${tc.name}` };
-        if (toolDef.executionContext === 'content-script') {
-          return { result: '', error: 'Content script tools are not available in desktop mode. Use fetch_url to read web pages instead.' };
-        }
-        if (tc.name === 'fetch_url') {
-          const url = tc.input.url as string;
-          if (isBlockedUrl(url)) return { result: '', error: 'URL is blocked or invalid' };
-          const res = await fetchAndCleanContent(url, FETCH_MAX_BYTES);
-          return { result: res.content, error: res.error };
-        }
-        return { result: '', error: `Tool ${tc.name} cannot be executed in this context` };
-      },
-    };
-
-    const usageStore = getUsageStore();
-    await coreRunAgentLoop(
-      { runId, userPrompt, apiKey, model, notesEnabled: notesEnabled ?? false },
-      streamFn,
-      toolExecutor,
-      (event: AgentProgressEvent) => {
-        broadcast({ type: 'AGENT_PROGRESS', payload: { runId, event } });
-        if (event.type === 'done' && event.inputTokens != null) {
-          coreRecordUsage(usageStore, 'agent', model, event.inputTokens, event.outputTokens ?? 0);
-        }
-      },
-    );
-  } catch (e: any) {
-    broadcast({ type: 'AGENT_PROGRESS', payload: { runId, event: { type: 'error', error: e.message } } });
   }
 }
 

@@ -11,7 +11,7 @@ import { ContentTabBar } from '../components/ContentTabBar';
 import { ColumnDropZone } from '../components/ColumnDropZone';
 import { NoteEditor } from '../components/notes/NoteEditor';
 import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
-import { VaultDrawer } from '../components/layout/VaultDrawer';
+import { LeftSidebar } from '../components/layout/LeftSidebar';
 import { ViewerTab } from '../components/tabs/ViewerTab';
 import { useUIStore } from '../../graph/store/ui-store';
 import { vaultWorkspace } from '@platform';
@@ -117,9 +117,7 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
       <Header onIngest={onIngest} />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex-1 flex overflow-hidden min-h-0" ref={columnsContainerRef}>
-          {vaultPath && (
-            <VaultDrawer rootPath={vaultPath} onOpenFile={handleOpenFile} />
-          )}
+          <LeftSidebar vaultPath={vaultPath} onOpenFile={handleOpenFile} />
           {contentColumns.map((col, i) => (
             <ColumnWithDropZones
               key={col.id}

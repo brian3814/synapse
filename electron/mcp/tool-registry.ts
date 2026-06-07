@@ -38,6 +38,7 @@ export class ToolRegistry implements IToolRegistry {
           : tool.name;
 
         if (filter?.disabledTools?.includes(namespacedName)) continue;
+        if (filter?.allowedTools && !filter.allowedTools.includes(namespacedName)) continue;
         if (filter?.capabilities && tool.category && !filter.capabilities.includes(tool.category)) continue;
 
         tools.push({

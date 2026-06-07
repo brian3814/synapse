@@ -2,6 +2,32 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [0.3.0] - 2026-06-07
+
+### Added
+- Agent management panel in the left sidebar with per-agent tool isolation
+- AgentDefinition format using `.md` files with YAML frontmatter (Claude Code convention)
+- ActivityBar: vertical icon rail replacing the single-icon vault drawer toggle
+- AgentPicker: chat header dropdown replacing PresetPicker, with "Manage Agents..." link
+- Two-layer tool enforcement: `allowedTools` on ToolFilter (listing) + execution-time validation in `tools:execute` IPC
+- Per-agent MCP server scoping via `mcpServers` field
+- Vault-scoped custom agents via `.kg/agents/*.md` files
+- Agent store (Zustand) as single source of truth for agent configuration
+- Migration from legacy `agentPromptConfig`/`agentToolConfig`/`harnessPresets` on first load
+- Dynamic tool categorization from ToolRegistry data instead of hardcoded lists
+- Extraction tools now injectable via `AgentLoopConfig.tools` parameter
+
+### Changed
+- Left sidebar: VaultDrawer icon rail extracted into reusable ActivityBar with switchable panels
+- Chat agent loop: `getToolDefs()` accepts `AgentToolFilter` instead of plain `disabledTools` string array
+- `useChatSession`: reads from agent store instead of 3 scattered `storage.get()` calls with `(storageData as any)` casts
+- Agent tab removed from Settings modal; VaultSandbox moved to General tab
+
+### Removed
+- Dead `handleAgentRun` broadcast path in `llm-backend.ts` (silently dropped customInstructions and disabledTools)
+- PresetPicker component (replaced by AgentPicker)
+- `AGENT_RUN_START` case in Electron's `handleRuntimeMessage`
+
 ## [0.2.0] - 2026-06-05
 
 ### Added
