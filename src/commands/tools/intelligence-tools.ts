@@ -149,7 +149,61 @@ export const definitions: ChatToolDefinition[] = [
     },
     executionContext: 'ui',
   },
+  {
+    name: 'synthesize_domains',
+    description:
+      'Find structural parallels between two knowledge domains. Loads nodes from each domain and uses the LLM to identify connections, shared patterns, and bridging concepts. Supports graph-only mode (strict, cites node IDs) or augmented mode (supplements with world knowledge).',
+    parameters: {
+      type: 'object',
+      properties: {
+        domain_a: { type: 'string', description: 'First domain: a node type (e.g. "concept"), or a search query' },
+        domain_b: { type: 'string', description: 'Second domain: same format as domain_a' },
+        mode: { type: 'string', description: '"graph-only" (default) or "augmented" — graph-only constrains analysis to graph data only' },
+        limit: { type: 'number', description: 'Max nodes to load per domain (default 20)' },
+      },
+      required: ['domain_a', 'domain_b'],
+    },
+    executionContext: 'ui',
+  },
+  {
+    name: 'analyze_gaps',
+    description:
+      'Identify what concepts or connections are missing from a knowledge domain. Loads nodes in the domain and asks the LLM what a practitioner would expect to find but is absent.',
+    parameters: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', description: 'Domain to analyze: a node type or search query' },
+        mode: { type: 'string', description: '"graph-only" (default) or "augmented"' },
+        limit: { type: 'number', description: 'Max nodes to load (default 30)' },
+      },
+      required: ['domain'],
+    },
+    executionContext: 'ui',
+  },
 ];
+
+async function resolveDomain(
+  ctx: CommandContext,
+  domain: string,
+  limit: number
+): Promise<Array<{ id: string; name: string; type: string; label?: string | null }>> {
+  const slim = await ctx.db.loadGraph();
+  const nodes = slim.nodes.map(toGraphNode);
+
+  // 1. Match by node type or label
+  const types = new Set(nodes.map(n => n.type));
+  const labels = new Set(nodes.filter(n => n.label).map(n => n.label!));
+  if (types.has(domain) || labels.has(domain)) {
+    return nodes
+      .filter(n => n.type === domain || n.label === domain)
+      .slice(0, limit)
+      .map(n => ({ id: n.id, name: n.name, type: n.type, label: n.label }));
+  }
+
+  // 2. Fall back to search
+  const searchResults = await ctx.db.nodes.search(domain, limit);
+  return searchResults.map(n => ({ id: n.id, name: n.name, type: n.type, label: n.label }));
+}
 
 async function execute(ctx: CommandContext, name: string, input: Record<string, unknown>): Promise<ToolExecResult | null> {
   switch (name) {
@@ -390,6 +444,98 @@ async function execute(ctx: CommandContext, name: string, input: Record<string, 
         }),
         collectedNodeIds: pathResult.nodeIds,
         collectedEdgeIds: pathResult.edgeIds,
+      };
+    }
+
+    case 'synthesize_domains': {
+      const domainA = input.domain_a as string;
+      const domainB = input.domain_b as string;
+      const mode = (input.mode as string) ?? 'graph-only';
+      const limit = (input.limit as number) ?? 20;
+
+      const [nodesA, nodesB] = await Promise.all([
+        resolveDomain(ctx, domainA, limit),
+        resolveDomain(ctx, domainB, limit),
+      ]);
+
+      const formatNodes = (nodes: Array<{ id: string; name: string; type: string; label?: string | null }>) =>
+        nodes.map(n => `- [${n.id}] ${n.name} (${n.label ?? n.type})`).join('\n');
+
+      const systemPrompt =
+        mode === 'augmented'
+          ? 'Start from the provided graph data. You may supplement with world knowledge, but clearly prefix each insight with [GRAPH] or [WORLD] to indicate its source.'
+          : 'Analyze ONLY the provided graph data. Do not introduce external knowledge. Every claim must reference specific node IDs in brackets.';
+
+      const userContent =
+        `Find structural parallels between these two knowledge domains.\n\n` +
+        `Domain A — "${domainA}" (${nodesA.length} nodes):\n${formatNodes(nodesA)}\n\n` +
+        `Domain B — "${domainB}" (${nodesB.length} nodes):\n${formatNodes(nodesB)}\n\n` +
+        `Identify connections, shared patterns, and bridging concepts between the two domains.`;
+
+      const requestId = crypto.randomUUID();
+      const result = await ctx.llm.streamChat(
+        {
+          requestId,
+          model: 'claude-sonnet-4-20250514',
+          systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+          tools: [],
+        },
+        () => {},
+      );
+
+      const allNodeIds = [...new Set([...nodesA.map(n => n.id), ...nodesB.map(n => n.id)])];
+
+      return {
+        result: JSON.stringify({
+          synthesis: result.textContent,
+          domainA: { query: domainA, nodeCount: nodesA.length },
+          domainB: { query: domainB, nodeCount: nodesB.length },
+          mode,
+        }),
+        collectedNodeIds: allNodeIds,
+      };
+    }
+
+    case 'analyze_gaps': {
+      const domain = input.domain as string;
+      const mode = (input.mode as string) ?? 'graph-only';
+      const limit = (input.limit as number) ?? 30;
+
+      const nodes = await resolveDomain(ctx, domain, limit);
+
+      const formatNodes = (ns: Array<{ id: string; name: string; type: string; label?: string | null }>) =>
+        ns.map(n => `- [${n.id}] ${n.name} (${n.label ?? n.type})`).join('\n');
+
+      const systemPrompt =
+        mode === 'augmented'
+          ? 'Start from the provided graph data. You may supplement with world knowledge, but clearly prefix each insight with [GRAPH] or [WORLD] to indicate its source.'
+          : 'Analyze ONLY the provided graph data. Do not introduce external knowledge. Every claim must reference specific node IDs in brackets.';
+
+      const userContent =
+        `Analyze what is missing from this knowledge domain.\n\n` +
+        `Domain — "${domain}" (${nodes.length} nodes):\n${formatNodes(nodes)}\n\n` +
+        `What concepts, connections, or topics would a practitioner expect to find in this domain that are absent from the graph?`;
+
+      const requestId = crypto.randomUUID();
+      const result = await ctx.llm.streamChat(
+        {
+          requestId,
+          model: 'claude-sonnet-4-20250514',
+          systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+          tools: [],
+        },
+        () => {},
+      );
+
+      return {
+        result: JSON.stringify({
+          analysis: result.textContent,
+          domain: { query: domain, nodeCount: nodes.length },
+          mode,
+        }),
+        collectedNodeIds: nodes.map(n => n.id),
       };
     }
 
