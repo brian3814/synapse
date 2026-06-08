@@ -18,6 +18,16 @@ export const files = new ChromeFiles();
 export const llm = new ChromeLLM();
 export const browser = new ChromeBrowser();
 export const embedding = new ChromeEmbedding();
+export const artifacts = {
+  list: async () => [],
+  get: async () => null,
+  getContent: async () => '',
+  create: async () => { throw new Error('Artifacts not supported in Chrome extension'); },
+  update: async () => { throw new Error('Artifacts not supported in Chrome extension'); },
+  delete: async () => {},
+  search: async () => [],
+  onChanged: () => () => {},
+} as any;
 export async function initPlatform(): Promise<void> {
   await db.init();
   await notes.init();

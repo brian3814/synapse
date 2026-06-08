@@ -1,5 +1,5 @@
 import type { DataStore } from '../db/data-store';
-import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser } from '../platform/types';
+import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser, PlatformArtifacts } from '../platform/types';
 import type { GraphNode, GraphEdge, DbNode, DbEdge, NodeType } from '../shared/types';
 import type { SemanticSearchResult } from '../embeddings/types';
 
@@ -10,6 +10,7 @@ export interface CommandContext {
   files: PlatformFiles;
   llm: PlatformLLM;
   browser: PlatformBrowser;
+  artifacts?: PlatformArtifacts;
   embedding?: {
     searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
   };

@@ -5,10 +5,11 @@ import { edgeTools } from './edge-tools';
 import { graphTools } from './graph-tools';
 import { entityTools } from './entity-tools';
 import { intelligenceTools } from './intelligence-tools';
+import { artifactTools } from './artifact-tools';
 
 export type { ToolModule, ToolExecResult };
 
-const ALL_MODULES: ToolModule[] = [noteTools, edgeTools, graphTools, entityTools, intelligenceTools];
+const ALL_MODULES: ToolModule[] = [noteTools, edgeTools, graphTools, entityTools, intelligenceTools, artifactTools];
 
 export const EXTENDED_TOOL_DEFINITIONS: ChatToolDefinition[] =
   ALL_MODULES.flatMap((m) => m.definitions);

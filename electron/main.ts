@@ -29,7 +29,8 @@ import { createMainProcessContext } from './mcp/main-process-context';
 import { McpClientManager } from './mcp/mcp-client-manager';
 import { loadMcpClientConfig, loadMcpServerConfig } from './mcp/mcp-config';
 import { McpServerBridge } from './mcp/mcp-server-bridge';
-import { initArtifactHandlers, registerArtifactIPC } from './main/artifact-handlers';
+import { initArtifactHandlers, registerArtifactIPC, createArtifactCore, updateArtifactCore } from './main/artifact-handlers';
+import * as artifactQueries from '../src/db/worker/queries/artifact-queries';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -619,6 +620,33 @@ app.whenReady().then(() => {
       readNote: async (nodeId) => readNote(nodeId),
       writeNote: async (nodeId, content) => {
         notesBackend.writeNote(nodeId, content);
+      },
+      artifacts: {
+        list: () => artifactQueries.listArtifacts(),
+        get: (id: string) => artifactQueries.getArtifact(id),
+        getContent: async (id: string) => {
+          const record = await artifactQueries.getArtifact(id);
+          if (!record) return '';
+          const filePath = path.join(ctx.kgPath, 'artifacts', record.sessionDir, record.fileName);
+          return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+        },
+        create: (params) => createArtifactCore({
+          title: params.title,
+          type: params.type,
+          content: params.content,
+          sessionId: params.sessionId,
+          sessionTitle: params.sessionTitle,
+        }),
+        update: async (id, content, title) => {
+          const existing = await artifactQueries.getArtifact(id);
+          if (!existing) throw new Error(`Artifact ${id} not found`);
+          return updateArtifactCore({ id, title: title ?? existing.title, content });
+        },
+        delete: async (id) => {
+          await artifactQueries.deleteArtifactRow(id);
+        },
+        search: (query) => artifactQueries.searchArtifacts(query),
+        onChanged: () => () => {},
       },
       embedding: embeddingService ? {
         searchSimilar: (query: string, topK?: number) => embeddingService!.searchSimilar(query, topK ?? 5),

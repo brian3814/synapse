@@ -105,6 +105,101 @@ function broadcastChange(record: ArtifactRecord): void {
   }
 }
 
+// ── Core operations (used by both IPC handlers and BuiltinToolProvider) ────
+
+export async function createArtifactCore(payload: {
+  title: string;
+  type: ArtifactType;
+  content: string;
+  sessionId: string;
+  sessionTitle: string;
+}): Promise<ArtifactRecord> {
+  const { title, type, content, sessionId, sessionTitle } = payload;
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const artifactsRoot = getArtifactsDir();
+  mkdirSync(artifactsRoot, { recursive: true });
+
+  const sessionDir = resolveSessionDir(artifactsRoot, sessionId, sessionTitle);
+  const sessionDirPath = path.join(artifactsRoot, sessionDir);
+  mkdirSync(sessionDirPath, { recursive: true });
+
+  const fileName = resolveFileName(sessionDirPath, title, type);
+
+  // Write content file
+  writeFileSync(path.join(sessionDirPath, fileName), content, 'utf-8');
+
+  // Write .meta.json
+  const meta: ArtifactMeta = {
+    id,
+    title,
+    type,
+    sessionId,
+    sessionDir,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const metaFileName = fileName.replace(/\.[^.]+$/, '.meta.json');
+  writeFileSync(
+    path.join(sessionDirPath, metaFileName),
+    JSON.stringify(meta, null, 2),
+    'utf-8',
+  );
+
+  // Insert into DB
+  const record: ArtifactRecord = { ...meta, fileName };
+  await artifactQueries.insertArtifact(record);
+
+  // Index text content for FTS
+  const textContent = extractTextContent(type, content);
+  await artifactQueries.updateArtifactFts(id, textContent);
+
+  broadcastChange(record);
+  return record;
+}
+
+export async function updateArtifactCore(payload: {
+  id: string;
+  title: string;
+  content: string;
+}): Promise<ArtifactRecord> {
+  const { id, title, content } = payload;
+  const existing = await artifactQueries.getArtifact(id);
+  if (!existing) throw new Error(`Artifact ${id} not found`);
+
+  const now = new Date().toISOString();
+  const sessionDirPath = path.join(getArtifactsDir(), existing.sessionDir);
+
+  // Overwrite content file
+  writeFileSync(path.join(sessionDirPath, existing.fileName), content, 'utf-8');
+
+  // Overwrite .meta.json
+  const meta: ArtifactMeta = {
+    id,
+    title,
+    type: existing.type,
+    sessionId: existing.sessionId,
+    sessionDir: existing.sessionDir,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+  const metaFileName = existing.fileName.replace(/\.[^.]+$/, '.meta.json');
+  writeFileSync(
+    path.join(sessionDirPath, metaFileName),
+    JSON.stringify(meta, null, 2),
+    'utf-8',
+  );
+
+  // Update DB
+  await artifactQueries.updateArtifactRow(id, title, now);
+  const textContent = extractTextContent(existing.type, content);
+  await artifactQueries.updateArtifactFts(id, textContent);
+
+  const record: ArtifactRecord = { ...meta, fileName: existing.fileName };
+  broadcastChange(record);
+  return record;
+}
+
 export function registerArtifactIPC(): void {
   ipcMain.handle('artifacts:list', async () => {
     return artifactQueries.listArtifacts();
@@ -134,48 +229,7 @@ export function registerArtifactIPC(): void {
         sessionTitle: string;
       },
     ) => {
-      const { title, type, content, sessionId, sessionTitle } = payload;
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const artifactsRoot = getArtifactsDir();
-      mkdirSync(artifactsRoot, { recursive: true });
-
-      const sessionDir = resolveSessionDir(artifactsRoot, sessionId, sessionTitle);
-      const sessionDirPath = path.join(artifactsRoot, sessionDir);
-      mkdirSync(sessionDirPath, { recursive: true });
-
-      const fileName = resolveFileName(sessionDirPath, title, type);
-
-      // Write content file
-      writeFileSync(path.join(sessionDirPath, fileName), content, 'utf-8');
-
-      // Write .meta.json
-      const meta: ArtifactMeta = {
-        id,
-        title,
-        type,
-        sessionId,
-        sessionDir,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const metaFileName = fileName.replace(/\.[^.]+$/, '.meta.json');
-      writeFileSync(
-        path.join(sessionDirPath, metaFileName),
-        JSON.stringify(meta, null, 2),
-        'utf-8',
-      );
-
-      // Insert into DB
-      const record: ArtifactRecord = { ...meta, fileName };
-      await artifactQueries.insertArtifact(record);
-
-      // Index text content for FTS
-      const textContent = extractTextContent(type, content);
-      await artifactQueries.updateArtifactFts(id, textContent);
-
-      broadcastChange(record);
-      return record;
+      return createArtifactCore(payload);
     },
   );
 
@@ -185,41 +239,7 @@ export function registerArtifactIPC(): void {
       _event,
       payload: { id: string; title: string; content: string },
     ) => {
-      const { id, title, content } = payload;
-      const existing = await artifactQueries.getArtifact(id);
-      if (!existing) throw new Error(`Artifact ${id} not found`);
-
-      const now = new Date().toISOString();
-      const sessionDirPath = path.join(getArtifactsDir(), existing.sessionDir);
-
-      // Overwrite content file
-      writeFileSync(path.join(sessionDirPath, existing.fileName), content, 'utf-8');
-
-      // Overwrite .meta.json
-      const meta: ArtifactMeta = {
-        id,
-        title,
-        type: existing.type,
-        sessionId: existing.sessionId,
-        sessionDir: existing.sessionDir,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      };
-      const metaFileName = existing.fileName.replace(/\.[^.]+$/, '.meta.json');
-      writeFileSync(
-        path.join(sessionDirPath, metaFileName),
-        JSON.stringify(meta, null, 2),
-        'utf-8',
-      );
-
-      // Update DB
-      await artifactQueries.updateArtifactRow(id, title, now);
-      const textContent = extractTextContent(existing.type, content);
-      await artifactQueries.updateArtifactFts(id, textContent);
-
-      const record: ArtifactRecord = { ...meta, fileName: existing.fileName };
-      broadcastChange(record);
-      return record;
+      return updateArtifactCore(payload);
     },
   );
 

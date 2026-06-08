@@ -1,13 +1,14 @@
 import type { CommandContext } from '../../src/commands/types';
 import type { DataStore } from '../../src/db/data-store';
 import type { SemanticSearchResult } from '../../src/embeddings/types';
-import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser } from '../../src/platform/types';
+import type { PlatformStorage, PlatformNotes, PlatformFiles, PlatformLLM, PlatformBrowser, PlatformArtifacts } from '../../src/platform/types';
 
 interface MainProcessDeps {
   dataStore: DataStore;
   storage: PlatformStorage;
   readNote: (nodeId: string) => Promise<string | null>;
   writeNote: (nodeId: string, content: string) => Promise<void>;
+  artifacts?: PlatformArtifacts;
   embedding?: {
     searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
   };
@@ -51,6 +52,7 @@ export function createMainProcessContext(deps: MainProcessDeps): CommandContext 
     files: noopFiles,
     llm: noopLLM,
     browser: noopBrowser,
+    artifacts: deps.artifacts,
     embedding: deps.embedding,
     getGraphSnapshot: async () => {
       const nodes = await deps.dataStore.nodes.getAll();

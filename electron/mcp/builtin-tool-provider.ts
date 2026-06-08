@@ -19,6 +19,7 @@ const WRITE_TOOLS = new Set([
   'create_note', 'update_note',
   'update_edge', 'delete_edge',
   'add_alias', 'tag_node',
+  'create_artifact', 'update_artifact',
 ]);
 
 export class BuiltinToolProvider implements ToolProvider {
