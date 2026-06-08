@@ -144,7 +144,7 @@ export async function streamAnthropicWithTools(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: 16384,
       system: systemPrompt,
       messages,
       tools,
