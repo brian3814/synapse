@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession';
 import { ChatToolCall } from './ChatToolCall';
 import { ChatReferencedEntities } from './ChatReferencedEntities';
