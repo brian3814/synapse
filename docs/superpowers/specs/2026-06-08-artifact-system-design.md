@@ -542,3 +542,4 @@ Electron implementation uses IPC to main process handlers. Chrome implementation
 - Artifact templates / scaffolding
 - Collaborative editing
 - Chrome extension support
+- Background agent for naming enhancement, memory extraction, metadata enrichment — see `docs/plans/background-agent-infrastructure.md`
