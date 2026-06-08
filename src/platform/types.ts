@@ -1,4 +1,5 @@
 import type { AgentProgressEvent, ToolCall } from '../shared/types';
+import type { ArtifactRecord, ArtifactType } from '../shared/artifact-types';
 
 export type { PlatformEmbedding } from '../embeddings/types';
 
@@ -45,6 +46,24 @@ export interface PlatformFiles {
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
+}
+
+export interface PlatformArtifacts {
+  list(): Promise<ArtifactRecord[]>;
+  get(id: string): Promise<ArtifactRecord | null>;
+  getContent(id: string): Promise<string>;
+  create(params: {
+    type: ArtifactType;
+    title: string;
+    content: string;
+    sessionId: string;
+    sessionTitle: string;
+    sessionCreatedAt: string;
+  }): Promise<ArtifactRecord>;
+  update(id: string, content: string, title?: string): Promise<ArtifactRecord>;
+  delete(id: string): Promise<void>;
+  search(query: string): Promise<ArtifactRecord[]>;
+  onChanged(cb: (artifact: ArtifactRecord) => void): () => void;
 }
 
 export interface RateLimitInfo {

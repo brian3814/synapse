@@ -7,6 +7,7 @@ import { ElectronFiles } from './files';
 import { ElectronLLM } from './llm';
 import { ElectronBrowser } from './browser';
 import { ElectronEmbedding } from './embedding';
+import { ElectronArtifacts } from './artifacts';
 export { vaultWorkspace } from './vault-workspace';
 
 export const platformId: PlatformId = 'electron';
@@ -18,6 +19,7 @@ export const files = new ElectronFiles();
 export const llm = new ElectronLLM();
 export const browser = new ElectronBrowser();
 export const embedding = new ElectronEmbedding();
+export const artifacts = new ElectronArtifacts();
 export async function initPlatform(): Promise<void> {
   await db.init();
   await notes.init();
