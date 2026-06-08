@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
 type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'notes' | 'intelligence' | 'readingList';
-export type LeftPanel = 'none' | 'explorer' | 'agents';
+export type LeftPanel = 'none' | 'explorer' | 'agents' | 'artifacts';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 
@@ -10,7 +10,8 @@ export type ContentTabType =
   | { kind: 'graph' }
   | { kind: 'noteEditor'; noteId: string }
   | { kind: 'extractionReview' }
-  | { kind: 'viewer'; filePath: string };
+  | { kind: 'viewer'; filePath: string }
+  | { kind: 'artifact'; artifactId: string };
 
 export interface ContentTab {
   id: string;
@@ -30,6 +31,7 @@ function contentTabId(type: ContentTabType): string {
   if (type.kind === 'extractionReview') return 'extraction-review';
   if (type.kind === 'noteEditor') return `note-${type.noteId}`;
   if (type.kind === 'viewer') return `viewer-${type.filePath}`;
+  if (type.kind === 'artifact') return `artifact-${type.artifactId}`;
   return 'unknown';
 }
 
