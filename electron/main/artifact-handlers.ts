@@ -23,7 +23,7 @@ function extractTextContent(type: ArtifactType, content: string): string {
       return content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     case 'svg': {
       const textMatches = content.match(/<text[^>]*>([^<]*)<\/text>/g) || [];
-      return textMatches.map(m => m.replace(/<[^>]*>/g, '')).join(' ');
+      return textMatches.map((m: string) => m.replace(/<[^>]*>/g, '')).join(' ');
     }
     case 'jsx':
       return content
