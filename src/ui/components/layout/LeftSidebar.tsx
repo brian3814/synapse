@@ -3,6 +3,7 @@ import { useUIStore } from '../../../graph/store/ui-store';
 import { ActivityBar } from './ActivityBar';
 import { VaultDrawer } from './VaultDrawer';
 import { AgentsPanel } from '../panels/AgentsPanel';
+import { ArtifactPanel } from '../sidebar/ArtifactPanel';
 
 interface LeftSidebarProps {
   vaultPath: string | null;
@@ -48,6 +49,7 @@ export function LeftSidebar({ vaultPath, onOpenFile }: LeftSidebarProps) {
               <VaultDrawer rootPath={vaultPath} onOpenFile={onOpenFile} />
             )}
             {leftPanel === 'agents' && <AgentsPanel />}
+            {leftPanel === 'artifacts' && <ArtifactPanel />}
           </div>
           <div
             onPointerDown={onPointerDown}

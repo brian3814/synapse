@@ -13,6 +13,7 @@ import { NoteEditor } from '../components/notes/NoteEditor';
 import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
 import { LeftSidebar } from '../components/layout/LeftSidebar';
 import { ViewerTab } from '../components/tabs/ViewerTab';
+import { ArtifactTab } from '../components/tabs/ArtifactTab';
 import { useUIStore } from '../../graph/store/ui-store';
 import { vaultWorkspace } from '@platform';
 import type { ContentColumn } from '../../graph/store/ui-store';
@@ -247,6 +248,8 @@ function ColumnWithDropZones({
                 <ExtractionReviewTab />
               ) : tab.type.kind === 'viewer' ? (
                 <ViewerTab filePath={tab.type.filePath} />
+              ) : tab.type.kind === 'artifact' ? (
+                <ArtifactTab artifactId={tab.type.artifactId} />
               ) : (
                 <div className="h-full overflow-y-auto bg-zinc-900">
                   <NoteEditor nodeId={tab.type.noteId} isTab />
