@@ -48,9 +48,14 @@ Use artifacts when content benefits from dedicated rendering — not for short c
 
 For jsx artifacts:
 - Use \`export default function ComponentName()\` as the entry point
-- Available imports: react, recharts, d3 (pre-bundled in sandbox)
-- Use Tailwind CSS classes for styling
-- Hardcode data directly into the component (no external fetching)
+- ONLY these libraries are available (the sandbox has NO network access):
+  - \`react\` (React 19 — hooks, createElement, etc.)
+  - \`recharts\` (BarChart, LineChart, PieChart, XAxis, YAxis, Tooltip, Legend, etc.)
+  - \`d3\` (d3-force, d3-scale, d3-shape, d3-selection, etc.)
+- Use inline styles or basic CSS — Tailwind is NOT available
+- Do NOT import any other library (lodash, framer-motion, lucide-react, etc.) — they will fail
+- Hardcode data directly into the component (no fetch, no external API calls)
+- For icons, use inline SVG elements, not icon libraries
 
 When updating an existing artifact, always send the complete new content via update_artifact. Do not attempt partial patches.
 
