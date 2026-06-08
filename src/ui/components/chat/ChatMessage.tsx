@@ -3,8 +3,18 @@ import type { ChatMessage as ChatMessageType } from '../../hooks/useChatSession'
 import { ChatToolCall } from './ChatToolCall';
 import { ChatReferencedEntities } from './ChatReferencedEntities';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
+import { ArtifactCard } from './ArtifactCard';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
+
+function isArtifactResult(content: string): boolean {
+  try {
+    const data = JSON.parse(content);
+    return data._artifactCard === true;
+  } catch {
+    return false;
+  }
+}
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -41,6 +51,19 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
                 ))}
               </div>
             )}
+            {message.agentTurns?.filter(turn =>
+              turn.type === 'tool_result' && !turn.isError && isArtifactResult(turn.content)
+            ).map((turn, i) => {
+              const data = JSON.parse(turn.content);
+              return (
+                <ArtifactCard
+                  key={`artifact-${i}`}
+                  artifactId={data.artifactId}
+                  title={data.title}
+                  type={data.type}
+                />
+              );
+            })}
             <MarkdownRenderer content={message.content || '...'} onNodeClick={onNodeClick} />
             <span className="inline-block w-1.5 h-3.5 bg-indigo-400 animate-pulse ml-0.5" />
             <CopyButton text={message.content} position="bottom-1 left-1" />
@@ -56,6 +79,19 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
                 ))}
               </div>
             )}
+            {message.agentTurns?.filter(turn =>
+              turn.type === 'tool_result' && !turn.isError && isArtifactResult(turn.content)
+            ).map((turn, i) => {
+              const data = JSON.parse(turn.content);
+              return (
+                <ArtifactCard
+                  key={`artifact-${i}`}
+                  artifactId={data.artifactId}
+                  title={data.title}
+                  type={data.type}
+                />
+              );
+            })}
             <p className="text-zinc-400 text-xs">Thinking...</p>
           </div>
         )}
@@ -69,6 +105,19 @@ export function ChatMessage({ message, onNodeClick }: ChatMessageProps) {
                 ))}
               </div>
             )}
+            {message.agentTurns?.filter(turn =>
+              turn.type === 'tool_result' && !turn.isError && isArtifactResult(turn.content)
+            ).map((turn, i) => {
+              const data = JSON.parse(turn.content);
+              return (
+                <ArtifactCard
+                  key={`artifact-${i}`}
+                  artifactId={data.artifactId}
+                  title={data.title}
+                  type={data.type}
+                />
+              );
+            })}
             <MarkdownRenderer content={message.content} onNodeClick={onNodeClick} />
             {message.subgraph && message.subgraph.nodeIds.length > 0 && (
               <ChatReferencedEntities subgraph={message.subgraph} onNodeClick={onNodeClick} />
