@@ -29,6 +29,7 @@ import { createMainProcessContext } from './mcp/main-process-context';
 import { McpClientManager } from './mcp/mcp-client-manager';
 import { loadMcpClientConfig, loadMcpServerConfig } from './mcp/mcp-config';
 import { McpServerBridge } from './mcp/mcp-server-bridge';
+import { initArtifactHandlers, registerArtifactIPC } from './main/artifact-handlers';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -534,6 +535,7 @@ app.whenReady().then(() => {
 
   registerToolIpcHandlers(() => toolRegistry);
   registerMcpClientIpcHandlers(() => mcpClientManager);
+  registerArtifactIPC();
 
   // ── Vault Workspace Management ──────────────────────────────────────
   const vaultManager = new VaultManager(storage);
@@ -553,6 +555,9 @@ app.whenReady().then(() => {
   function registerVaultHandlers() {
     const ctx = vaultManager.getContext();
     if (!ctx) return;
+
+    // Point artifact handlers at the active vault
+    initArtifactHandlers(ctx.path);
 
     // Point files backend at the active vault's agent directory
     filesBackend.setRoot(path.join(ctx.kgPath, 'agent'));
