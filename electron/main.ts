@@ -48,6 +48,14 @@ protocol.registerSchemesAsPrivileged([
       stream: true,
     },
   },
+  {
+    scheme: 'artifact-sandbox',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+    },
+  },
 ]);
 
 function createWindow(): BrowserWindow {
@@ -86,6 +94,14 @@ app.whenReady().then(() => {
       filePath = path.join(RENDERER_DIR, 'index.html');
     }
 
+    return net.fetch('file://' + filePath);
+  });
+
+  // Serve artifact sandbox files via artifact-sandbox:// protocol
+  const SANDBOX_DIR = path.join(__dirname, 'sandbox');
+  protocol.handle('artifact-sandbox', (request) => {
+    const url = new URL(request.url);
+    const filePath = path.join(SANDBOX_DIR, url.pathname === '/' ? 'artifact-renderer.html' : url.pathname);
     return net.fetch('file://' + filePath);
   });
 
