@@ -96,9 +96,10 @@ export class VaultFileWatcher {
   }
 
   private shouldIgnore(relativePath: string): boolean {
+    if (relativePath.startsWith('.kg/artifacts/')) return false;
+
     const parts = relativePath.split('/');
 
-    // Ignore files in ignored directories
     for (const part of parts.slice(0, -1)) {
       if (IGNORE_DIRS.has(part)) return true;
     }

@@ -19,6 +19,7 @@ import type { VaultSandboxConfig } from '../src/shared/agent-settings-types';
 import { NoteFileHandler } from './vault/handlers/note-file-handler';
 import { SyncBroadcastHandler } from './vault/handlers/sync-broadcast-handler';
 import { ResourceDetectionHandler } from './vault/handlers/resource-detection-handler';
+import { ArtifactFileHandler } from './vault/handlers/artifact-file-handler';
 import { VaultFileWatcher } from './vault/file-watcher';
 import { reconcileVault } from './vault/reconciliation';
 import { computeFileHash } from './vault/content-hash';
@@ -551,6 +552,7 @@ app.whenReady().then(() => {
   let noteFileHandler: NoteFileHandler | null = null;
   let syncBroadcastHandler: SyncBroadcastHandler | null = null;
   let resourceDetectionHandler: ResourceDetectionHandler | null = null;
+  let artifactFileHandler: ArtifactFileHandler | null = null;
   let fileWatcher: VaultFileWatcher | null = null;
 
   function registerVaultHandlers() {
@@ -577,6 +579,9 @@ app.whenReady().then(() => {
 
     resourceDetectionHandler = new ResourceDetectionHandler(ctx, getSandboxConfig);
     resourceDetectionHandler.register(ctx.eventBus);
+
+    artifactFileHandler = new ArtifactFileHandler(ctx.path);
+    artifactFileHandler.register(ctx.eventBus);
 
     // Start file watcher for live changes
     fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
