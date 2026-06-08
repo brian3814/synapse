@@ -5,6 +5,8 @@ import { MarkdownRenderer } from '../shared/MarkdownRenderer';
 import { SvgRenderer } from '../artifacts/SvgRenderer';
 import { MermaidRenderer } from '../artifacts/MermaidRenderer';
 import { HtmlRenderer } from '../artifacts/HtmlRenderer';
+import { JsxRenderer } from '../artifacts/JsxRenderer';
+import { ArtifactEditor } from '../artifacts/ArtifactEditor';
 
 interface ArtifactTabProps { artifactId: string; }
 type ViewMode = 'preview' | 'source';
@@ -91,12 +93,7 @@ export function ArtifactTab({ artifactId }: ArtifactTabProps) {
         {mode === 'preview' ? (
           <ArtifactPreview type={artifact.type} content={content} />
         ) : (
-          <textarea
-            value={editContent}
-            onChange={(e) => handleEditChange(e.target.value)}
-            className="w-full h-full bg-zinc-950 text-zinc-300 text-xs font-mono p-4 resize-none focus:outline-none"
-            spellCheck={false}
-          />
+          <ArtifactEditor content={editContent} onChange={handleEditChange} type={artifact.type} />
         )}
       </div>
     </div>
@@ -114,7 +111,7 @@ function ArtifactPreview({ type, content }: { type: ArtifactType; content: strin
     case 'html':
       return <HtmlRenderer content={content} />;
     case 'jsx':
-      return <div className="h-full flex items-center justify-center text-zinc-500 text-xs">JSX preview — sandbox renderer coming next</div>;
+      return <JsxRenderer content={content} />;
     default:
       return <pre className="p-4 text-zinc-400 text-xs font-mono overflow-auto h-full">{content}</pre>;
   }
