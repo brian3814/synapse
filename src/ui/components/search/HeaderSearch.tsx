@@ -3,8 +3,10 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { nodes as dbNodes, edges as dbEdges, noteSearch } from '../../../db/client/db-client';
-import { embedding } from '@platform';
+import { embedding, artifacts as platformArtifacts } from '@platform';
 import type { DbNode } from '../../../shared/types';
+import type { ArtifactRecord } from '../../../shared/artifact-types';
+import { ARTIFACT_TYPE_LABELS, type ArtifactType } from '../../../shared/artifact-types';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 300;
@@ -23,9 +25,10 @@ interface SearchResults {
   notes: DbNode[];
   resources: DbNode[];
   edges: EdgeResult[];
+  artifacts: ArtifactRecord[];
 }
 
-const EMPTY: SearchResults = { entities: [], notes: [], resources: [], edges: [] };
+const EMPTY: SearchResults = { entities: [], notes: [], resources: [], edges: [], artifacts: [] };
 
 export function HeaderSearch() {
   const [query, setQuery] = useState('');
@@ -77,10 +80,11 @@ export function HeaderSearch() {
 
     // Use allSettled so a single slow/failed sub-query (e.g. edges.search on
     // large datasets) doesn't wipe out successful node results.
-    const [nodeSettled, edgeSettled, noteSettled] = await Promise.allSettled([
+    const [nodeSettled, edgeSettled, noteSettled, artifactSettled] = await Promise.allSettled([
       dbNodes.search(q, 30) as Promise<DbNode[]>,
       dbEdges.search(q, 15) as Promise<EdgeResult[]>,
       noteSearch.search(q, 10),
+      platformArtifacts.search(q) as Promise<ArtifactRecord[]>,
     ]);
 
     if (searchIdRef.current !== id) return;
@@ -94,10 +98,14 @@ export function HeaderSearch() {
     if (noteSettled.status === 'rejected') {
       console.warn('[HeaderSearch] noteSearch.search failed:', noteSettled.reason);
     }
+    if (artifactSettled.status === 'rejected') {
+      console.warn('[HeaderSearch] artifacts.search failed:', artifactSettled.reason);
+    }
 
     const nodeResults = nodeSettled.status === 'fulfilled' ? nodeSettled.value : [];
     const edgeResults = edgeSettled.status === 'fulfilled' ? edgeSettled.value : [];
     const noteContentResults = noteSettled.status === 'fulfilled' ? noteSettled.value : [];
+    const artifactResults = artifactSettled.status === 'fulfilled' ? artifactSettled.value : [];
 
     const entities: DbNode[] = [];
     const notes: DbNode[] = [];
@@ -118,10 +126,10 @@ export function HeaderSearch() {
       }
     }
 
-    setResults({ entities, notes, resources, edges: edgeResults });
+    setResults({ entities, notes, resources, edges: edgeResults, artifacts: artifactResults });
 
     // Semantic fallback: only when FTS gives sparse results and query has 3+ words
-    const ftsTotal = entities.length + notes.length + resources.length + edgeResults.length;
+    const ftsTotal = entities.length + notes.length + resources.length + edgeResults.length + artifactResults.length;
     const wordCount = q.trim().split(/\s+/).length;
     if (ftsTotal < 5 && wordCount >= 3) {
       const ftsIds = new Set<string>([
@@ -211,6 +219,16 @@ export function HeaderSearch() {
     setSemanticResults([]);
   };
 
+  const openContentTab = useUIStore((s) => s.openContentTab);
+
+  const handleSelectArtifact = (artifact: ArtifactRecord) => {
+    openContentTab({ kind: 'artifact', artifactId: artifact.id }, artifact.title);
+    setOpen(false);
+    setQuery('');
+    setResults(EMPTY);
+    setSemanticResults([]);
+  };
+
   const handleSelectEdge = (id: string, sourceId?: string, targetId?: string) => {
     selectEdge(id);
     setActivePanel('edgeDetail');
@@ -226,7 +244,7 @@ export function HeaderSearch() {
   };
 
   const totalCount =
-    results.entities.length + results.notes.length + results.resources.length + results.edges.length + semanticResults.length;
+    results.entities.length + results.notes.length + results.resources.length + results.edges.length + results.artifacts.length + semanticResults.length;
   const hasResults = totalCount > 0;
   const showDropdown = open && query.length >= MIN_QUERY_LENGTH;
 
@@ -326,6 +344,19 @@ export function HeaderSearch() {
             </ResultSection>
           )}
 
+          {/* Artifacts section */}
+          {results.artifacts.length > 0 && (
+            <ResultSection title="Artifacts" count={results.artifacts.length}>
+              {results.artifacts.map((artifact) => (
+                <ArtifactResultItem
+                  key={artifact.id}
+                  artifact={artifact}
+                  onClick={() => handleSelectArtifact(artifact)}
+                />
+              ))}
+            </ResultSection>
+          )}
+
           {/* Semantic matches section */}
           {semanticResults.length > 0 && (
             <ResultSection title="Semantic matches" count={semanticResults.length}>
@@ -389,6 +420,29 @@ function NodeResultItem({
       {sublabel && (
         <span className="text-zinc-600 ml-auto shrink-0">{sublabel}</span>
       )}
+    </button>
+  );
+}
+
+const ARTIFACT_ICONS: Record<ArtifactType, string> = {
+  jsx: '⚛', markdown: '📄', html: '🌐', svg: '◈', mermaid: '◇',
+};
+
+function ArtifactResultItem({
+  artifact,
+  onClick,
+}: {
+  artifact: ArtifactRecord;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-3 py-1.5 hover:bg-zinc-700 flex items-center gap-2 text-xs"
+    >
+      <span className="shrink-0">{ARTIFACT_ICONS[artifact.type]}</span>
+      <span className="text-zinc-200 truncate">{artifact.title}</span>
+      <span className="text-zinc-600 ml-auto shrink-0">{ARTIFACT_TYPE_LABELS[artifact.type]}</span>
     </button>
   );
 }
