@@ -45,14 +45,13 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
     });
   }, []);
 
-  const handleOpenFile = useCallback((filePath: string, fileType: string) => {
+  const handleOpenFile = useCallback(async (filePath: string, fileType: string) => {
     const fileName = filePath.split('/').pop() ?? filePath;
-    if (fileType === 'note' && vaultPath) {
-      // Only match notes in the vault's own notes/ directory, not /notes/ anywhere in the path
-      const notesPrefix = `${vaultPath}/notes/`;
-      if (filePath.startsWith(notesPrefix) && filePath.endsWith('.md')) {
-        const noteId = filePath.slice(notesPrefix.length, -3);
-        useUIStore.getState().openContentTab({ kind: 'noteEditor', noteId }, fileName);
+    if (fileType === 'note' && vaultPath && filePath.startsWith(vaultPath + '/') && filePath.endsWith('.md')) {
+      const vaultRelPath = filePath.slice(vaultPath.length + 1);
+      const nodeId = await (window as any).electronIPC.invoke('notes:resolveByVaultPath', vaultRelPath) as string | null;
+      if (nodeId) {
+        useUIStore.getState().openContentTab({ kind: 'noteEditor', noteId: nodeId }, fileName);
         return;
       }
     }

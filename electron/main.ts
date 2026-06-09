@@ -335,6 +335,14 @@ app.whenReady().then(() => {
     return notesBackend.moveNotes(newPath);
   });
 
+  ipcMain.handle('notes:resolveByVaultPath', (_event, vaultRelPath: string): string | null => {
+    const ctx = vaultManager.getContext();
+    if (!ctx) return null;
+    const row = getDb().prepare('SELECT id FROM nodes WHERE vault_path = ?')
+      .get(vaultRelPath) as { id: string } | undefined;
+    return row?.id ?? null;
+  });
+
   // Vault handlers — binary file storage at ~/Documents/KnowledgeGraph/vault/
   function getVaultDir(): string {
     return path.join(app.getPath('documents'), 'KnowledgeGraph', 'vault');
