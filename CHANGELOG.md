@@ -2,6 +2,34 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [0.4.0] - 2026-06-09
+
+### Added
+- Artifact system: LLM-generated content (dashboards, documents, diagrams) persisted as first-class objects in the vault
+- Five artifact types: JSX (React components), Markdown, HTML, SVG, Mermaid diagrams
+- `create_artifact` and `update_artifact` chat agent tools with full-replacement update model
+- Artifact storage in `.kg/artifacts/` grouped by chat session with human-readable directory/file names and sidecar `.meta.json` metadata
+- SQLite `artifacts` table with FTS5 full-text search index
+- Artifacts panel in left sidebar with search bar and type filter chips
+- Artifact content tab with Preview/Source toggle and CodeMirror 6 editor
+- Sandboxed JSX renderer: iframe with custom `artifact-sandbox://` Electron protocol, Sucrase transpilation, pre-bundled React 19 + Recharts + D3 (1.1MB vendor bundle via esbuild)
+- ArtifactCard component in chat messages with type-specific icons and "Open" button
+- Artifacts icon in activity bar (third position after Explorer and Agents)
+- File watcher integration for external artifact edits with automatic SQLite re-sync
+- Artifact instructions in chat agent system prompt with explicit library restrictions
+- Mermaid diagram rendering via mermaid.js with error fallback
+- SVG rendering via blob URL, HTML rendering via sandboxed iframe
+
+### Changed
+- `max_tokens` for chat streaming increased from 4096 to 16384 to support artifact tool calls with large content payloads
+- `ContentTabType` extended with `artifact` variant, `LeftPanel` extended with `artifacts`
+- `CommandContext` extended with optional `PlatformArtifacts` for artifact tool execution in main process
+- `BuiltinToolProvider` categorizes artifact tools as write operations
+
+### Fixed
+- Chat agent silently failing to create artifacts due to `max_tokens: 4096` truncating tool calls mid-response
+- Sandbox CORS errors from null-origin iframe loading CDN scripts — resolved by bundling vendor libs locally via custom Electron protocol
+
 ## [0.3.0] - 2026-06-07
 
 ### Added
