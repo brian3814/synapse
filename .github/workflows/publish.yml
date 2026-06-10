@@ -57,14 +57,7 @@ jobs:
 
   build:
     needs: publish
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            dist: dist:mac
-          - os: windows-latest
-            dist: dist:win
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -77,16 +70,13 @@ jobs:
         run: npm ci
 
       - name: Build & package
-        run: npm run ${{ matrix.dist }} -- --publish never
+        run: npm run dist:mac -- --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.os }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
+          name: release-macos
+          path: release/*.dmg
           if-no-files-found: error
 
   release:
@@ -111,14 +101,12 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Synapse ${{ github.ref_name }}
           draft: false
-          files: artifacts/*
+          files: artifacts/*.dmg
           token: ${{ secrets.PUBLIC_REPO_PAT }}
           body: |
             ## Synapse ${{ github.ref_name }}
 
             ### Downloads
-            - **macOS**: `.dmg` (Intel + Apple Silicon) or `.zip`
-            - **Windows**: `.exe` installer
-            - **Linux**: `.AppImage` or `.deb`
+            - **macOS**: `.dmg`
 
-            > ⚠️ Builds are unsigned. macOS: right-click → Open. Windows: click "More info" → "Run anyway".
+            > ⚠️ Build is unsigned. Right-click → Open on first launch.

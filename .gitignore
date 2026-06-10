@@ -37,3 +37,6 @@ test-results/
 skills-lock.json
 tests/screenshots/
 electron/sandbox/vendor/
+
+# Local test data (contains live SQLite db + wal/shm)
+synapse-test-vault/
