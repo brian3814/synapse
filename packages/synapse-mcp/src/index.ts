@@ -170,13 +170,13 @@ interface VaultEntry {
   provider: StandaloneGraphProvider;
 }
 
-function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): VaultEntry[] {
+async function openVaults(vaultPaths: string[], allowWrite: boolean, init: boolean): Promise<VaultEntry[]> {
   const entries: VaultEntry[] = [];
   const embeddingConfig = loadEmbeddingConfig();
 
   for (const vaultPath of vaultPaths) {
     if (init) {
-      StandaloneGraphProvider.initVault(vaultPath);
+      await StandaloneGraphProvider.initVault(vaultPath);
       process.stderr.write(`Initialized vault at ${vaultPath}\n`);
     }
     const dbPath = path.join(vaultPath, '.kg', 'graph.db');
@@ -644,7 +644,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const vaults = openVaults(vaultPaths, opts.allowWrite, opts.initVault);
+  const vaults = await openVaults(vaultPaths, opts.allowWrite, opts.initVault);
 
   // Helper: resolve vault by name or default to first
   function resolveVault(args: ToolArgs): VaultEntry | { error: string } {
