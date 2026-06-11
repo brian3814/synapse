@@ -12,6 +12,7 @@ import * as migration010 from './010-ingestion';
 import * as migration011 from './011-vault-file-tracking';
 import * as migration012 from './012-content-hash';
 import * as migration013 from './013-artifacts';
+import * as migration014 from './014-schema-cleanup';
 
 interface Migration {
   version: number;
@@ -20,7 +21,7 @@ interface Migration {
   optional?: boolean;
 }
 
-const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013];
+const migrations: Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012, migration013, migration014];
 
 // Track whether FTS5 is available for search queries
 let fts5Available = false;
