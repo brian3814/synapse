@@ -50,7 +50,6 @@ export function graphEdgesToRender(edges: GraphEdge[]): RenderEdge[] {
       type: edge.type,
       properties: edge.properties,
       weight: edge.weight,
-      sourceUrl: edge.sourceUrl,
     },
   }));
 }

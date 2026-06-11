@@ -92,7 +92,6 @@ export const createEdgeInputSchema = z.object({
   properties: z.record(z.string(), z.unknown()).optional().default({}),
   weight: z.number().positive().optional().default(1.0),
   directed: z.boolean().optional().default(true),
-  sourceUrl: z.string().url().optional(),
 });
 
 export const updateEdgeInputSchema = z.object({

@@ -30,7 +30,6 @@ function dbEdgeToGraphEdge(row: DbEdge): GraphEdge {
     properties: JSON.parse(row.properties || '{}'),
     weight: row.weight,
     directed: row.directed === 1,
-    sourceUrl: row.source_url ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -111,7 +110,6 @@ export async function createEdge(
     properties: JSON.stringify(input.properties ?? {}),
     weight: input.weight,
     directed: input.directed,
-    sourceUrl: input.sourceUrl,
   });
   if (!row) return { data: null, events: [] };
   const edge = dbEdgeToGraphEdge(row);

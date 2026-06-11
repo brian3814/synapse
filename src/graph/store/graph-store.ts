@@ -36,7 +36,6 @@ function dbEdgeToGraphEdge(row: DbEdge): GraphEdge {
     properties: JSON.parse(row.properties || '{}'),
     weight: row.weight,
     directed: row.directed === 1,
-    sourceUrl: row.source_url ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

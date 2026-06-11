@@ -83,7 +83,6 @@ export interface EdgeRepository {
     properties?: string;
     weight?: number;
     directed?: boolean;
-    sourceUrl?: string;
   }): Promise<DbEdge>;
   update(input: {
     id: string;

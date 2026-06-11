@@ -49,7 +49,6 @@ export async function createEdge(input: {
   properties?: string;
   weight?: number;
   directed?: boolean;
-  sourceUrl?: string;
 }): Promise<DbEdge> {
   const id = generateId();
   // Auto-derive type from label if caller didn't specify one. This keeps
@@ -57,14 +56,13 @@ export async function createEdge(input: {
   // still gets a stable category to color/style the edge by.
   const type = input.type ?? (await deriveEdgeType(input.label));
   const { rows } = await executeQuery<DbEdge>(
-    `INSERT INTO edges (id, source_id, target_id, label, type, properties, weight, directed, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO edges (id, source_id, target_id, label, type, properties, weight, directed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(source_id, target_id, label) DO UPDATE SET
        type = excluded.type,
        properties = excluded.properties,
        weight = excluded.weight,
        directed = excluded.directed,
-       source_url = excluded.source_url,
        updated_at = datetime('now')
      RETURNING *;`,
     [
@@ -76,7 +74,6 @@ export async function createEdge(input: {
       input.properties ?? '{}',
       input.weight ?? 1.0,
       input.directed !== false ? 1 : 0,
-      input.sourceUrl ?? null,
     ]
   );
   return rows[0];

@@ -465,7 +465,6 @@ export function useLLMExtraction() {
             sourceId,
             targetId,
             label: extracted.label,
-            sourceUrl: llmStore.sourceUrl ?? undefined,
             skipProvenance: true,
           });
         }
@@ -890,7 +889,6 @@ export function useLLMExtraction() {
             sourceId,
             targetId,
             label: edge.label,
-            sourceUrl: llmStore.sourceUrl ?? undefined,
             skipProvenance: true,
           });
           if (created) {

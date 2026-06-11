@@ -48,7 +48,6 @@ export interface DbEdge {
   properties: string; // JSON string
   weight: number;
   directed: number; // 0 or 1
-  source_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -171,7 +170,6 @@ export interface GraphEdge {
   properties: Record<string, unknown>;
   weight: number;
   directed: boolean;
-  sourceUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -216,7 +214,6 @@ export interface CreateEdgeInput {
   properties?: Record<string, unknown>;
   weight?: number;
   directed?: boolean;
-  sourceUrl?: string;
   /**
    * When true, graph.createEdge will NOT auto-write a user-attributed
    * edge_sources row. Extraction flows should pass `true` and then record
