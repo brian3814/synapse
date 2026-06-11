@@ -92,12 +92,27 @@ export async function runMigrations(): Promise<number> {
 
       console.log(`[DB] Applying migration ${migration.version}: ${migration.description}`);
       try {
-        await executeExec(migration.up);
-
-        await executeExec(
-          `INSERT INTO schema_version (version, description) VALUES (?, ?);`,
-          [migration.version, migration.description]
-        );
+        // Apply the migration and its version stamp atomically: a mid-migration
+        // failure (power loss, constraint error) must leave the schema exactly
+        // at the previous version so the next boot can re-run cleanly. SQLite
+        // DDL is fully transactional.
+        await executeExec('BEGIN IMMEDIATE;');
+        try {
+          await executeExec(migration.up);
+          await executeExec(
+            `INSERT INTO schema_version (version, description) VALUES (?, ?);`,
+            [migration.version, migration.description]
+          );
+          await executeExec('COMMIT;');
+        } catch (e) {
+          try {
+            await executeExec('ROLLBACK;');
+          } catch {
+            // No transaction to roll back (e.g. the BEGIN itself failed, or the
+            // connection already aborted it)
+          }
+          throw e;
+        }
         appliedVersion = migration.version;
 
         if (migration.version === 2) {

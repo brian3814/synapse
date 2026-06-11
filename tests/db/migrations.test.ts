@@ -296,19 +296,66 @@ describe('migration 014: schema cleanup', () => {
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
 
-  it('preserves source_content and reading_list_history data through the rebuilds', async () => {
-    // Build a healthy v13 vault, seed the rebuilt tables, then apply 014 alone.
-    // We can't stop the runner mid-way, so simulate: full fresh migration gives
-    // v14 directly — instead seed via the DRIFTED fixture which runs 12-14.
+  it('preserves source_content and reading_list_history rows through the rebuilds', async () => {
     db.exec(DRIFTED_MCP_FIXTURE);
-    // drifted vaults lack source_content/reading_list_history; 014's repair-create
-    // makes them, so nothing to preserve there — the preservation path is covered
-    // by rebuilding ontology seed rows (test 1) and chat rows (test 2). Here we
-    // assert the rebuilt tables are usable post-migration: insert + unique upsert key.
+    // Simulate a vault that DOES have the old-shape tables with data
+    // (e.g. a healthy pre-014 vault) so the _new+INSERT SELECT+RENAME
+    // rebuild path is exercised with real rows.
+    db.exec(`
+      CREATE TABLE source_content (
+        id TEXT PRIMARY KEY, node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL,
+        url TEXT NOT NULL, title TEXT, content TEXT NOT NULL,
+        content_hash TEXT, extracted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO source_content (id, url, title, content, content_hash)
+        VALUES ('sc1', 'https://x.test', 'Title', 'page body', 'deadbeef');
+      CREATE TABLE reading_list_history (
+        id TEXT PRIMARY KEY, url TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '', key_topics TEXT NOT NULL DEFAULT '[]',
+        merged_at TEXT NOT NULL DEFAULT (datetime('now')),
+        node_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO reading_list_history (id, url, title, summary, key_topics)
+        VALUES ('r1', 'https://x.test', 'Article', 'sum', '["a","b"]');
+    `);
+
     await runMigrations();
-    db.prepare("INSERT INTO source_content (id, url, content) VALUES ('sc1', 'https://x.test', 'body')").run();
-    db.prepare("INSERT INTO reading_list_history (id, url, title) VALUES ('r1', 'https://x.test', 't')").run();
-    expect((db.prepare('SELECT COUNT(*) AS c FROM source_content').get() as any).c).toBe(1);
-    expect((db.prepare('SELECT COUNT(*) AS c FROM reading_list_history').get() as any).c).toBe(1);
+
+    const sc = db.prepare("SELECT * FROM source_content WHERE id = 'sc1'").get() as any;
+    expect(sc.url).toBe('https://x.test');
+    expect(sc.content).toBe('page body');
+    expect(sc.content_hash).toBeUndefined(); // column gone
+    const rl = db.prepare("SELECT * FROM reading_list_history WHERE id = 'r1'").get() as any;
+    expect(rl.key_topics).toBe('["a","b"]');
+    expect(rl.node_ids).toBeUndefined(); // column gone
+  });
+
+  it('a failing migration rolls back atomically and a later re-run succeeds', async () => {
+    db.exec(DRIFTED_MCP_FIXTURE);
+    db.prepare("INSERT INTO chat_sessions (id, title) VALUES ('s1', 'chat')").run();
+    db.prepare("INSERT INTO chat_messages (id, session_id, role, content) VALUES ('m1', 's1', 'user', 'hi')").run();
+    // Sabotage 014 mid-way: its rebuild creates source_content_new, which
+    // collides with this pre-existing table and fails the migration partway.
+    db.exec('CREATE TABLE source_content_new (dummy TEXT);');
+
+    await expect(runMigrations()).rejects.toThrow();
+
+    // Atomic rollback: nothing from 014 may have applied (12 and 13 committed
+    // their own transactions before it — that's fine and expected).
+    expect((db.prepare('SELECT MAX(version) AS v FROM schema_version').get() as any).v).toBe(13);
+    expect(tableNames(db)).toContain('extraction_log');          // 014's drops rolled back
+    expect(columnNames(db, 'nodes')).toContain('z');             // 014's column drops rolled back
+    expect(columnNames(db, 'chat_messages')).toContain('rag_context');
+    expect((db.prepare('SELECT COUNT(*) AS c FROM chat_messages').get() as any).c).toBe(1);
+
+    // Operator clears the obstruction; the vault recovers on next boot.
+    db.exec('DROP TABLE source_content_new;');
+    const version = await runMigrations();
+    expect(version).toBeGreaterThanOrEqual(14);
+    expect(tableNames(db)).not.toContain('extraction_log');
+    expect((db.prepare('SELECT COUNT(*) AS c FROM chat_messages').get() as any).c).toBe(1);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
 });
