@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { setEngine } from '../../src/db/worker/query-executor';
 import { runMigrations } from '../../src/db/worker/migrations';
@@ -43,6 +43,7 @@ function tableNames(db: Database.Database): string[] {
   ).all().map((r: any) => r.name);
 }
 
+// Used by later migration tests in this branch (kept at module scope intentionally).
 function columnNames(db: Database.Database, table: string): string[] {
   return db.prepare(`PRAGMA table_info(${table})`).all().map((r: any) => r.name);
 }
@@ -53,6 +54,10 @@ describe('migration runner harness', () => {
   beforeEach(() => {
     db = freshDb();
     bindEngine(db);
+  });
+
+  afterEach(() => {
+    db.close();
   });
 
   it('requires SQLite >= 3.35 (DROP COLUMN support)', () => {
@@ -77,12 +82,15 @@ describe('migration runner harness', () => {
     expect(tables).toContain('notes_fts');
   });
 
-  it('chat cascade sanity: deleting a session cascades messages, dropping unrelated tables does not', async () => {
+  it('chat FK: deleting a session cascades its messages', async () => {
     await runMigrations();
     db.prepare("INSERT INTO chat_sessions (id, title) VALUES ('s1', 't')").run();
     db.prepare(
       "INSERT INTO chat_messages (id, session_id, role, content) VALUES ('m1', 's1', 'user', 'hi')"
     ).run();
     expect((db.prepare('SELECT COUNT(*) AS c FROM chat_messages').get() as any).c).toBe(1);
+
+    db.prepare("DELETE FROM chat_sessions WHERE id = 's1'").run();
+    expect((db.prepare('SELECT COUNT(*) AS c FROM chat_messages').get() as any).c).toBe(0);
   });
 });
