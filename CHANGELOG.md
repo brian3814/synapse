@@ -2,6 +2,25 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Migration test suite driving the real migration runner against in-memory SQLite: drifted-vault fixture, atomic-rollback re-entry test, and data-preservation tests for the schema rebuilds
+
+### Changed
+- Database migrations now apply atomically (`BEGIN IMMEDIATE`/`COMMIT` with rollback) — an interrupted migration can no longer leave a vault part-migrated and unable to start
+- `embedding_metadata` reduced to `(node_id, text_hash)`; existing embeddings regenerate lazily after migration
+- Standalone MCP CLI initializes vaults by running the canonical migration chain (001–014) instead of a separately-maintained schema copy, so CLI-created vaults are schema-identical to app vaults
+
+### Fixed
+- Vaults created by the standalone MCP CLI were stamped schema v11 with missing tables (`source_content`, `reading_list_history`, note FTS) and incompatibly-shaped embedding tables, crashing the shared embedding service and `get_source_content`; migration 014 repairs existing drifted vaults
+- `open_vault` MCP tool with `init: true` raced tool execution against in-flight migrations (unawaited init)
+- Chrome extension build broken by a stale 4-argument `addItem` call in ExtractionReviewTab
+
+### Removed
+- Migration 014 drops six dead tables (`extraction_log`, `note_folders`, `indexed_files`, `memory_semantic`, `memory_episodic`, `embedding_dismissals`) and dead columns across eight tables (`nodes.z`/`content_type`/`folder_path`, `edges.source_url`, `chat_messages.rag_context`, `chat_sessions.preset_id`, never-implemented ontology constraint columns, `source_content.content_hash`, `reading_list_history.node_ids`, redundant duplicate timestamps), plus all their orphaned query/repository plumbing
+- DB-backed agent memory tables removed entirely — files in `.kg/agent/memory/` are the sole memory store
+
 ## [0.4.0] - 2026-06-09
 
 ### Added
