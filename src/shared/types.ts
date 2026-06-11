@@ -122,16 +122,6 @@ export interface DbNoteAttachment {
   created_at: string;
 }
 
-export interface DbIndexedFile {
-  id: string;
-  file_path: string;
-  file_name: string;
-  last_modified: number;
-  content_hash: string | null;
-  node_id: string | null;
-  indexed_at: string;
-}
-
 // Slim projections for bulk graph loading (skip properties, timestamps)
 export interface DbNodeSlim {
   id: string;

@@ -25,9 +25,7 @@ const TABLES_TO_MIGRATE = [
   'nodes',
   'edges',
   'entity_aliases',
-  'extraction_log',
   'source_content',
-  'indexed_files',
 ];
 
 /**

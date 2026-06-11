@@ -14,7 +14,6 @@ import type {
   DbEntityAlias,
   DbSourceContent,
   DbEdgeSource,
-  DbIndexedFile,
   DbNoteAttachment,
   NodeType,
 } from '../shared/types';
@@ -167,21 +166,6 @@ export interface EntitySourceRepository {
   getEntitiesForResource(resourceId: string): Promise<Array<{ entityId: string; relationType: string }>>;
 }
 
-export interface IndexedFileRepository {
-  save(input: {
-    filePath: string;
-    fileName: string;
-    lastModified: number;
-    contentHash?: string;
-    nodeId?: string;
-  }): Promise<DbIndexedFile>;
-  getByPath(filePath: string): Promise<DbIndexedFile | null>;
-  getAll(): Promise<DbIndexedFile[]>;
-  deleteByPath(filePath: string): Promise<boolean>;
-  deleteByNodeId(nodeId: string): Promise<boolean>;
-  getByNodeId(nodeId: string): Promise<DbIndexedFile | null>;
-}
-
 export interface SpatialRepository {
   batchUpdatePositions(updates: Array<{ id: string; x: number; y: number }>): Promise<void>;
   nodesInBounds(minX: number, minY: number, maxX: number, maxY: number, limit?: number): Promise<DbNodeSlim[]>;
@@ -262,7 +246,6 @@ export interface DataStore {
   tags: TagRepository;
   edgeSources: EdgeSourceRepository;
   entitySources: EntitySourceRepository;
-  indexedFiles: IndexedFileRepository;
   spatial: SpatialRepository;
   readingList: ReadingListRepository;
   chat: ChatRepository;

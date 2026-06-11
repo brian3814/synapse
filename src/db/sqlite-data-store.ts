@@ -13,7 +13,6 @@ import * as entityResolutionQueries from './worker/queries/entity-resolution-que
 import * as tagQueries from './worker/queries/tag-queries';
 import * as edgeSourceQueries from './worker/queries/edge-source-queries';
 import * as entitySourceQueries from './worker/queries/entity-source-queries';
-import * as indexedFileQueries from './worker/queries/indexed-file-queries';
 import * as spatialQueries from './worker/queries/spatial-queries';
 import * as readingListQueries from './worker/queries/reading-list-queries';
 import * as chatQueries from './worker/queries/chat-queries';
@@ -133,17 +132,6 @@ export function createSqliteDataStore(
         entitySourceQueries.removeEntitySource(entityId, resourceId, relationType as any),
       removeAllForResource: (resourceId) => entitySourceQueries.removeAllForResource(resourceId),
       getEntitiesForResource: (resourceId) => entitySourceQueries.getEntitiesForResource(resourceId),
-    },
-
-    // ── Indexed File Repository ─────────────────────────────────────
-
-    indexedFiles: {
-      save: (input) => indexedFileQueries.saveIndexedFile(input),
-      getByPath: (filePath) => indexedFileQueries.getByPath(filePath),
-      getAll: () => indexedFileQueries.getAllIndexedFiles(),
-      deleteByPath: (filePath) => indexedFileQueries.deleteByPath(filePath),
-      deleteByNodeId: (nodeId) => indexedFileQueries.deleteByNodeId(nodeId),
-      getByNodeId: (nodeId) => indexedFileQueries.getByNodeId(nodeId),
     },
 
     // ── Spatial Repository ──────────────────────────────────────────

@@ -19,7 +19,6 @@ function dbClientAsDataStore(): DataStore {
     tags: dbClient.tags as any,
     edgeSources: dbClient.edgeSources as any,
     entitySources: dbClient.entitySources as any,
-    indexedFiles: dbClient.indexedFiles as any,
     spatial: dbClient.spatial as any,
     readingList: dbClient.readingList as any,
     chat: dbClient.chat as any,

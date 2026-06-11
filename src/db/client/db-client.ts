@@ -212,22 +212,6 @@ export const entitySources = {
     >,
 };
 
-// Indexed file operations
-export const indexedFiles = {
-  save: (input: { filePath: string; fileName: string; lastModified: number; contentHash?: string; nodeId?: string }) =>
-    sendRequest('indexedFiles.save', input) as Promise<any>,
-  getByPath: (filePath: string) =>
-    sendRequest('indexedFiles.getByPath', filePath) as Promise<any>,
-  getAll: () =>
-    sendRequest('indexedFiles.getAll') as Promise<any[]>,
-  delete: (filePath: string) =>
-    sendRequest('indexedFiles.delete', filePath) as Promise<boolean>,
-  deleteByNodeId: (nodeId: string) =>
-    sendRequest('indexedFiles.deleteByNodeId', nodeId) as Promise<boolean>,
-  getByNodeId: (nodeId: string) =>
-    sendRequest('indexedFiles.getByNodeId', nodeId) as Promise<any>,
-};
-
 // Spatial queries
 export const spatial = {
   nodesInBounds: (minX: number, minY: number, maxX: number, maxY: number, limit?: number) =>

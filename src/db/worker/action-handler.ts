@@ -335,38 +335,6 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.edgeSources.getEdgesFromNote(params as string) };
       }
 
-
-      // Indexed file operations
-      case 'indexedFiles.save': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.save(params as any) };
-      }
-
-      case 'indexedFiles.getByPath': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.getByPath(params as string) };
-      }
-
-      case 'indexedFiles.getAll': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.getAll() };
-      }
-
-      case 'indexedFiles.delete': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.deleteByPath(params as string) };
-      }
-
-      case 'indexedFiles.deleteByNodeId': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.deleteByNodeId(params as string) };
-      }
-
-      case 'indexedFiles.getByNodeId': {
-        ensureInit();
-        return { result: await dataStore.indexedFiles.getByNodeId(params as string) };
-      }
-
       // Spatial queries
       case 'spatial.nodesInBounds': {
         ensureInit();
