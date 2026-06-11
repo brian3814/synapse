@@ -22,7 +22,7 @@ npm run build:companion          # Companion extension → dist-companion/
 npm run build:mcp                # MCP CLI → packages/synapse-mcp/dist/
 ```
 
-No test framework or linter is configured. For Electron, run `npx electron .` after building.
+Tests: vitest (`npm test`), suites in `tests/`. No linter is configured. For Electron, run `npx electron .` after building.
 
 ## Architecture at a Glance
 

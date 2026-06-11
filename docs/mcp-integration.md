@@ -12,6 +12,10 @@ External MCP writes trigger immediate UI updates:
 - **HTTP bridge** (`/mcp`): `McpServerBridge.onGraphMutated()` broadcasts `db:sync { type: 'reset' }` to renderer windows after write tool execution.
 - **stdio CLI**: `notifyApp()` POSTs to `http://127.0.0.1:19876/api/graph-changed`. Companion server broadcasts the same reset event.
 
+## stdio CLI Vault Init
+
+`open_vault { init: true }` (or the `--init` flag) runs the canonical migration chain from `src/db/worker/migrations/` — the same chain the desktop app runs on startup. CLI-initialized vaults are schema-identical to app-created vaults and have `schemaVersion` stamped truthfully in `.kg/config.json`. Running init against a vault that the desktop app has open may transiently fail with `SQLITE_BUSY`; this is safe to retry — migrations are transactional and the vault will be left unchanged on failure.
+
 ## stdio CLI Write Tools
 
 Gated by `--allow-write` flag. Write tools: `create_node`, `update_node`, `delete_node`, `create_edge`, `delete_edge`, `create_note`, `merge_nodes`.

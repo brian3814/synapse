@@ -31,7 +31,7 @@ All new fields are optional with backward-compatible defaults. Existing files wo
 
 **Inline self-governance:** The agent's system prompt includes Memory Guidelines (appended by `assembleSystemPrompt`). Before calling `manage_memory`, the agent checks for contradictions/duplicates. The `manage_memory` tool accepts `tags` (retrieval keywords) and `supersedes` (filename to replace). When `supersedes` is provided, `governance.ts:markSuperseded()` sets `valid: false` and `superseded_by` on the old file.
 
-**Episodic unification:** Session summaries now write to files (`episodic_{date}-{slug}.md`) alongside the `memory_episodic` DB table (both paths coexist). `memory-extractor.ts` uses a richer LLM prompt that returns JSON with `summary`, `tags`, and `slug`.
+**Episodic unification:** Session summaries write to files (`episodic_{date}-{slug}.md`) in `.kg/agent/memory/`. `memory-extractor.ts` uses a richer LLM prompt that returns JSON with `summary`, `tags`, and `slug`. The legacy `memory_semantic` and `memory_episodic` SQLite tables were removed in schema v14 (migration 014); files in `.kg/agent/memory/` are the only memory store.
 
 ## Read Path: Retrieval Pipeline
 

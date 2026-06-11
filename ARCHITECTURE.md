@@ -368,7 +368,13 @@ OPFS (OriginPrivateFileSystemVFS) → IDB (IDBBatchAtomicVFS) → Default (in-me
 
 ### Schema Migrations
 
-Migrations are versioned and tracked in a `schema_version` table. The runner detects available SQLite modules (e.g., FTS5) before executing optional migrations, recording skipped ones to avoid retries.
+Migrations are versioned and tracked in a `schema_version` table. The runner detects available SQLite modules (e.g., FTS5) before executing optional migrations, recording skipped ones to avoid retries. Each migration runs atomically (BEGIN IMMEDIATE / COMMIT with rollback on failure), so a mid-migration crash cannot leave the database in a partial state.
+
+**Migration inventory (selected):**
+- **002** — FTS5 full-text index (`optional: true`; skipped when FTS5 unavailable, search falls back to LIKE)
+- **009** — `embedding_metadata` table (optional)
+- **010** — `vault_path TEXT` on `nodes`; `location TEXT` on `entity_sources`/`edge_sources`
+- **014** — Schema cleanup: dropped dead tables (`extraction_log`, `note_folders`, `indexed_files`, `memory_semantic`, `memory_episodic`, `embedding_dismissals`, `spatial_positions`, `reading_list`, `browsing_history`) and dead columns (`nodes.z`, `nodes.content_type`, `nodes.folder_path`, `edges.source_url`, `chat_messages.rag_context`, `chat_sessions.preset_id`, `note_attachments.source_url`, `ontology_node_types.{is_default,parent_type,properties_schema}`, `ontology_edge_types.{source_types,target_types,properties_schema}`, `source_content.{content_hash,created_at}`, `reading_list_history.{node_ids,created_at}`, `embedding_metadata` reduced to `(node_id, text_hash)`). Also repairs vaults initialized by the old synapse-mcp CLI that may be missing tables added after their initial schema.
 
 ---
 

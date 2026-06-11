@@ -11,7 +11,7 @@ Renderer → IPC (embedding:*) → EmbeddingService → sqlite-vec (KNN) + Provi
 - **`src/embeddings/types.ts`** — Type-only module (no runtime imports). Defines `EmbeddingProvider`, `EmbeddingConfig`, `PlatformEmbedding`. Safe to import from both Chrome and Electron builds.
 - **`electron/embeddings/`** — All runtime code. `EmbeddingService` (orchestrator), `OnnxProvider` (worker_threads), `OpenAIProvider` (API), `EmbeddingQueue` (background processing), `vec-store.ts` (sqlite-vec wrapper).
 - **`sqlite-vec`** — npm package, loaded via `sqliteVec.getLoadablePath()`. `vec_nodes` virtual table created by EmbeddingService at runtime (not in migrations).
-- **Migration 009** — Creates `embedding_metadata` and `embedding_dismissals` tables. Marked `optional: true`. Regular SQL tables that work on both platforms.
+- **Migration 009** — Creates `embedding_metadata` table (`node_id`, `text_hash`). Marked `optional: true`. Regular SQL table that works on both platforms. (`embedding_dismissals` was also created here but was dropped in migration 014 — the dismissal feature was never built.)
 
 ## Chrome Isolation Constraints
 
