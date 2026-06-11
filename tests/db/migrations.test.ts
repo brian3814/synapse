@@ -93,4 +93,12 @@ describe('migration runner harness', () => {
     db.prepare("DELETE FROM chat_sessions WHERE id = 's1'").run();
     expect((db.prepare('SELECT COUNT(*) AS c FROM chat_messages').get() as any).c).toBe(0);
   });
+
+  it('drops chat_sessions.preset_id via the ensure-block without touching messages', async () => {
+    await runMigrations();
+    expect(columnNames(db, 'chat_sessions')).not.toContain('preset_id');
+    // re-run: idempotent
+    await runMigrations();
+    expect(columnNames(db, 'chat_sessions')).not.toContain('preset_id');
+  });
 });

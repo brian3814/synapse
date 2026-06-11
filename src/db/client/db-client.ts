@@ -261,7 +261,6 @@ export const chat = {
     sessionId: string;
     role: 'user' | 'assistant';
     content: string;
-    ragContext?: string | null;
     status: 'complete' | 'error';
   }) => sendRequest('chat.saveMessage', input) as Promise<any>,
   getMessages: (sessionId: string) =>

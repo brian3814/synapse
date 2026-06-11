@@ -131,18 +131,20 @@ export async function runMigrations(): Promise<number> {
     id TEXT PRIMARY KEY, title TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_active_at TEXT NOT NULL DEFAULT (datetime('now')),
-    status TEXT NOT NULL DEFAULT 'active',
-    preset_id TEXT
+    status TEXT NOT NULL DEFAULT 'active'
   );`);
   try {
-    await executeExec(`ALTER TABLE chat_sessions ADD COLUMN preset_id TEXT;`);
+    // Dead column (presets live in app storage, never in the DB). Dropped here
+    // rather than in migration 014 because drifted MCP-initialized vaults may
+    // not have the column, and a failed ALTER would abort the migration.
+    await executeExec(`ALTER TABLE chat_sessions DROP COLUMN preset_id;`);
   } catch {
-    // Column already exists
+    // Column already gone (fresh DB or already dropped)
   }
   await executeExec(`CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
-    role TEXT NOT NULL, content TEXT NOT NULL, rag_context TEXT,
+    role TEXT NOT NULL, content TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'complete',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`);

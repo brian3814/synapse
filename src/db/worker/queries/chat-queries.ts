@@ -55,13 +55,12 @@ export async function saveMessage(input: {
   sessionId: string;
   role: 'user' | 'assistant';
   content: string;
-  ragContext?: string | null;
   status: 'complete' | 'error';
 }): Promise<any> {
   const { rows } = await executeQuery<any>(
-    `INSERT INTO chat_messages (id, session_id, role, content, rag_context, status)
-     VALUES (?, ?, ?, ?, ?, ?) RETURNING *;`,
-    [input.id, input.sessionId, input.role, input.content, input.ragContext ?? null, input.status]
+    `INSERT INTO chat_messages (id, session_id, role, content, status)
+     VALUES (?, ?, ?, ?, ?) RETURNING *;`,
+    [input.id, input.sessionId, input.role, input.content, input.status]
   );
   return rows[0];
 }

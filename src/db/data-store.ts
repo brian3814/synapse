@@ -194,7 +194,6 @@ export interface ChatRepository {
     sessionId: string;
     role: 'user' | 'assistant';
     content: string;
-    ragContext?: string | null;
     status: 'complete' | 'error';
   }): Promise<any>;
   getMessages(sessionId: string): Promise<any[]>;
