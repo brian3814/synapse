@@ -3,13 +3,13 @@ import { isContextDirective } from './types';
 
 const NODE_COLUMNS = [
   'id', 'identifier', 'label', 'type', 'properties',
-  'x', 'y', 'z', 'color', 'size', 'source_url',
+  'x', 'y', 'color', 'size', 'source_url',
   'created_at', 'updated_at',
 ];
 
 const EDGE_COLUMNS = [
   'id', 'source_id', 'target_id', 'label', 'type',
-  'properties', 'weight', 'directed', 'source_url',
+  'properties', 'weight', 'directed',
   'created_at', 'updated_at',
 ];
 

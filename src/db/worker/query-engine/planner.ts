@@ -23,11 +23,11 @@ function validatePropertyName(name: string): void {
 // Columns that live directly on the nodes/edges tables (not in JSON properties)
 const NODE_DIRECT_COLUMNS = new Set([
   'id', 'identifier', 'name', 'type', 'color', 'size',
-  'source_url', 'x', 'y', 'z', 'created_at', 'updated_at',
+  'source_url', 'x', 'y', 'created_at', 'updated_at',
 ]);
 const EDGE_DIRECT_COLUMNS = new Set([
   'id', 'source_id', 'target_id', 'label', 'type', 'weight',
-  'directed', 'source_url', 'created_at', 'updated_at',
+  'directed', 'created_at', 'updated_at',
 ]);
 
 interface PlannerState {
@@ -400,7 +400,7 @@ function applyFilterOperator(
 function addNodeSelectColumns(alias: string, state: PlannerState): void {
   const cols = [
     'id', 'identifier', 'name', 'type', 'properties',
-    'x', 'y', 'z', 'color', 'size', 'source_url',
+    'x', 'y', 'color', 'size', 'source_url',
     'created_at', 'updated_at',
   ];
   for (const col of cols) {
@@ -411,7 +411,7 @@ function addNodeSelectColumns(alias: string, state: PlannerState): void {
 function addEdgeSelectColumns(alias: string, state: PlannerState): void {
   const cols = [
     'id', 'source_id', 'target_id', 'label', 'type',
-    'properties', 'weight', 'directed', 'source_url',
+    'properties', 'weight', 'directed',
     'created_at', 'updated_at',
   ];
   for (const col of cols) {
