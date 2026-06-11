@@ -4,7 +4,12 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-11
+
 ### Added
+- Vault recovery modal: opening a recent vault whose `.kg` folder was deleted or cleaned up now shows a modal dialog explaining the issue and offering to reinitialize the vault as a fresh workspace, preserving existing user files
+- Stale vault cleanup: dismissing the recovery modal automatically removes the broken entry from the recent vaults list
+- VaultManager test suite covering `open()` error paths, `reinitialize()`, and `removeFromRecent()`
 - Migration test suite driving the real migration runner against in-memory SQLite: drifted-vault fixture, atomic-rollback re-entry test, and data-preservation tests for the schema rebuilds
 
 ### Changed
@@ -13,6 +18,7 @@ All notable changes to Synapse will be documented in this file.
 - Standalone MCP CLI initializes vaults by running the canonical migration chain (001–014) instead of a separately-maintained schema copy, so CLI-created vaults are schema-identical to app vaults
 
 ### Fixed
+- Opening a recent vault with a missing `.kg` folder showed a cryptic "No vault found" error instead of actionable recovery options
 - Vaults created by the standalone MCP CLI were stamped schema v11 with missing tables (`source_content`, `reading_list_history`, note FTS) and incompatibly-shaped embedding tables, crashing the shared embedding service and `get_source_content`; migration 014 repairs existing drifted vaults
 - `open_vault` MCP tool with `init: true` raced tool execution against in-flight migrations (unawaited init)
 - Chrome extension build broken by a stale 4-argument `addItem` call in ExtractionReviewTab
