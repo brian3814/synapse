@@ -26,7 +26,6 @@ export type { NoteSearchResult } from './worker/queries/note-search-queries';
 export type { ClusterSummary, InterClusterEdge } from './worker/queries/spatial-queries';
 export type { EdgeProvenanceType } from './worker/queries/edge-source-queries';
 export type { EntityRelationType } from './worker/queries/entity-source-queries';
-export type { EpisodicMemory } from './worker/queries/memory-queries';
 
 // Import for use in interface signatures
 import type { ResolvedEntity } from './worker/queries/entity-resolution-queries';
@@ -222,12 +221,6 @@ export interface StressTestRepository {
   generate(nodeCount: number): Promise<{ nodes: number; edges: number }>;
 }
 
-export interface MemoryRepository {
-  addEpisodic(input: { sessionId: string; summary: string; keyTopics?: string[] }): Promise<any>;
-  getRecentEpisodic(limit?: number): Promise<any[]>;
-  clearAllEpisodic(): Promise<number>;
-}
-
 // ── Top-level DataStore ───────────────────────────────────────────────
 
 export interface DataStore {
@@ -252,7 +245,6 @@ export interface DataStore {
   noteAttachments: NoteAttachmentRepository;
   noteSearch: NoteSearchRepository;
   stressTest: StressTestRepository;
-  memory: MemoryRepository;
 
   /** Load the full graph (slim projections) in a single round-trip. */
   loadGraph(): Promise<{ nodes: DbNodeSlim[]; edges: DbEdgeSlim[] }>;

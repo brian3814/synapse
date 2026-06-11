@@ -506,17 +506,6 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.noteSearch.getAll() };
       }
 
-      // Memory operations (episodic only — semantic memory is file-based)
-      case 'memory.addEpisodic':
-        ensureInit();
-        return { result: await dataStore.memory.addEpisodic(params as any) };
-      case 'memory.getRecentEpisodic':
-        ensureInit();
-        return { result: await dataStore.memory.getRecentEpisodic((params as any)?.limit) };
-      case 'memory.clearAllEpisodic':
-        ensureInit();
-        return { result: await dataStore.memory.clearAllEpisodic() };
-
       default:
         throw new Error(`Unknown action: ${action}`);
     }

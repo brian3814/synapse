@@ -19,7 +19,6 @@ import * as chatQueries from './worker/queries/chat-queries';
 import * as noteAttachmentQueries from './worker/queries/note-attachment-queries';
 import * as noteSearchQueries from './worker/queries/note-search-queries';
 import * as stressTestQueries from './worker/queries/stress-test-queries';
-import * as memoryQueries from './worker/queries/memory-queries';
 import { executeQuery, executeExec } from './worker/query-executor';
 import { executeGraphQuery, executeGraphMutation } from './worker/query-engine/index';
 import { runMigrations } from './worker/migrations';
@@ -196,12 +195,6 @@ export function createSqliteDataStore(
 
     stressTest: {
       generate: (nodeCount) => stressTestQueries.generateStressTestData(nodeCount),
-    },
-
-    memory: {
-      addEpisodic: memoryQueries.addEpisodic,
-      getRecentEpisodic: memoryQueries.getRecentEpisodic,
-      clearAllEpisodic: memoryQueries.clearAllEpisodic,
     },
 
     // ── Top-level operations ────────────────────────────────────────

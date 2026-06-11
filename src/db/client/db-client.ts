@@ -286,12 +286,3 @@ export const stressTest = {
   generate: (nodeCount: number) =>
     sendRequest('stressTest.generate', { nodeCount }, 300_000) as Promise<{ nodes: number; edges: number }>,
 };
-
-export const memory = {
-  addEpisodic: (input: { sessionId: string; summary: string; keyTopics?: string[] }) =>
-    sendRequest('memory.addEpisodic', input),
-  getRecentEpisodic: (limit?: number) =>
-    sendRequest('memory.getRecentEpisodic', { limit }),
-  clearAllEpisodic: () =>
-    sendRequest('memory.clearAllEpisodic'),
-};

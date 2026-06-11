@@ -25,7 +25,6 @@ function dbClientAsDataStore(): DataStore {
     noteAttachments: dbClient.noteAttachments as any,
     noteSearch: dbClient.noteSearch as any,
     stressTest: dbClient.stressTest as any,
-    memory: (dbClient as any).memory ?? ({} as any),
     loadGraph: dbClient.loadGraph as any,
     clearAll: dbClient.clearAll as any,
     graphQuery: (input: unknown) => dbClient.graph.query(input) as any,
