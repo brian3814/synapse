@@ -26,16 +26,13 @@ export interface DbNode {
   type: string; // StructuralNodeType: 'resource' | 'entity' | 'note'
   label: string | null; // entity semantic label (e.g., 'concept', 'person'); null for resource/note
   summary: string | null; // cached LLM-generated entity summary
-  folder_path: string; // S3-style folder prefix for notes; empty string for non-notes
   properties: string; // JSON string
   x: number | null;
   y: number | null;
-  z: number | null;
   color: string | null;
   size: number;
   source_url: string | null;
   vault_path: string | null; // vault-relative file path (e.g. 'notes/Machine Learning.md')
-  content_type: string | null; // MIME type or format hint (e.g. 'text/markdown', 'application/pdf')
   file_mtime: number | null; // last known file modification time (ms since epoch)
   file_size: number | null; // last known file size in bytes
   created_at: string;
@@ -129,7 +126,6 @@ export interface DbNodeSlim {
   name: string;
   type: string;
   label: string | null;
-  folder_path: string;
   color: string | null;
   size: number;
   source_url: string | null;
@@ -155,12 +151,10 @@ export interface GraphNode {
   type: string; // StructuralNodeType: 'resource' | 'entity' | 'note'
   label?: string | null; // entity semantic label
   summary?: string | null; // cached LLM-generated entity summary
-  folderPath?: string; // S3-style folder prefix for notes
   properties: Record<string, unknown>;
   tags?: string[];
   x?: number;
   y?: number;
-  z?: number;
   color?: string;
   size: number;
   sourceUrl?: string;
@@ -192,7 +186,6 @@ export interface CreateNodeInput {
   name: string;
   type?: string;
   label?: string;
-  folderPath?: string;
   identifier?: string;
   properties?: Record<string, unknown>;
   tags?: string[];
@@ -207,12 +200,10 @@ export interface UpdateNodeInput {
   type?: string;
   label?: string;
   summary?: string;
-  folderPath?: string;
   properties?: Record<string, unknown>;
   tags?: string[];
   x?: number;
   y?: number;
-  z?: number;
   color?: string;
   size?: number;
 }

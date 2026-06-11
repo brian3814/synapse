@@ -44,14 +44,12 @@ export interface NodeRepository {
     name: string;
     type?: string;
     label?: string;
-    folderPath?: string;
     identifier?: string;
     properties?: string;
     color?: string;
     size?: number;
     sourceUrl?: string;
     vaultPath?: string;
-    contentType?: string;
   }): Promise<DbNode>;
   update(input: {
     id: string;
@@ -59,11 +57,9 @@ export interface NodeRepository {
     type?: string;
     label?: string;
     summary?: string;
-    folderPath?: string;
     properties?: string;
     x?: number;
     y?: number;
-    z?: number;
     color?: string;
     size?: number;
   }): Promise<DbNode | null>;

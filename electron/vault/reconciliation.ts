@@ -227,8 +227,8 @@ function createNoteFromFile(ctx: VaultContext, file: ClassifiedFile): void {
   }
 
   ctx.db.prepare(`
-    INSERT INTO nodes (id, identifier, name, type, label, summary, folder_path, properties, x, y, z, color, size, source_url, vault_path, content_type, file_mtime, file_size, content_hash, created_at, updated_at)
-    VALUES (?, ?, ?, 'note', NULL, NULL, '', '{}', NULL, NULL, NULL, NULL, 1, NULL, ?, 'text/markdown', ?, ?, ?, ?, ?)
+    INSERT INTO nodes (id, identifier, name, type, label, summary, properties, x, y, color, size, source_url, vault_path, file_mtime, file_size, content_hash, created_at, updated_at)
+    VALUES (?, ?, ?, 'note', NULL, NULL, '{}', NULL, NULL, NULL, 1, NULL, ?, ?, ?, ?, ?, ?)
   `).run(id, id, name, file.relativePath, file.mtime, file.size, hash, now, now);
 
   // Index for FTS

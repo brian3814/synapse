@@ -10,7 +10,7 @@ export async function getAllNodes(): Promise<DbNode[]> {
 /** Slim projection for bulk graph loading — skips properties, timestamps */
 export async function getAllNodesSlim(): Promise<DbNodeSlim[]> {
   const { rows } = await executeQuery<DbNodeSlim>(
-    'SELECT id, identifier, name, type, label, folder_path, color, size, source_url, x, y FROM nodes;'
+    'SELECT id, identifier, name, type, label, color, size, source_url, x, y FROM nodes;'
   );
   return rows;
 }
@@ -24,19 +24,16 @@ export async function createNode(input: {
   name: string;
   type?: string;
   label?: string;
-  folderPath?: string;
   identifier?: string;
   properties?: string;
   color?: string;
   size?: number;
   sourceUrl?: string;
   vaultPath?: string;
-  contentType?: string;
 }): Promise<DbNode> {
   const id = generateId();
   const type = input.type ?? 'entity';
   const label = input.label ?? (type === 'entity' ? 'concept' : null);
-  const folderPath = input.folderPath ?? '';
   const identifier = input.identifier ?? generateIdentifier(type, input.name, input.sourceUrl, label);
 
   // Return existing node if identifier already exists (common during extraction
@@ -48,8 +45,8 @@ export async function createNode(input: {
   if (existing.length > 0) return existing[0];
 
   const { rows } = await executeQuery<DbNode>(
-    `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, color, size, source_url, vault_path, content_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO nodes (id, identifier, name, type, label, properties, color, size, source_url, vault_path)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING *;`,
     [
       id,
@@ -57,13 +54,11 @@ export async function createNode(input: {
       input.name,
       type,
       label,
-      folderPath,
       input.properties ?? '{}',
       input.color ?? null,
       input.size ?? 1.0,
       input.sourceUrl ?? null,
       input.vaultPath ?? null,
-      input.contentType ?? null,
     ]
   );
   return rows[0];
@@ -75,11 +70,9 @@ export async function updateNode(input: {
   type?: string;
   label?: string;
   summary?: string;
-  folderPath?: string;
   properties?: string;
   x?: number;
   y?: number;
-  z?: number;
   color?: string;
   size?: number;
 }): Promise<DbNode | null> {
@@ -102,10 +95,6 @@ export async function updateNode(input: {
     sets.push('summary = ?');
     params.push(input.summary);
   }
-  if (input.folderPath !== undefined) {
-    sets.push('folder_path = ?');
-    params.push(input.folderPath);
-  }
   if (input.properties !== undefined) {
     sets.push('properties = ?');
     params.push(input.properties);
@@ -117,10 +106,6 @@ export async function updateNode(input: {
   if (input.y !== undefined) {
     sets.push('y = ?');
     params.push(input.y);
-  }
-  if (input.z !== undefined) {
-    sets.push('z = ?');
-    params.push(input.z);
   }
   if (input.color !== undefined) {
     sets.push('color = ?');

@@ -20,7 +20,6 @@ function toGraphNode(row: DbNodeSlim): GraphNode {
     name: row.name,
     type: row.type,
     label: row.label,
-    folderPath: row.folder_path,
     properties: {},
     x: row.x ?? undefined,
     y: row.y ?? undefined,

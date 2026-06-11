@@ -6,24 +6,6 @@ import type { VaultEventBus } from '../event-bus';
 import type { VaultSandboxConfig } from '../../../src/shared/agent-settings-types';
 import { computeFileHash } from '../content-hash';
 
-const MIME_MAP: Record<string, string> = {
-  '.pdf': 'application/pdf',
-  '.html': 'text/html',
-  '.htm': 'text/html',
-  '.txt': 'text/plain',
-  '.md': 'text/markdown',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.mp3': 'audio/mpeg',
-  '.mp4': 'video/mp4',
-  '.csv': 'text/csv',
-};
-
 export class ResourceDetectionHandler {
   private ctx: VaultContext;
   private unsubscribers: (() => void)[] = [];
@@ -84,21 +66,19 @@ export class ResourceDetectionHandler {
     }
 
     const name = basename(relativePath, ext);
-    const contentType = MIME_MAP[ext] ?? null;
     const id = randomUUID();
     const now = new Date().toISOString();
     const hash = computeFileHash(absolutePath);
 
     this.ctx.db.prepare(`
-      INSERT INTO nodes (id, identifier, name, type, label, summary, folder_path, properties, x, y, z, color, size, source_url, vault_path, content_type, file_mtime, file_size, content_hash, created_at, updated_at)
-      VALUES (?, ?, ?, 'resource', NULL, NULL, '', ?, NULL, NULL, NULL, NULL, 1, NULL, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO nodes (id, identifier, name, type, label, summary, properties, x, y, color, size, source_url, vault_path, file_mtime, file_size, content_hash, created_at, updated_at)
+      VALUES (?, ?, ?, 'resource', NULL, NULL, ?, NULL, NULL, NULL, 1, NULL, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       id,
       name,
       JSON.stringify({ fileType: ext.slice(1), addedAt: now }),
       relativePath,
-      contentType,
       Math.floor(stat.mtimeMs),
       stat.size,
       hash,

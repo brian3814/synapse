@@ -284,8 +284,8 @@ export class StandaloneGraphProvider {
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       this.db.prepare(
-        `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, size, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, '', ?, 1, ?, ?)`
+        `INSERT INTO nodes (id, identifier, name, type, label, properties, size, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`
       ).run(id, null, name, type, label ?? null, JSON.stringify(properties ?? {}), now, now);
       return { result: JSON.stringify({ id, name, type }) };
     } catch (e: unknown) {
@@ -364,8 +364,8 @@ export class StandaloneGraphProvider {
       const notePath = `notes/${title.replace(/[/\\:]/g, '_').trim()}.md`;
 
       this.db.prepare(
-        `INSERT INTO nodes (id, identifier, name, type, label, folder_path, properties, size, vault_path, content_type, created_at, updated_at)
-         VALUES (?, ?, ?, 'note', NULL, '', '{}', 1, ?, 'text/markdown', ?, ?)`
+        `INSERT INTO nodes (id, identifier, name, type, label, properties, size, vault_path, created_at, updated_at)
+         VALUES (?, ?, ?, 'note', NULL, '{}', 1, ?, ?, ?)`
       ).run(id, null, title, notePath, now, now);
 
       // Write markdown file
@@ -734,7 +734,7 @@ export class StandaloneGraphProvider {
 }
 
 function toGraphNode(row: { id: string; name: string; type: string; label: string | null }): GraphNode {
-  return { id: row.id, identifier: null, name: row.name, type: row.type, label: row.label, folderPath: '', properties: {}, size: 1, createdAt: '', updatedAt: '' };
+  return { id: row.id, identifier: null, name: row.name, type: row.type, label: row.label, properties: {}, size: 1, createdAt: '', updatedAt: '' };
 }
 
 function toGraphEdge(row: { id: string; source_id: string; target_id: string; label: string; type: string }): GraphEdge {

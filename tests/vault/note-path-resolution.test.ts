@@ -13,14 +13,12 @@ function createTestDb(): Database.Database {
       type TEXT NOT NULL DEFAULT 'entity',
       label TEXT,
       summary TEXT,
-      folder_path TEXT NOT NULL DEFAULT '',
       properties TEXT NOT NULL DEFAULT '{}',
-      x REAL, y REAL, z REAL,
+      x REAL, y REAL,
       color TEXT,
       size REAL DEFAULT 1.0,
       source_url TEXT,
       vault_path TEXT,
-      content_type TEXT,
       file_mtime INTEGER,
       file_size INTEGER,
       content_hash TEXT,
@@ -37,8 +35,8 @@ function insertNode(db: Database.Database, overrides: Partial<{
 }> = {}) {
   const id = overrides.id ?? randomUUID();
   db.prepare(`
-    INSERT INTO nodes (id, identifier, name, type, folder_path, properties, size, vault_path, created_at, updated_at)
-    VALUES (?, ?, ?, ?, '', '{}', 1, ?, datetime('now'), datetime('now'))
+    INSERT INTO nodes (id, identifier, name, type, properties, size, vault_path, created_at, updated_at)
+    VALUES (?, ?, ?, ?, '{}', 1, ?, datetime('now'), datetime('now'))
   `).run(id, id, overrides.name ?? 'Test Node', overrides.type ?? 'note', overrides.vault_path ?? null);
   return id;
 }

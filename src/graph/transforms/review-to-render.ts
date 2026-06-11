@@ -64,7 +64,7 @@ export function existingNodesToRender(
     name: node.name,
     x: node.x ?? 0,
     y: node.y ?? 0,
-    z: node.z ?? 0,
+    z: 0,
     color: EXISTING_NODE_COLOR,
     size: node.size,
     data: {

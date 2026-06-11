@@ -37,14 +37,12 @@ function createTestVault(): { vaultPath: string; db: Database.Database; ctx: Vau
       type TEXT NOT NULL DEFAULT 'entity',
       label TEXT,
       summary TEXT,
-      folder_path TEXT NOT NULL DEFAULT '',
       properties TEXT NOT NULL DEFAULT '{}',
-      x REAL, y REAL, z REAL,
+      x REAL, y REAL,
       color TEXT,
       size REAL DEFAULT 1.0,
       source_url TEXT,
       vault_path TEXT,
-      content_type TEXT,
       file_mtime INTEGER,
       file_size INTEGER,
       content_hash TEXT,
@@ -107,8 +105,8 @@ function insertNode(db: Database.Database, overrides: Partial<{
   const id = overrides.id ?? randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO nodes (id, identifier, name, type, folder_path, properties, size, vault_path, file_mtime, file_size, content_hash, created_at, updated_at)
-    VALUES (?, ?, ?, ?, '', '{}', 1, ?, ?, ?, ?, ?, ?)
+    INSERT INTO nodes (id, identifier, name, type, properties, size, vault_path, file_mtime, file_size, content_hash, created_at, updated_at)
+    VALUES (?, ?, ?, ?, '{}', 1, ?, ?, ?, ?, ?, ?)
   `).run(
     id, id,
     overrides.name ?? 'Test Node',

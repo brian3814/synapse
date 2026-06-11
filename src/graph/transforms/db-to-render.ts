@@ -26,7 +26,7 @@ export function graphNodesToRender(
     name: node.name,
     x: node.x ?? 0,
     y: node.y ?? 0,
-    z: node.z ?? 0,
+    z: 0,
     color: colorForNode(node, typeColorMap),
     size: node.size,
     data: {
