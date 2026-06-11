@@ -122,6 +122,9 @@ export class StandaloneGraphProvider {
         createdAt: new Date().toISOString(),
       }, null, 2));
     }
+    // NOTE: the query-executor engine singleton stays bound to this (closed)
+    // DB after init. The MCP runtime never uses that singleton (tools use
+    // this.db directly) — rebind via setEngine before any future use.
     db.close();
   }
 

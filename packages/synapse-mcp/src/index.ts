@@ -713,7 +713,7 @@ async function main(): Promise<void> {
         }
         const shouldInit = toolArgs.init === true;
         if (shouldInit) {
-          StandaloneGraphProvider.initVault(resolved);
+          await StandaloneGraphProvider.initVault(resolved);
           process.stderr.write(`Initialized vault at ${resolved}\n`);
         }
         const dbPath = path.join(resolved, '.kg', 'graph.db');
