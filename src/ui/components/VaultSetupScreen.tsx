@@ -6,18 +6,33 @@ interface Props {
   onVaultReady: () => void;
 }
 
+type VaultIssue =
+  | { kind: 'kg_missing'; path: string }
+  | { kind: 'dir_missing'; path: string };
+
+function parseVaultError(e: unknown): VaultIssue | null {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (msg.includes('VAULT_KG_MISSING:')) return { kind: 'kg_missing', path: msg.split('VAULT_KG_MISSING:')[1] };
+  if (msg.includes('VAULT_DIR_MISSING:')) return { kind: 'dir_missing', path: msg.split('VAULT_DIR_MISSING:')[1] };
+  return null;
+}
+
 export function VaultSetupScreen({ onVaultReady }: Props) {
   const [recentVaults, setRecentVaults] = useState<RecentVault[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vaultIssue, setVaultIssue] = useState<VaultIssue | null>(null);
 
-  useEffect(() => {
+  const refreshRecent = useCallback(() => {
     vaultWorkspace.getRecent().then(setRecentVaults).catch(() => {});
   }, []);
+
+  useEffect(() => { refreshRecent(); }, [refreshRecent]);
 
   const handleCreate = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setVaultIssue(null);
     try {
       const result = await vaultWorkspace.pickAndCreate();
       if (result) onVaultReady();
@@ -31,6 +46,7 @@ export function VaultSetupScreen({ onVaultReady }: Props) {
   const handleOpen = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setVaultIssue(null);
     try {
       const result = await vaultWorkspace.pickAndOpen();
       if (result) onVaultReady();
@@ -44,15 +60,47 @@ export function VaultSetupScreen({ onVaultReady }: Props) {
   const handleOpenRecent = useCallback(async (vaultPath: string) => {
     setLoading(true);
     setError(null);
+    setVaultIssue(null);
     try {
       await vaultWorkspace.open(vaultPath);
       onVaultReady();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to open vault');
+      const issue = parseVaultError(e);
+      if (issue) {
+        setVaultIssue(issue);
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to open vault');
+      }
     } finally {
       setLoading(false);
     }
   }, [onVaultReady]);
+
+  const handleReinitialize = useCallback(async () => {
+    if (!vaultIssue) return;
+    setLoading(true);
+    setVaultIssue(null);
+    setError(null);
+    try {
+      await vaultWorkspace.reinitialize(vaultIssue.path);
+      onVaultReady();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to reinitialize vault');
+    } finally {
+      setLoading(false);
+    }
+  }, [vaultIssue, onVaultReady]);
+
+  const handleRemoveRecent = useCallback(async () => {
+    if (!vaultIssue) return;
+    setVaultIssue(null);
+    await vaultWorkspace.removeRecent(vaultIssue.path);
+    refreshRecent();
+  }, [vaultIssue, refreshRecent]);
+
+  const handleDismissIssue = useCallback(() => {
+    setVaultIssue(null);
+  }, []);
 
   return (
     <div className="flex items-center justify-center h-screen bg-zinc-900">
@@ -97,6 +145,59 @@ export function VaultSetupScreen({ onVaultReady }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {vaultIssue && (
+          <div className="mt-4 bg-zinc-800 border border-zinc-700 rounded-lg p-4">
+            {vaultIssue.kind === 'dir_missing' ? (
+              <>
+                <p className="text-zinc-300 text-sm mb-1">This vault folder no longer exists.</p>
+                <p className="text-zinc-500 text-xs mb-3 truncate">{vaultIssue.path}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRemoveRecent}
+                    className="flex-1 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm rounded transition-colors"
+                  >
+                    Remove from list
+                  </button>
+                  <button
+                    onClick={handleDismissIssue}
+                    className="px-3 py-1.5 text-zinc-500 hover:text-zinc-300 text-sm rounded transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-zinc-300 text-sm mb-1">
+                  This vault's data folder is missing. It may have been deleted or cleaned up.
+                </p>
+                <p className="text-zinc-500 text-xs mb-3 truncate">{vaultIssue.path}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReinitialize}
+                    disabled={loading}
+                    className="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                  >
+                    Reinitialize vault
+                  </button>
+                  <button
+                    onClick={handleRemoveRecent}
+                    className="flex-1 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm rounded transition-colors"
+                  >
+                    Remove from list
+                  </button>
+                  <button
+                    onClick={handleDismissIssue}
+                    className="px-3 py-1.5 text-zinc-500 hover:text-zinc-300 text-sm rounded transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 

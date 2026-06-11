@@ -39,6 +39,10 @@ export const vaultWorkspace = {
     return null;
   },
   async close(): Promise<void> {},
+  async reinitialize(_vaultPath: string): Promise<VaultInfo> {
+    throw new Error('Vault workspace not supported in Chrome extension');
+  },
+  async removeRecent(_vaultPath: string): Promise<void> {},
   async getSandboxConfig(): Promise<VaultSandboxConfig | null> {
     return null;
   },

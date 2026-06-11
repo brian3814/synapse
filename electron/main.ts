@@ -807,6 +807,17 @@ app.whenReady().then(() => {
     await vaultManager.close();
   });
 
+  ipcMain.handle('vault-workspace:reinitialize', async (_event, vaultPath: string) => {
+    unregisterVaultHandlers();
+    const ctx = await vaultManager.reinitialize(vaultPath);
+    registerVaultHandlers();
+    return { path: ctx.path, name: ctx.name, id: ctx.id };
+  });
+
+  ipcMain.handle('vault-workspace:remove-recent', (_event, vaultPath: string) => {
+    vaultManager.removeFromRecent(vaultPath);
+  });
+
   ipcMain.handle('vault-workspace:get-sandbox-config', () => {
     const ctx = vaultManager.getContext();
     if (!ctx) return null;

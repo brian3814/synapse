@@ -55,6 +55,14 @@ export const vaultWorkspace = {
     await window.electronIPC.invoke('vault-workspace:close');
   },
 
+  async reinitialize(vaultPath: string): Promise<VaultInfo> {
+    return window.electronIPC.invoke('vault-workspace:reinitialize', vaultPath) as Promise<VaultInfo>;
+  },
+
+  async removeRecent(vaultPath: string): Promise<void> {
+    await window.electronIPC.invoke('vault-workspace:remove-recent', vaultPath);
+  },
+
   async getSandboxConfig(): Promise<VaultSandboxConfig | null> {
     return window.electronIPC.invoke('vault-workspace:get-sandbox-config') as Promise<VaultSandboxConfig | null>;
   },

@@ -60,9 +60,13 @@ export class VaultManager {
       await this.close();
     }
 
+    if (!existsSync(vaultPath)) {
+      throw new Error(`VAULT_DIR_MISSING:${vaultPath}`);
+    }
+
     const configPath = join(vaultPath, '.kg', 'config.json');
     if (!existsSync(configPath)) {
-      throw new Error(`No vault found at ${vaultPath}`);
+      throw new Error(`VAULT_KG_MISSING:${vaultPath}`);
     }
 
     // Point the shared DB engine at the vault's graph.db and run migrations
@@ -111,6 +115,17 @@ export class VaultManager {
 
     const vaultPath = result.filePaths[0];
     return this.open(vaultPath);
+  }
+
+  async reinitialize(vaultPath: string): Promise<VaultContext> {
+    const name = vaultPath.split('/').pop() ?? 'My Vault';
+    scaffoldVault(vaultPath, name);
+    return this.open(vaultPath);
+  }
+
+  removeFromRecent(vaultPath: string): void {
+    const vaults = this.getRecentVaults().filter((v) => v.path !== vaultPath);
+    this.storage.set({ recentVaults: vaults });
   }
 
   private updateRecentVaults(path: string, name: string): void {
