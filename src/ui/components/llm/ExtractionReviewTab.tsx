@@ -8,7 +8,6 @@ import { ExtractionReview } from './ExtractionReview';
 import { ExtractionSummary } from './ExtractionSummary';
 import { AgentTimeline } from './AgentTimeline';
 import { StepTimeline, RateLimitCountdown, FetchError } from './ExtractionProgress';
-import { platformId, vaultWorkspace } from '@platform';
 
 export function ExtractionReviewTab() {
   const { applyReview, proceedToReview } = useLLMExtraction();
@@ -58,15 +57,7 @@ export function ExtractionReviewTab() {
       return;
     }
 
-    let vaultPath = '';
-    let vaultName = '';
-    if (platformId === 'electron') {
-      const vault = await vaultWorkspace.getStatus();
-      vaultPath = vault.path ?? '';
-      vaultName = vault.name ?? '';
-    }
-
-    await useReadingListStore.getState().addItem(url, url, vaultPath, vaultName);
+    await useReadingListStore.getState().addItem(url, url);
     handleDiscard();
   }, [handleDiscard]);
 
