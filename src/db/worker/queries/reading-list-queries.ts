@@ -13,30 +13,28 @@ export async function saveHistory(input: {
   title: string;
   summary: string;
   keyTopics: string[];
-  nodeIds: string[];
 }): Promise<any> {
   const id = generateId();
   const keyTopicsJson = JSON.stringify(input.keyTopics);
-  const nodeIdsJson = JSON.stringify(input.nodeIds);
 
   // Upsert: if same URL already exists, update
   const existing = await getByUrl(input.url);
   if (existing) {
     const { rows } = await executeQuery(
       `UPDATE reading_list_history
-       SET title = ?, summary = ?, key_topics = ?, node_ids = ?, merged_at = datetime('now')
+       SET title = ?, summary = ?, key_topics = ?, merged_at = datetime('now')
        WHERE id = ?
        RETURNING *;`,
-      [input.title, input.summary, keyTopicsJson, nodeIdsJson, existing.id]
+      [input.title, input.summary, keyTopicsJson, existing.id]
     );
     return rows[0];
   }
 
   const { rows } = await executeQuery(
-    `INSERT INTO reading_list_history (id, url, title, summary, key_topics, node_ids)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO reading_list_history (id, url, title, summary, key_topics)
+     VALUES (?, ?, ?, ?, ?)
      RETURNING *;`,
-    [id, input.url, input.title, input.summary, keyTopicsJson, nodeIdsJson]
+    [id, input.url, input.title, input.summary, keyTopicsJson]
   );
   return rows[0];
 }

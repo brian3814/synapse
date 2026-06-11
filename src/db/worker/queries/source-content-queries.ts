@@ -9,15 +9,6 @@ function generateId(): string {
     .join('');
 }
 
-function hashContent(content: string): string {
-  // Simple DJB2 hash for dedup — not crypto-grade but fine for content comparison
-  let hash = 5381;
-  for (let i = 0; i < content.length; i++) {
-    hash = ((hash << 5) + hash + content.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(16);
-}
-
 export async function saveSourceContent(input: {
   nodeId?: string;
   url: string;
@@ -25,27 +16,26 @@ export async function saveSourceContent(input: {
   content: string;
 }): Promise<DbSourceContent> {
   const id = generateId();
-  const contentHash = hashContent(input.content);
 
   // Upsert: if same URL already exists, update content
   const existing = await getByUrl(input.url);
   if (existing) {
     const { rows } = await executeQuery<DbSourceContent>(
       `UPDATE source_content
-       SET content = ?, content_hash = ?, title = COALESCE(?, title),
+       SET content = ?, title = COALESCE(?, title),
            node_id = COALESCE(?, node_id), extracted_at = datetime('now')
        WHERE id = ?
        RETURNING *;`,
-      [input.content, contentHash, input.title ?? null, input.nodeId ?? null, existing.id]
+      [input.content, input.title ?? null, input.nodeId ?? null, existing.id]
     );
     return rows[0];
   }
 
   const { rows } = await executeQuery<DbSourceContent>(
-    `INSERT INTO source_content (id, node_id, url, title, content, content_hash)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO source_content (id, node_id, url, title, content)
+     VALUES (?, ?, ?, ?, ?)
      RETURNING *;`,
-    [id, input.nodeId ?? null, input.url, input.title ?? null, input.content, contentHash]
+    [id, input.nodeId ?? null, input.url, input.title ?? null, input.content]
   );
   return rows[0];
 }

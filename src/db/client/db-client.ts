@@ -232,7 +232,7 @@ export const spatial = {
 
 // Reading list history operations
 export const readingList = {
-  save: (input: { url: string; title: string; summary: string; keyTopics: string[]; nodeIds: string[] }) =>
+  save: (input: { url: string; title: string; summary: string; keyTopics: string[] }) =>
     sendRequest('readingList.save', input) as Promise<any>,
   getAll: () =>
     sendRequest('readingList.getAll') as Promise<any[]>,

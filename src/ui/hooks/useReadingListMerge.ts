@@ -63,7 +63,6 @@ export function useReadingListMerge() {
               title: item.pageTitle || item.title,
               summary: item.summary ?? '',
               keyTopics: item.keyTopics ?? [],
-              nodeIds: [], // TODO: collect node IDs from the merge
             });
           }
 

@@ -77,9 +77,7 @@ export interface DbSourceContent {
   url: string;
   title: string | null;
   content: string;
-  content_hash: string | null;
   extracted_at: string;
-  created_at: string;
 }
 
 // Edge provenance row from edge_sources table
@@ -307,7 +305,6 @@ export interface NodeType {
   description: string | null;
   color: string | null;
   category: 'structural' | 'entity_label';
-  isDefault: boolean;
 }
 
 // Agent step types

@@ -98,8 +98,8 @@ export class EmbeddingQueue {
 
     const hash = computeTextHash(text);
     this.db.prepare(
-      'INSERT OR REPLACE INTO embedding_metadata(node_id, provider_id, dimensions, embedded_at, text_hash) VALUES (?, ?, ?, ?, ?)'
-    ).run(nodeId, this.provider.id, this.provider.dimensions, new Date().toISOString(), hash);
+      'INSERT OR REPLACE INTO embedding_metadata(node_id, text_hash) VALUES (?, ?)'
+    ).run(nodeId, hash);
   }
 
   handleNodeDeleted(nodeId: string): void {

@@ -6,9 +6,6 @@ interface DbNodeType {
   description: string | null;
   color: string | null;
   category: string;
-  is_default: number;
-  parent_type: string | null;
-  properties_schema: string | null;
 }
 
 function toNodeType(row: DbNodeType): NodeType {
@@ -18,7 +15,6 @@ function toNodeType(row: DbNodeType): NodeType {
     description: row.description,
     color: row.color,
     category,
-    isDefault: row.is_default === 1,
   };
 }
 

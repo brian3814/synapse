@@ -171,7 +171,7 @@ export interface SpatialRepository {
 }
 
 export interface ReadingListRepository {
-  save(input: { url: string; title: string; summary: string; keyTopics: string[]; nodeIds: string[] }): Promise<any>;
+  save(input: { url: string; title: string; summary: string; keyTopics: string[] }): Promise<any>;
   getAll(): Promise<any[]>;
   getByUrl(url: string): Promise<any | null>;
   getRecent(limit: number): Promise<any[]>;
