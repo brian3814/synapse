@@ -1,0 +1,45 @@
+{
+  "mcpb_version": "0.1",
+  "name": "synapse",
+  "display_name": "Synapse Knowledge Graph",
+  "version": "0.1.0",
+  "description": "Connect Claude to your Synapse knowledge graph. Search, create, and manage entities, notes, and relationships.",
+  "author": {
+    "name": "Synapse"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js", "--vault", "${user_config.vault_path}", "--allow-write"]
+    }
+  },
+  "user_config": {
+    "vault_path": {
+      "type": "directory",
+      "required": true,
+      "description": "Path to your Synapse vault (the folder containing .kg/graph.db)"
+    }
+  },
+  "tools": [
+    { "name": "list_vaults", "description": "List connected vaults" },
+    { "name": "search_nodes", "description": "Search entities by name" },
+    { "name": "get_node_details", "description": "Get full details of a node" },
+    { "name": "get_neighbors", "description": "Traverse graph relationships" },
+    { "name": "get_graph_overview", "description": "Graph statistics and recent activity" },
+    { "name": "get_subgraph", "description": "Extract a subgraph around a node" },
+    { "name": "get_nodes_by_type", "description": "Filter nodes by type" },
+    { "name": "read_note", "description": "Read note markdown content" },
+    { "name": "list_notes", "description": "List all notes" },
+    { "name": "search_notes", "description": "Full-text search in notes" },
+    { "name": "find_similar_entities", "description": "Find potential duplicate entities" },
+    { "name": "create_node", "description": "Create a new entity" },
+    { "name": "update_node", "description": "Update an existing entity" },
+    { "name": "delete_node", "description": "Delete a node and its edges" },
+    { "name": "create_edge", "description": "Create a relationship" },
+    { "name": "delete_edge", "description": "Delete a relationship" },
+    { "name": "create_note", "description": "Create a note with content" },
+    { "name": "merge_nodes", "description": "Merge duplicate entities" }
+  ]
+}

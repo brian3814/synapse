@@ -1,0 +1,64 @@
+import { executeQuery, executeExec } from '../query-executor';
+import type { NodeType } from '../../../shared/types';
+
+interface DbNodeType {
+  type: string;
+  description: string | null;
+  color: string | null;
+  category: string;
+}
+
+function toNodeType(row: DbNodeType): NodeType {
+  const category = row.category === 'structural' ? 'structural' : 'entity_label';
+  return {
+    type: row.type,
+    description: row.description,
+    color: row.color,
+    category,
+  };
+}
+
+export async function getAllNodeTypes(): Promise<NodeType[]> {
+  const { rows } = await executeQuery<DbNodeType>(
+    'SELECT * FROM ontology_node_types ORDER BY category, type;'
+  );
+  return rows.map(toNodeType);
+}
+
+export async function createNodeType(input: {
+  type: string;
+  description?: string;
+  color?: string;
+  category?: 'structural' | 'entity_label';
+}): Promise<NodeType> {
+  const { rows } = await executeQuery<DbNodeType>(
+    `INSERT INTO ontology_node_types (type, description, color, category)
+     VALUES (?, ?, ?, ?)
+     RETURNING *;`,
+    [
+      input.type,
+      input.description ?? null,
+      input.color ?? null,
+      input.category ?? 'entity_label',
+    ]
+  );
+  return toNodeType(rows[0]);
+}
+
+export async function getDistinctEntityLabels(): Promise<string[]> {
+  const { rows } = await executeQuery<{ label: string }>(
+    `SELECT type AS label FROM ontology_node_types WHERE category = 'entity_label'
+     UNION
+     SELECT DISTINCT label FROM nodes WHERE type = 'entity' AND label IS NOT NULL
+     ORDER BY label;`
+  );
+  return rows.map(r => r.label);
+}
+
+export async function deleteNodeType(type: string): Promise<boolean> {
+  const { changes } = await executeExec(
+    'DELETE FROM ontology_node_types WHERE type = ?;',
+    [type]
+  );
+  return changes > 0;
+}

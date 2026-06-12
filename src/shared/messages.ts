@@ -1,0 +1,396 @@
+// Message types for communication between extension contexts
+export type MessageSource = 'content-script' | 'service-worker' | 'side-panel' | 'tab' | 'offscreen';
+
+// DB Worker messages (postMessage, not chrome.runtime)
+export type DbWorkerRequest =
+  | { type: 'init' }
+  | { type: 'exec'; sql: string; params?: unknown[] }
+  | { type: 'query'; sql: string; params?: unknown[] }
+  | { type: 'run-migrations' };
+
+export type DbWorkerResponse =
+  | { type: 'init-result'; success: boolean; error?: string }
+  | { type: 'exec-result'; requestId: string; success: boolean; changes?: number; error?: string }
+  | { type: 'query-result'; requestId: string; success: boolean; rows?: unknown[]; error?: string }
+  | { type: 'migration-result'; requestId: string; success: boolean; version?: number; error?: string };
+
+// Wrap with requestId for the postMessage protocol
+export interface DbRequest {
+  requestId: string;
+  message: DbWorkerRequest;
+}
+
+export interface DbResponse {
+  requestId: string;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+// Chrome runtime messages (between content script, service worker, panel/tab, offscreen)
+export interface ExtensionMessage {
+  type: string;
+  payload?: unknown;
+  requestId?: string;
+  source?: MessageSource;
+  timestamp?: number;
+}
+
+// Content script -> Service worker
+export interface PageContentMessage extends ExtensionMessage {
+  type: 'PAGE_CONTENT';
+  payload: {
+    title: string;
+    text: string;
+    url: string;
+    selectedText?: string;
+  };
+}
+
+export interface SelectionMessage extends ExtensionMessage {
+  type: 'SELECTION';
+  payload: {
+    text: string;
+    url: string;
+  };
+}
+
+// Service worker -> Content script
+export interface ExtractPageMessage extends ExtensionMessage {
+  type: 'EXTRACT_PAGE';
+}
+
+export interface ExtractSelectionMessage extends ExtensionMessage {
+  type: 'EXTRACT_SELECTION';
+}
+
+// UI -> Service worker (no apiKey — key is injected by the SW before forwarding to offscreen)
+export interface LLMRequestMessage extends ExtensionMessage {
+  type: 'LLM_REQUEST';
+  payload: {
+    provider: string;
+    model: string;
+    prompt: string;
+    systemPrompt?: string;
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    /** Phase 4: carries the extractionNotesEnabled toggle for prompt selection. */
+    notesEnabled?: boolean;
+  };
+}
+
+// Service worker -> Offscreen (internal, with apiKey injected by SW)
+export interface LLMRequestWithKeyMessage extends ExtensionMessage {
+  type: 'LLM_REQUEST_WITH_KEY';
+  payload: LLMRequestMessage['payload'] & { apiKey: string };
+}
+
+// Offscreen -> Service worker -> Panel/Tab
+export interface LLMStreamChunkMessage extends ExtensionMessage {
+  type: 'LLM_STREAM_CHUNK';
+  payload: {
+    requestId: string;
+    chunk: string;
+    done: boolean;
+    content?: string;
+    error?: string;
+    errorType?: import('./llm-errors').LLMErrorType;
+    retryAfterMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
+  };
+}
+
+export interface LLMResponseMessage extends ExtensionMessage {
+  type: 'LLM_RESPONSE';
+  payload: {
+    requestId: string;
+    content: string;
+    error?: string;
+  };
+}
+
+// Display mode messages
+export interface OpenSidePanelMessage extends ExtensionMessage {
+  type: 'OPEN_SIDE_PANEL';
+}
+
+export interface OpenTabMessage extends ExtensionMessage {
+  type: 'OPEN_TAB';
+}
+
+export interface ToggleDisplayModeMessage extends ExtensionMessage {
+  type: 'TOGGLE_DISPLAY_MODE';
+  payload: { currentMode: 'sidePanel' | 'tab' };
+}
+
+// Agent extraction messages
+// UI -> Service worker (no apiKey)
+export interface AgentRunStartMessage extends ExtensionMessage {
+  type: 'AGENT_RUN_START';
+  payload: {
+    runId: string;
+    userPrompt: string;
+    tabId: number;
+    provider: string;
+    model: string;
+    maxIterations?: number;
+    /** Phase 4: when true, the agent produces prose notes alongside entities. */
+    notesEnabled?: boolean;
+  };
+}
+
+// Service worker -> Offscreen (internal, with apiKey injected by SW)
+export interface AgentRunStartWithKeyMessage extends ExtensionMessage {
+  type: 'AGENT_RUN_START_WITH_KEY';
+  payload: AgentRunStartMessage['payload'] & { apiKey: string };
+}
+
+export interface ToolExecuteMessage extends ExtensionMessage {
+  type: 'TOOL_EXECUTE';
+  payload: {
+    runId: string;
+    toolCallId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    tabId: number;
+  };
+}
+
+export interface ToolResultMessage extends ExtensionMessage {
+  type: 'TOOL_RESULT';
+  payload: {
+    runId: string;
+    toolCallId: string;
+    result: string;
+    error?: string;
+  };
+}
+
+export interface AgentProgressMessage extends ExtensionMessage {
+  type: 'AGENT_PROGRESS';
+  payload: {
+    runId: string;
+    event: import('./types').AgentProgressEvent;
+  };
+}
+
+// Keepalive for offscreen
+export interface KeepaliveMessage extends ExtensionMessage {
+  type: 'KEEPALIVE';
+}
+
+// Query engine messages (external extension API)
+export interface QueryExecuteMessage extends ExtensionMessage {
+  type: 'QUERY_EXECUTE';
+  payload: {
+    query: unknown;
+  };
+}
+
+export interface MutationExecuteMessage extends ExtensionMessage {
+  type: 'MUTATION_EXECUTE';
+  payload: {
+    mutation: unknown;
+  };
+}
+
+// Contextual relevance messages (Phase 4)
+export interface ExtractPageTermsMessage extends ExtensionMessage {
+  type: 'EXTRACT_PAGE_TERMS';
+}
+
+export interface PageTermsMessage extends ExtensionMessage {
+  type: 'PAGE_TERMS';
+  payload: {
+    url: string;
+    title: string;
+    terms: string[];
+  };
+}
+
+// Reading list messages
+// SW -> Offscreen (with API key injected by SW)
+export interface ReadingListExtractMessage extends ExtensionMessage {
+  type: 'READING_LIST_EXTRACT';
+  payload: {
+    url: string;
+    title: string;
+    apiKey: string; // injected by SW
+    model: string;
+  };
+}
+
+// Offscreen -> broadcast (SW + UI both pick up)
+export interface ReadingListExtractionResultMessage extends ExtensionMessage {
+  type: 'READING_LIST_EXTRACTION_RESULT';
+  payload: {
+    url: string;
+    success: boolean;
+    summary?: string;
+    keyTopics?: string[];
+    nodes?: Array<{
+      name: string;
+      type?: string;
+      label?: string;
+      properties?: Record<string, unknown>;
+      tags?: string[];
+    }>;
+    edges?: Array<{ sourceName: string; targetName: string; label: string; type?: string }>;
+    pageContent?: string;
+    pageTitle?: string;
+    error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
+  };
+}
+
+// UI -> SW: after merge, remove from Chrome reading list
+export interface ReadingListRemoveMessage extends ExtensionMessage {
+  type: 'READING_LIST_REMOVE';
+  payload: {
+    url: string;
+  };
+}
+
+// UI -> SW: re-trigger extraction for a failed item
+export interface ReadingListRetryMessage extends ExtensionMessage {
+  type: 'READING_LIST_RETRY';
+  payload: {
+    url: string;
+  };
+}
+
+// Chat agent messages
+// UI -> Service Worker (no API key) for tool-use LLM calls
+export interface ChatLLMRequestMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_REQUEST';
+  payload: {
+    requestId: string;
+    provider: string;
+    model: string;
+    systemPrompt: string;
+    messages: Array<{ role: string; content: string | Array<any> }>;
+    tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+  };
+}
+
+// SW -> Offscreen (with API key injected)
+export interface ChatLLMRequestWithKeyMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_REQUEST_WITH_KEY';
+  payload: ChatLLMRequestMessage['payload'] & { apiKey: string };
+}
+
+// Offscreen -> broadcast (streaming chunks + final result)
+export interface ChatLLMStreamMessage extends ExtensionMessage {
+  type: 'CHAT_LLM_STREAM';
+  payload: {
+    requestId: string;
+    textChunk?: string;
+    done: boolean;
+    textContent?: string;
+    toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
+    stopReason?: string;
+    error?: string;
+    errorType?: import('./llm-errors').LLMErrorType;
+    retryAfterMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    model?: string;
+  };
+}
+
+// Page analysis messages (UI → SW → content script)
+export interface AnalyzePageMessage extends ExtensionMessage {
+  type: 'ANALYZE_PAGE';
+}
+
+export interface GetPageContentQuickMessage extends ExtensionMessage {
+  type: 'GET_PAGE_CONTENT_QUICK';
+}
+
+// Rate-limit retry messages
+export interface RateLimitWaitMessage extends ExtensionMessage {
+  type: 'RATE_LIMIT_WAIT';
+  payload: {
+    requestId: string;
+    retryAfterMs: number;
+    retryCount: number;
+    maxRetries: number;
+  };
+}
+
+// OAuth messages
+export interface OAuthStartMessage extends ExtensionMessage {
+  type: 'OAUTH_START';
+}
+
+export interface OAuthRevokeMessage extends ExtensionMessage {
+  type: 'OAUTH_REVOKE';
+}
+
+export interface OAuthCheckMessage extends ExtensionMessage {
+  type: 'OAUTH_CHECK';
+}
+
+export interface OAuthStatusMessage extends ExtensionMessage {
+  type: 'OAUTH_STATUS';
+  payload: {
+    authenticated: boolean;
+    error?: string;
+  };
+}
+
+export interface OpenSettingsTabMessage extends ExtensionMessage {
+  type: 'OPEN_SETTINGS_TAB';
+}
+
+// Union of all chrome.runtime messages
+export type RuntimeMessage =
+  | PageContentMessage
+  | SelectionMessage
+  | ExtractPageMessage
+  | ExtractSelectionMessage
+  | LLMRequestMessage
+  | LLMRequestWithKeyMessage
+  | LLMStreamChunkMessage
+  | LLMResponseMessage
+  | OpenSidePanelMessage
+  | OpenTabMessage
+  | ToggleDisplayModeMessage
+  | KeepaliveMessage
+  | QueryExecuteMessage
+  | MutationExecuteMessage
+  | AgentRunStartMessage
+  | AgentRunStartWithKeyMessage
+  | ToolExecuteMessage
+  | ToolResultMessage
+  | AgentProgressMessage
+  | ExtractPageTermsMessage
+  | PageTermsMessage
+  | ReadingListExtractMessage
+  | ReadingListExtractionResultMessage
+  | ReadingListRemoveMessage
+  | ReadingListRetryMessage
+  | AnalyzePageMessage
+  | GetPageContentQuickMessage
+  | RateLimitWaitMessage
+  | OAuthStartMessage
+  | OAuthRevokeMessage
+  | OAuthCheckMessage
+  | OAuthStatusMessage
+  | ChatLLMRequestMessage
+  | ChatLLMRequestWithKeyMessage
+  | ChatLLMStreamMessage
+  | OpenSettingsTabMessage;
+
+// Helper to create messages
+export function createMessage<T extends ExtensionMessage>(
+  msg: Omit<T, 'timestamp'> & { source: MessageSource }
+): T {
+  return {
+    ...msg,
+    timestamp: Date.now(),
+  } as T;
+}

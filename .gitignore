@@ -1,0 +1,42 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+
+# Git worktrees
+.worktrees/
+
+# Tooling artifacts
+.superpowers/
+.playwright-mcp/
+
+# Electron build output
+dist-electron/
+release/
+
+# Companion extension build output
+dist-companion/
+
+# Eval results (auto-generated)
+evals/results/
+test-results/
+.agents/
+skills-lock.json
+tests/screenshots/
+electron/sandbox/vendor/
+
+# Local test data (contains live SQLite db + wal/shm)
+synapse-test-vault/
