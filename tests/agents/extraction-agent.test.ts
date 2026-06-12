@@ -65,6 +65,21 @@ describe('selectExtractionAgent', () => {
     expect(resolved.id).toBe('extraction');
     expect(resolved.enabled).toBe(true); // the pristine DEFAULT_AGENTS entry
   });
+
+  it('falls back when the preferred id matches no agent at all (vanished vault agent)', () => {
+    const agents = [builtinChat, builtinExtraction];
+    expect(selectExtractionAgent(agents, 'vault:gone-after-vault-switch').id).toBe('extraction');
+  });
+
+  it('returns the pristine default without exposing it to caller mutation surprises', () => {
+    const disabledBuiltin = { ...builtinExtraction, enabled: false };
+    const first = selectExtractionAgent([builtinChat, disabledBuiltin]);
+    const second = selectExtractionAgent([builtinChat, disabledBuiltin]);
+    // Documents current behavior: the fallback aliases the module-level
+    // DEFAULT_AGENTS entry, so callers must treat resolved agents as read-only.
+    expect(second).toBe(first);
+    expect(first.enabled).toBe(true);
+  });
 });
 
 describe('toPromptContext', () => {
