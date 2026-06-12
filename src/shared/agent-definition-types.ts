@@ -117,6 +117,55 @@ export function toToolFilter(agent: AgentDefinition): AgentToolFilter {
   return filter;
 }
 
+// --- Per-feature agent assignment ---
+
+export type CoreFeature = 'extraction' | 'chat';
+
+export interface FeatureAgentMap {
+  extraction?: string;
+  chat?: string;
+}
+
+export const FEATURE_AGENTS_KEY = 'featureAgents';
+
+/**
+ * Prompt-relevant context derived from an agent definition. Extend this
+ * interface (and toPromptContext) when new per-agent context lands —
+ * consumers pick up new fields without signature changes.
+ */
+export interface AgentPromptContext {
+  instructions?: string;
+}
+
+export function toPromptContext(agent: AgentDefinition): AgentPromptContext {
+  const instructions = agent.customInstructions?.trim();
+  return { instructions: instructions ? instructions : undefined };
+}
+
+/**
+ * Resolve the extraction agent: explicit preference (if it exists, is enabled,
+ * and is extraction-kind) → builtin 'extraction' if enabled → first enabled
+ * extraction agent (vault agents merge into the list) → pristine builtin
+ * default. Never undefined: extraction must not break because of agent
+ * management actions.
+ */
+export function selectExtractionAgent(
+  agents: AgentDefinition[],
+  preferredId?: string,
+): AgentDefinition {
+  if (preferredId) {
+    const preferred = agents.find(
+      a => a.id === preferredId && a.enabled && a.kind === 'extraction',
+    );
+    if (preferred) return preferred;
+  }
+  const builtin = agents.find(a => a.id === 'extraction' && a.enabled);
+  if (builtin) return builtin;
+  const firstEnabled = agents.find(a => a.kind === 'extraction' && a.enabled);
+  if (firstEnabled) return firstEnabled;
+  return DEFAULT_AGENTS.find(a => a.id === 'extraction')!;
+}
+
 // --- Frontmatter Parser ---
 
 interface ParsedAgentFile {
