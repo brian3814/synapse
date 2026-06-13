@@ -8,8 +8,8 @@ import { createUICommandContext } from '../../commands/create-context';
 import { extractionResultSchema } from '../../shared/schema';
 import { computeCostCents } from '../../shared/constants';
 import { getQuickExtractSystemPrompt, type ExtractionGraphContext } from '../../shared/quick-extract-prompt';
-import { AGENT_PROMPT_CONFIG_KEY, AGENT_TOOL_CONFIG_KEY } from '../../shared/agent-settings-types';
-import type { AgentPromptConfig, AgentToolConfig } from '../../shared/agent-settings-types';
+import { useAgentStore, getExtractionAgent } from '../../graph/store/agent-store';
+import { toPromptContext } from '../../shared/agent-definition-types';
 
 const EXTRACTION_NOTES_ENABLED_KEY = 'extractionNotesEnabled';
 
@@ -196,11 +196,14 @@ export async function buildDiffItems(
 }
 
 export function useLLMExtraction() {
-  const getAgentConfig = useCallback(async () => {
-    const data = await storage.get([AGENT_PROMPT_CONFIG_KEY, AGENT_TOOL_CONFIG_KEY]);
-    const promptConfig = (data as any)[AGENT_PROMPT_CONFIG_KEY] as AgentPromptConfig | undefined;
-    const toolConfig = (data as any)[AGENT_TOOL_CONFIG_KEY] as AgentToolConfig | undefined;
-    return { promptConfig, toolConfig };
+  const getExtractionAgentConfig = useCallback(async () => {
+    const store = useAgentStore.getState();
+    if (!store.loaded) {
+      await store.loadAgents().catch(() => {});
+    }
+    const agent = getExtractionAgent(useAgentStore.getState());
+    const { instructions } = toPromptContext(agent);
+    return { instructions, disallowedTools: agent.disallowedTools };
   }, []);
 
   const startExtraction = useCallback(async (text: string, sourceUrl?: string) => {
@@ -232,14 +235,14 @@ export function useLLMExtraction() {
       }
 
       const notesOn = await isNotesEnabled();
-      const { promptConfig } = await getAgentConfig();
+      const { instructions } = await getExtractionAgentConfig();
       const graphContext = await fetchGraphContext();
 
       const streamResult = await llm.streamExtraction(
         {
           prompt: text,
           model: config.model,
-          systemPrompt: getQuickExtractSystemPrompt(notesOn, promptConfig?.extractionInstructions, graphContext),
+          systemPrompt: getQuickExtractSystemPrompt(notesOn, instructions, graphContext),
         },
         (chunk) => {
           useLLMStore.getState().appendToCurrentStep(chunk);
@@ -349,6 +352,7 @@ export function useLLMExtraction() {
     llmStore.setStatus('extracting');
 
     const notesOn = await isNotesEnabled();
+    const { instructions } = await getExtractionAgentConfig();
     const graphContext = await fetchGraphContext();
 
     try {
@@ -360,7 +364,7 @@ export function useLLMExtraction() {
         {
           prompt: userContent,
           model: config.model,
-          systemPrompt: getQuickExtractSystemPrompt(notesOn, undefined, graphContext),
+          systemPrompt: getQuickExtractSystemPrompt(notesOn, instructions, graphContext),
         },
         (chunk) => {
           useLLMStore.getState().appendToCurrentStep(chunk);
@@ -560,7 +564,7 @@ export function useLLMExtraction() {
     llmStore.setSourceUrl(sourceUrl ?? tab.url ?? null);
 
     const notesOn = await isNotesEnabled();
-    const { promptConfig, toolConfig } = await getAgentConfig();
+    const { instructions, disallowedTools } = await getExtractionAgentConfig();
     const graphContext = await fetchGraphContext();
 
     // Build agent prompt: include custom URL if provided, so the agent
@@ -578,8 +582,8 @@ export function useLLMExtraction() {
           model: config.model,
           tabId: tab.id,
           notesEnabled: notesOn,
-          customInstructions: promptConfig?.extractionInstructions,
-          disabledTools: toolConfig?.disabledExtractionTools,
+          customInstructions: instructions,
+          disabledTools: disallowedTools,
           graphContext,
         },
         async (event) => {
@@ -1132,7 +1136,7 @@ export function useLLMExtraction() {
     llmStore.setSourceUrl(source.name);
 
     const notesOn = await isNotesEnabled();
-    const { promptConfig } = await getAgentConfig();
+    const { instructions } = await getExtractionAgentConfig();
     const graphContext = await fetchGraphContext();
 
     try {
@@ -1157,7 +1161,7 @@ export function useLLMExtraction() {
             llm.streamExtraction(request, onChunk, (info) => {
               useLLMStore.getState().setRateLimitWait({ ...info, startedAt: Date.now() });
             }),
-          getSystemPrompt: (notesEnabled: boolean) => getQuickExtractSystemPrompt(notesEnabled, promptConfig?.extractionInstructions, graphContext),
+          getSystemPrompt: (notesEnabled: boolean) => getQuickExtractSystemPrompt(notesEnabled, instructions, graphContext),
           notesEnabled: notesOn,
           model: config.model,
         },
