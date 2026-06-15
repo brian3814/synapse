@@ -9,6 +9,7 @@ import { MemorySection } from './MemorySection';
 import { EmbeddingSettings } from './EmbeddingSettings';
 import { VaultSandboxSection } from './VaultSandboxSection';
 import type { SettingsTab } from './SettingsModal';
+import { AgentAssignmentsTab } from './AgentAssignmentsTab';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   const [provider, setProvider] = useState<LLMProvider>('anthropic');
@@ -50,6 +51,10 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   };
 
   const models = LLM_MODELS[provider] ?? [];
+
+  if (activeTab === 'agents') {
+    return <AgentAssignmentsTab />;
+  }
 
   if (activeTab === 'model') {
     return (
