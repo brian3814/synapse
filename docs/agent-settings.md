@@ -82,6 +82,18 @@ Load order: defaults → user overrides → vault agents. Migration from legacy 
 
 `useChatSession.ts` reads from `useAgentStore.getState()` instead of scattered `storage.get()` calls. The active agent's `customInstructions` become `globalInstructions` in `assembleSystemPrompt()`. The active agent's `ToolFilter` is passed to `chat-agent-loop.ts` `getToolDefs()`.
 
+## Feature Agent Assignment
+
+Settings → Agents assigns which agent each core feature uses, persisted under the
+`featureAgents` storage key (`{ extraction?: agentId, chat?: agentId }`).
+Resolution is centralized: extraction resolves via `selectExtractionAgent(agents, featureAgents.extraction)`
+(preference → enabled builtin → first enabled extraction agent → builtin default; never undefined),
+and the chat assignment is the *default* — the chat header picker still switches per conversation.
+Disabling or deleting an assigned agent falls back silently. New core features add a key to
+`FeatureAgentMap` and a dropdown to `AgentAssignmentsTab`. Extraction consumes the resolved agent's
+`customInstructions` (via `toPromptContext`) and `disallowedTools` in all four modes; the legacy
+`agentPromptConfig`/`agentToolConfig` keys are no longer read outside the one-time migration.
+
 ## Key Files
 
 - `src/shared/agent-definition-types.ts` — `AgentDefinition`, `AgentToolFilter`, frontmatter parser, `toToolFilter()`

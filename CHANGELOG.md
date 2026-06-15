@@ -4,6 +4,13 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Settings → Agents page: assign which agent extraction uses and the default chat agent (chat header picker still overrides per conversation)
+- Custom extraction agents can be created from the Agents panel
+
+### Fixed
+- Agent custom instructions now actually reach extraction: all four extraction modes (text, page, agent, file ingestion) read the configured extraction agent instead of a legacy settings key that nothing had written since 0.3.0
+
 ## [0.5.0] - 2026-06-11
 
 ### Added
