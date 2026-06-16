@@ -5,6 +5,7 @@ import { useNodeTypeStore } from '../graph/store/node-type-store';
 import { useUIStore } from '../graph/store/ui-store';
 import { useReadingListStore } from '../graph/store/reading-list-store';
 import { useAuthStore } from '../graph/store/auth-store';
+import { initArtifactStoreListener } from '../graph/store/artifact-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { useCompanionCapture } from './hooks/useCompanionCapture';
 import { useLLMExtraction } from './hooks/useLLMExtraction';
@@ -128,6 +129,10 @@ function AppMain() {
     useAuthStore.getState().checkAuth();
     const cleanupAuth = useAuthStore.getState().startAuthListener();
     return cleanupAuth;
+  }, []);
+
+  useEffect(() => {
+    return initArtifactStoreListener();
   }, []);
 
   useEffect(() => {
