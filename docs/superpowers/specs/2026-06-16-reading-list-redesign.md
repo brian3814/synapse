@@ -105,7 +105,7 @@ Error is a property on pending items, not a separate status. On failure, the ite
 
 ### Supported file types
 
-`.md`, `.txt`, `.pdf`, `.html`, `.json`, `.csv`
+`.md`, `.txt`, `.pdf`, `.html`, `.json`, `.csv`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`
 
 ### Import decision flow
 
@@ -137,7 +137,7 @@ FETCH → PARSE → EXTRACT → VALIDATE → SIMILARITY → READY
 ```
 
 - **FETCH**: HTTP fetch + clean HTML (URLs), or read from disk/vault (files).
-- **PARSE**: extract text content. PDF → text, HTML → text, etc.
+- **PARSE**: extract text content. PDF → text, HTML → text, etc. Images (`.png`, `.jpg`, `.webp`, `.gif`, `.svg`) skip text parsing — the raw image is passed to the LLM as a vision input in the extract stage.
 - **EXTRACT**: LLM call with streaming. Produces summary, keyTopics, nodes, edges.
 - **VALIDATE**: run `readingListExtractionSchema.parse()` on the LLM's JSON output.
 - **SIMILARITY**: tiered matching against existing graph nodes (see Similarity Detection).
