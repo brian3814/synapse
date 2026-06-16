@@ -104,9 +104,9 @@ export const updateEdgeInputSchema = z.object({
 
 // LLM config validation
 export const llmConfigSchema = z.object({
-  provider: z.enum(['anthropic']),
+  provider: z.string().min(1),
   model: z.string().min(1),
-  apiKey: z.string().min(1),
+  apiKey: z.string().optional(),
 });
 
 // Search query

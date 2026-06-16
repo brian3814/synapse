@@ -7,7 +7,7 @@ export class LLMApiError extends Error {
     public readonly body: string,
     public readonly retryAfterMs?: number,
   ) {
-    super(`Anthropic API error (${statusCode}): ${body}`);
+    super(`LLM API error (${statusCode}): ${body}`);
     this.name = 'LLMApiError';
   }
 }

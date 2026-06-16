@@ -24,7 +24,7 @@ async function getAuthToken(): Promise<string> {
 // Read model from storage
 async function getModelFromStorage(): Promise<string> {
   const result = await chrome.storage.local.get('llmConfig') as Record<string, any>;
-  return result.llmConfig?.model ?? 'claude-sonnet-4-5-20241022';
+  return result.llmConfig?.model ?? 'claude-sonnet-4-6';
 }
 
 // Get current reading list items from chrome.storage.local

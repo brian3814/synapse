@@ -245,12 +245,12 @@ export interface EntityMatch {
 }
 
 // LLM types
-export type LLMProvider = 'anthropic';
+export type LLMProvider = string;
 
 export interface LLMConfig {
   provider: LLMProvider;
   model: string;
-  apiKey: string;
+  apiKey?: string;
 }
 
 export interface ExtractionResult {

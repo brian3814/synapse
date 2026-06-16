@@ -51,10 +51,28 @@ export interface AgentDefinition {
   skills?: string[];
   hooks?: Record<string, string>;
 
+  modelProvider?: string;
+  modelId?: string;
+
   maxIterations: number;
 
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ResolvedModelConfig {
+  provider: string;
+  model: string;
+}
+
+export function resolveAgentModel(
+  agent: AgentDefinition,
+  globalConfig: { provider: string; model: string },
+): ResolvedModelConfig {
+  return {
+    provider: agent.modelProvider ?? globalConfig.provider,
+    model: agent.modelId ?? globalConfig.model,
+  };
 }
 
 export const AGENT_OVERRIDES_KEY = 'agentOverrides';
@@ -257,6 +275,8 @@ export function parseAgentFile(content: string, filePath: string, scope: AgentSc
     graphScope: fm.graphScope as AgentGraphScope | undefined,
     skills: Array.isArray(fm.skills) ? fm.skills as string[] : undefined,
     hooks: (fm.hooks && typeof fm.hooks === 'object') ? fm.hooks as Record<string, string> : undefined,
+    modelProvider: typeof fm.modelProvider === 'string' ? fm.modelProvider : undefined,
+    modelId: typeof fm.modelId === 'string' ? fm.modelId : undefined,
     maxIterations: typeof fm.maxIterations === 'number' ? fm.maxIterations : 100,
     createdAt: now,
     updatedAt: now,
@@ -284,6 +304,9 @@ export function serializeAgentToMd(agent: AgentDefinition): string {
     lines.push('mcpServers:');
     for (const s of agent.mcpServers) lines.push(`  - ${s}`);
   }
+
+  if (agent.modelProvider) lines.push(`modelProvider: ${agent.modelProvider}`);
+  if (agent.modelId) lines.push(`modelId: ${agent.modelId}`);
 
   if (agent.maxIterations !== 100) lines.push(`maxIterations: ${agent.maxIterations}`);
 
