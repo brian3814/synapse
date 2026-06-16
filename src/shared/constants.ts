@@ -34,22 +34,31 @@ export const SEARCH_RESULT_LIMIT = 50;
 
 export const DB_REQUEST_TIMEOUT_MS = 10_000;
 
-export const LLM_MODELS = {
+export const FALLBACK_MODELS: Record<string, Array<{ id: string; label: string; contextWindow?: number; maxOutputTokens?: number }>> = {
   anthropic: [
-    { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
-    { id: 'claude-haiku-4-20250414', label: 'Claude Haiku 4' },
+    { id: 'claude-opus-4-8',   label: 'Claude Opus 4.8',   contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', contextWindow: 1_000_000, maxOutputTokens: 64_000 },
+    { id: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5',  contextWindow: 200_000,   maxOutputTokens: 64_000 },
   ],
-} as const;
+};
 
-// Pricing per 1M tokens in USD
+/** @deprecated Use FALLBACK_MODELS */
+export const LLM_MODELS = FALLBACK_MODELS;
+
 export const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  'claude-opus-4-8':   { inputPer1M: 5.00, outputPer1M: 25.00 },
+  'claude-opus-4-7':   { inputPer1M: 5.00, outputPer1M: 25.00 },
+  'claude-opus-4-6':   { inputPer1M: 5.00, outputPer1M: 25.00 },
+  'claude-sonnet-4-6': { inputPer1M: 3.00, outputPer1M: 15.00 },
+  'claude-haiku-4-5':  { inputPer1M: 1.00, outputPer1M: 5.00  },
+  // Legacy IDs for cost tracking of historical usage
   'claude-sonnet-4-20250514': { inputPer1M: 3.00, outputPer1M: 15.00 },
   'claude-haiku-4-20250414':  { inputPer1M: 0.80, outputPer1M: 4.00  },
 };
 
 /** Compute cost in cents from token counts and model ID */
 export function computeCostCents(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['claude-sonnet-4-20250514'];
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['claude-sonnet-4-6'];
   return ((inputTokens * pricing.inputPer1M + outputTokens * pricing.outputPer1M) / 1_000_000) * 100;
 }
 
