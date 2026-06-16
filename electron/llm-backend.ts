@@ -1,13 +1,10 @@
-import {
-  executeLLMRequestStreaming as anthropicExtractionStream,
-  streamAnthropicWithTools,
-} from '../src/offscreen/llm-executor';
 import { AGENT_TOOLS } from '../src/shared/agent-tools';
 import { fetchAndCleanContent, isBlockedUrl } from './fetch-utils';
 import type { AgentProgressEvent } from '../src/shared/types';
 import { StorageBackend } from './storage-backend';
 import { runAgentLoop as coreRunAgentLoop, type ToolExecutor } from '../src/core/agent-loop';
 import type { StreamFn } from '../src/core/llm-protocol';
+import type { ModelProvider, ModelInfo } from '../src/core/model-provider';
 import { recordUsage as coreRecordUsage, type UsageStore } from '../src/core/usage';
 import { withRetry } from '../src/core/retry';
 
@@ -20,37 +17,35 @@ export function setStorage(s: StorageBackend): void {
 }
 
 // ---------------------------------------------------------------------------
-// Provider factory
+// Provider registry
 // ---------------------------------------------------------------------------
 
-type ExtractionStreamFn = typeof anthropicExtractionStream;
+const providerRegistry = new Map<string, ModelProvider>();
 
-const streamFnRegistry: Record<string, StreamFn> = {
-  anthropic: streamAnthropicWithTools,
-};
-
-const extractionFnRegistry: Record<string, ExtractionStreamFn> = {
-  anthropic: anthropicExtractionStream,
-};
-
-export function registerStreamFn(provider: string, fn: StreamFn): void {
-  streamFnRegistry[provider] = fn;
+export function registerProvider(provider: ModelProvider): void {
+  providerRegistry.set(provider.id, provider);
 }
 
-export function registerExtractionFn(provider: string, fn: ExtractionStreamFn): void {
-  extractionFnRegistry[provider] = fn;
+export function getProvider(id: string): ModelProvider {
+  const p = providerRegistry.get(id);
+  if (!p) throw new Error(`No LLM provider registered: "${id}"`);
+  return p;
+}
+
+export function listProviders(): Array<{ id: string; label: string }> {
+  return [...providerRegistry.values()].map(p => ({ id: p.id, label: p.label }));
+}
+
+export async function listModels(providerId: string, apiKey: string): Promise<ModelInfo[]> {
+  return getProvider(providerId).listModels(apiKey);
 }
 
 function getStreamFn(provider: string): StreamFn {
-  const fn = streamFnRegistry[provider];
-  if (!fn) throw new Error(`No LLM stream adapter registered for provider "${provider}"`);
-  return fn;
+  return getProvider(provider).streamWithTools;
 }
 
-function getExtractionFn(provider: string): ExtractionStreamFn {
-  const fn = extractionFnRegistry[provider];
-  if (!fn) throw new Error(`No LLM extraction adapter registered for provider "${provider}"`);
-  return fn;
+function getExtractionFn(provider: string) {
+  return getProvider(provider).streamExtraction;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,10 +59,14 @@ interface LLMConfigSlice {
 
 function getLLMConfig(): LLMConfigSlice {
   if (!storage) throw new Error('Storage not initialized');
-  const data = storage.get('llmConfig');
+  const data = storage.get(['llmConfig', 'llmApiKeys']);
   const cfg = data.llmConfig;
-  if (!cfg?.apiKey) throw new Error('No API key configured. Go to Settings to add one.');
-  return { apiKey: cfg.apiKey, provider: cfg.provider ?? 'anthropic' };
+  const provider = cfg?.provider ?? 'anthropic';
+
+  const keys = data.llmApiKeys ?? {};
+  const apiKey = keys[provider] ?? cfg?.apiKey;
+  if (!apiKey) throw new Error('No API key configured. Go to Settings to add one.');
+  return { apiKey, provider };
 }
 
 function getUsageStore(): UsageStore {

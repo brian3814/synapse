@@ -1,5 +1,6 @@
 import type { AgentProgressEvent, ToolCall } from '../shared/types';
 import type { ArtifactRecord, ArtifactType } from '../shared/artifact-types';
+import type { ModelInfo } from '../core/model-provider';
 
 export type { PlatformEmbedding } from '../embeddings/types';
 
@@ -129,6 +130,9 @@ export interface PlatformLLM {
     onChunk: (text: string) => void,
     onRateLimitWait?: (info: RateLimitInfo) => void,
   ): Promise<ChatResult>;
+
+  listProviders(): Promise<Array<{ id: string; label: string }>>;
+  listModels(providerId: string, apiKey: string): Promise<ModelInfo[]>;
 }
 
 export interface TabInfo {

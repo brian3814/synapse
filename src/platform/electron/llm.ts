@@ -1,5 +1,6 @@
 import type { PlatformLLM, ExtractionRequest, LLMResult, AgentRequest, ChatRequest, ChatResult, RateLimitInfo } from '../types';
 import type { AgentProgressEvent } from '../../shared/types';
+import type { ModelInfo } from '../../core/model-provider';
 
 declare const window: Window & {
   electronIPC: {
@@ -88,5 +89,13 @@ export class ElectronLLM implements PlatformLLM {
         reject(e);
       });
     });
+  }
+
+  async listProviders(): Promise<Array<{ id: string; label: string }>> {
+    return window.electronIPC.invoke('llm:list-providers') as Promise<Array<{ id: string; label: string }>>;
+  }
+
+  async listModels(providerId: string, apiKey: string): Promise<ModelInfo[]> {
+    return window.electronIPC.invoke('llm:list-models', providerId, apiKey) as Promise<ModelInfo[]>;
   }
 }

@@ -6,7 +6,8 @@ import { StorageBackend } from './storage-backend';
 import { handleAction as dbHandleAction, dataStore } from './db-backend';
 import * as notesBackend from './notes-backend';
 import * as filesBackend from './files-backend';
-import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat } from './llm-backend';
+import { handleRuntimeMessage, setStorage as setLLMStorage, handleStreamExtraction, handleRunAgent, handleStreamChat, registerProvider, listProviders, listModels } from './llm-backend';
+import { anthropicProvider } from './providers/anthropic';
 import { startCompanionServer } from './companion-server';
 import { getDb } from './better-sqlite3-engine';
 import { EmbeddingService } from './embeddings/embedding-service';
@@ -107,6 +108,7 @@ app.whenReady().then(() => {
 
   const storage = new StorageBackend();
   setLLMStorage(storage);
+  registerProvider(anthropicProvider);
   notesBackend.setStorage(storage);
 
   let embeddingService: EmbeddingService | null = null;
@@ -539,6 +541,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('llm:stream-chat', async (event, payload) => {
     handleStreamChat(payload, (channel, ...args) => event.sender.send(channel, ...args));
+  });
+
+  ipcMain.handle('llm:list-providers', async () => {
+    return listProviders();
+  });
+
+  ipcMain.handle('llm:list-models', async (_event, providerId: string, apiKey: string) => {
+    return listModels(providerId, apiKey);
   });
 
   ipcMain.handle('shell:open-external', (_event, url: string) => {

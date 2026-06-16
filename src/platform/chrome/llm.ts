@@ -1,5 +1,7 @@
 import type { PlatformLLM, ExtractionRequest, LLMResult, AgentRequest, ChatRequest, ChatResult, RateLimitInfo } from '../types';
 import type { AgentProgressEvent } from '../../shared/types';
+import type { ModelInfo } from '../../core/model-provider';
+import { FALLBACK_MODELS } from '../../shared/constants';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -126,5 +128,17 @@ export class ChromeLLM implements PlatformLLM {
         },
       });
     });
+  }
+
+  async listProviders(): Promise<Array<{ id: string; label: string }>> {
+    return [{ id: 'anthropic', label: 'Anthropic' }];
+  }
+
+  async listModels(_providerId: string, _apiKey: string): Promise<ModelInfo[]> {
+    return (FALLBACK_MODELS.anthropic ?? []).map(m => ({
+      ...m,
+      provider: 'anthropic',
+      supportsTools: true,
+    }));
   }
 }
