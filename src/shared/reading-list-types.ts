@@ -29,21 +29,18 @@ export function isFileSource(
 }
 
 export const SUPPORTED_FILE_EXTENSIONS = new Set([
-  '.pdf',
-  '.txt',
   '.md',
-  '.markdown',
+  '.txt',
+  '.pdf',
   '.html',
-  '.htm',
+  '.json',
+  '.csv',
   '.png',
   '.jpg',
   '.jpeg',
-  '.gif',
   '.webp',
+  '.gif',
   '.svg',
-  '.docx',
-  '.doc',
-  '.csv',
 ]);
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
@@ -102,11 +99,13 @@ export interface ExtractionResult {
 export type SimilarityMatchType = 'exact' | 'normalized' | 'fuzzy' | 'acronym' | 'embedding';
 
 export interface SimilarityMatch {
+  extractedNodeName: string;
   existingNodeId: string;
   existingNodeName: string;
-  candidateName: string;
   matchType: SimilarityMatchType;
   score: number;
+  existingLabel?: string;
+  existingSummary?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +114,11 @@ export interface SimilarityMatch {
 
 export type ExtractionProgressEvent =
   | { type: 'stage-start'; resourceId: string; stage: ExtractionStage }
-  | { type: 'stage-complete'; resourceId: string; stage: ExtractionStage }
-  | { type: 'llm-chunk'; resourceId: string; chunk: string }
-  | { type: 'chunk-progress'; resourceId: string; chunkIndex: number; totalChunks: number }
-  | { type: 'strategy-selected'; resourceId: string; strategy: ExtractionStrategy }
-  | { type: 'error'; resourceId: string; message: string; stage?: ExtractionStage };
+  | { type: 'stage-complete'; resourceId: string; stage: ExtractionStage; meta?: { bytes?: number; chars?: number; ms?: number } }
+  | { type: 'llm-chunk'; resourceId: string; text: string }
+  | { type: 'chunk-progress'; resourceId: string; current: number; total: number; label?: string }
+  | { type: 'strategy-selected'; resourceId: string; strategy: ExtractionStrategy; reason: string }
+  | { type: 'error'; resourceId: string; stage: ExtractionStage; message: string };
 
 // ---------------------------------------------------------------------------
 // Error record
