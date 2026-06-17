@@ -4,6 +4,7 @@ import type { GraphCanvasHandle, RenderNode, RenderEdge, RenderTheme, Modifiers 
 import { LayoutRunner } from '../../../graph/layout/layout-runner';
 import { spatial } from '../../../db/client/db-client';
 import { useViewportSync } from '../../hooks/useViewportSync';
+import { useTierStore } from '../../../graph/store/tier-store';
 
 interface GraphCanvasProps {
   nodes: RenderNode[];
@@ -118,7 +119,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(
         return n;
       });
 
-      renderer.setGraphData(nodesWithPositions, props.edges);
+      const tierMap = useTierStore.getState().tierIndex?.tiers;
+      const nodesWithTiers = nodesWithPositions.map(n => ({
+        ...n,
+        tier: tierMap?.get(n.id) ?? 1,
+      }));
+      renderer.setGraphData(nodesWithTiers, props.edges);
 
       if (needsLayout && props.nodes.length > 0) {
         // Always run force layout — persisted positions serve as warm-start seeds
