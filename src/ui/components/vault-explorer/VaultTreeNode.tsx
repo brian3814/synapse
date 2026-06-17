@@ -18,18 +18,22 @@ export function VaultTreeNode({ node, style, dragHandle }: NodeRendererProps<Vau
     menu.style.left = `${e.clientX}px`;
     menu.style.top = `${e.clientY}px`;
 
-    const items: { label: string; action: () => void }[] = [];
+    const items: { label: string; action: () => void; danger?: boolean }[] = [];
+
+    items.push({ label: 'Open', action: () => { if (node.isLeaf) node.activate(); else node.toggle(); } });
 
     if (data.isFolder) {
       items.push({ label: 'New File', action: () => node.tree.create({ parentId: node.id, type: 'leaf' }) });
       items.push({ label: 'New Folder', action: () => node.tree.create({ parentId: node.id, type: 'internal' }) });
     }
     items.push({ label: 'Rename', action: () => node.edit() });
-    items.push({ label: 'Delete', action: () => node.tree.delete(node.id) });
+    items.push({ label: 'Delete', action: () => node.tree.delete(node.id), danger: true });
 
     for (const item of items) {
       const btn = document.createElement('button');
-      btn.className = 'block w-full text-left px-3 py-1 hover:bg-zinc-700';
+      btn.className = item.danger
+        ? 'block w-full text-left px-3 py-1 text-red-400 hover:bg-red-900/30'
+        : 'block w-full text-left px-3 py-1 hover:bg-zinc-700';
       btn.textContent = item.label;
       btn.onclick = () => { item.action(); menu.remove(); };
       menu.appendChild(btn);
