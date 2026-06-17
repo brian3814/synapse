@@ -793,6 +793,7 @@ app.whenReady().then(() => {
     unregisterVaultHandlers();
     const ctx = await vaultManager.create(vaultPath, name);
     registerVaultHandlers();
+    updateWindowTitle(ctx.path);
     return { path: ctx.path, name: ctx.name, id: ctx.id };
   });
 
@@ -832,6 +833,7 @@ app.whenReady().then(() => {
     unregisterVaultHandlers();
     const ctx = await vaultManager.reinitialize(vaultPath);
     registerVaultHandlers();
+    updateWindowTitle(ctx.path);
     return { path: ctx.path, name: ctx.name, id: ctx.id };
   });
 
