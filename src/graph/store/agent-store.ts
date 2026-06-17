@@ -225,7 +225,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       try {
         const status = await vaultWorkspace.getStatus();
         if (status.open && status.path) {
-          const filePath = `${status.path}/.kg/agents/${agent.name}.md`;
+          const filePath = `${status.path}/.synapse/agents/${agent.name}.md`;
           await (window as any).electronIPC.invoke('vault-explorer:delete-files', [filePath]);
         }
       } catch {}

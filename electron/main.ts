@@ -61,6 +61,7 @@ protocol.registerSchemesAsPrivileged([
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
+    title: 'Synapse',
     width: 1200,
     height: 800,
     webPreferences: {
@@ -71,13 +72,19 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  win.loadURL('app://kg/index.html');
+  win.loadURL('app://synapse/index.html');
 
   if (!app.isPackaged) {
     win.webContents.openDevTools();
   }
 
   return win;
+}
+
+function updateWindowTitle(vaultPath?: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.setTitle(vaultPath ? `Synapse — ${vaultPath}` : 'Synapse');
+  }
 }
 
 app.whenReady().then(() => {
@@ -517,7 +524,7 @@ app.whenReady().then(() => {
   ipcMain.handle('agents:list-vault', async () => {
     const ctx = vaultManager.getContext();
     if (!ctx) return [];
-    const agentsDir = path.join(ctx.kgPath, 'agents');
+    const agentsDir = path.join(ctx.synapsePath, 'agents');
     if (!fs.existsSync(agentsDir)) return [];
     try {
       const files = fs.readdirSync(agentsDir).filter(f => f.endsWith('.md'));
@@ -580,7 +587,7 @@ app.whenReady().then(() => {
   const vaultArgIdx = process.argv.indexOf('--vault');
   const vaultReadyPromise = (vaultArgIdx !== -1 && process.argv[vaultArgIdx + 1])
     ? vaultManager.open(process.argv[vaultArgIdx + 1])
-        .then(() => registerVaultHandlers())
+        .then((ctx) => { registerVaultHandlers(); updateWindowTitle(ctx.path); })
         .catch((e) => console.error('[Vault] Failed to auto-open from --vault arg:', e))
     : Promise.resolve();
   let noteFileHandler: NoteFileHandler | null = null;
@@ -597,7 +604,7 @@ app.whenReady().then(() => {
     initArtifactHandlers(ctx.path);
 
     // Point files backend at the active vault's agent directory
-    filesBackend.setRoot(path.join(ctx.kgPath, 'agent'));
+    filesBackend.setRoot(path.join(ctx.synapsePath, 'agent'));
 
     // Run reconciliation to catch offline changes
     reconcileVault(ctx);
@@ -666,7 +673,7 @@ app.whenReady().then(() => {
         getContent: async (id: string) => {
           const record = await artifactQueries.getArtifact(id);
           if (!record) return '';
-          const filePath = path.join(ctx.kgPath, 'artifacts', record.sessionDir, record.fileName);
+          const filePath = path.join(ctx.synapsePath, 'artifacts', record.sessionDir, record.fileName);
           return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
         },
         create: (params) => createArtifactCore({
@@ -697,9 +704,9 @@ app.whenReady().then(() => {
 
     // MCP Client — connect to configured external servers
     const globalConfigPath = path.join(app.getPath('userData'), 'mcp-config.json');
-    const vaultConfigPath = path.join(ctx.path, '.kg', 'mcp.json');
+    const vaultConfigPath = path.join(ctx.path, '.synapse', 'mcp.json');
     const globalSecretsPath = path.join(app.getPath('userData'), 'mcp-secrets.json');
-    const vaultSecretsPath = path.join(ctx.path, '.kg', 'secrets.json');
+    const vaultSecretsPath = path.join(ctx.path, '.synapse', 'secrets.json');
 
     const mcpConfig = loadMcpClientConfig({ globalConfigPath, vaultConfigPath });
 
@@ -793,6 +800,7 @@ app.whenReady().then(() => {
     unregisterVaultHandlers();
     const ctx = await vaultManager.open(vaultPath);
     registerVaultHandlers();
+    updateWindowTitle(ctx.path);
     return { path: ctx.path, name: ctx.name, id: ctx.id };
   });
 
@@ -801,6 +809,7 @@ app.whenReady().then(() => {
     const ctx = await vaultManager.pickAndCreate();
     if (!ctx) return null;
     registerVaultHandlers();
+    updateWindowTitle(ctx.path);
     return { path: ctx.path, name: ctx.name, id: ctx.id };
   });
 
@@ -809,12 +818,14 @@ app.whenReady().then(() => {
     const ctx = await vaultManager.pickAndOpen();
     if (!ctx) return null;
     registerVaultHandlers();
+    updateWindowTitle(ctx.path);
     return { path: ctx.path, name: ctx.name, id: ctx.id };
   });
 
   ipcMain.handle('vault-workspace:close', async () => {
     unregisterVaultHandlers();
     await vaultManager.close();
+    updateWindowTitle();
   });
 
   ipcMain.handle('vault-workspace:reinitialize', async (_event, vaultPath: string) => {
@@ -838,7 +849,7 @@ app.whenReady().then(() => {
     const ctx = vaultManager.getContext();
     if (!ctx) return;
     ctx.sandboxConfig = config;
-    const agentConfigPath = path.join(ctx.kgPath, 'agent-config.json');
+    const agentConfigPath = path.join(ctx.synapsePath, 'agent-config.json');
     fs.writeFileSync(agentConfigPath, JSON.stringify(config, null, 2), 'utf-8');
   });
 

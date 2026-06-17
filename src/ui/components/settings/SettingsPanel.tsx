@@ -190,7 +190,7 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       <div className="p-5 space-y-4">
         <div>
           <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">About</h3>
-          <p className="text-sm text-zinc-200 font-medium">Knowledge Graph Extension</p>
+          <p className="text-sm text-zinc-200 font-medium">Synapse</p>
           <p className="text-xs text-zinc-500 mt-1">Version 0.1.0</p>
         </div>
         <div className="space-y-2">

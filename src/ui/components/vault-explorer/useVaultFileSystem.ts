@@ -22,7 +22,7 @@ interface UseVaultFileSystemReturn {
 function markInternalRecursive(entries: VaultFileEntry[], rootPath: string): VaultFileEntry[] {
   return entries.map(entry => {
     const relativePath = entry.id.slice(rootPath.length + 1);
-    const isInternal = relativePath.startsWith('.kg');
+    const isInternal = relativePath.startsWith('.synapse');
     const children = entry.children ? markInternalRecursive(entry.children, rootPath) : undefined;
     return { ...entry, isInternal, children };
   });

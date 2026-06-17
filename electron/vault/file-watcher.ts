@@ -3,7 +3,7 @@ import { sep } from 'path';
 import type { VaultEventBus } from './event-bus';
 import type { VaultSandboxConfig } from '../../src/shared/agent-settings-types';
 
-const IGNORE_DIRS = new Set(['.kg', '.git', 'node_modules']);
+const IGNORE_DIRS = new Set(['.synapse', '.git', 'node_modules']);
 const IGNORE_FILES = new Set(['.DS_Store', 'Thumbs.db', '.gitignore']);
 const DEBOUNCE_MS = 500;
 
@@ -96,7 +96,7 @@ export class VaultFileWatcher {
   }
 
   private shouldIgnore(relativePath: string): boolean {
-    if (relativePath.startsWith('.kg/artifacts/')) return false;
+    if (relativePath.startsWith('.synapse/artifacts/')) return false;
 
     const parts = relativePath.split('/');
 

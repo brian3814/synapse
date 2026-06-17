@@ -60,7 +60,7 @@ function parseArgs(argv: string[]): CliOptions {
         '                   If omitted, auto-discovers from recent vaults.\n' +
         '  --allow-write    Open vault DB in read-write mode (default: read-only).\n' +
         '  --init           Initialize vault directories and DB schema before opening.\n' +
-        '                   Creates .kg/, notes/, and graph.db with full schema.\n' +
+        '                   Creates .synapse/, notes/, and graph.db with full schema.\n' +
         '                   Safe to run on existing vaults (no-ops if already set up).\n'
       );
       process.exit(0);
@@ -95,7 +95,7 @@ function discoverVaultPaths(): string[] {
           const paths = recentVaults
             .filter((v): v is { path: string } => v && typeof v === 'object' && typeof (v as Record<string, unknown>)['path'] === 'string')
             .map((v) => v.path)
-            .filter((p) => fs.existsSync(path.join(p, '.kg', 'graph.db')));
+            .filter((p) => fs.existsSync(path.join(p, '.synapse', 'graph.db')));
           if (paths.length > 0) return paths;
         }
       } catch {
@@ -179,7 +179,7 @@ async function openVaults(vaultPaths: string[], allowWrite: boolean, init: boole
       await StandaloneGraphProvider.initVault(vaultPath);
       process.stderr.write(`Initialized vault at ${vaultPath}\n`);
     }
-    const dbPath = path.join(vaultPath, '.kg', 'graph.db');
+    const dbPath = path.join(vaultPath, '.synapse', 'graph.db');
     if (!fs.existsSync(dbPath)) {
       process.stderr.write(`Warning: No graph.db found at ${dbPath}, skipping.\n`);
       continue;
@@ -716,7 +716,7 @@ async function main(): Promise<void> {
           await StandaloneGraphProvider.initVault(resolved);
           process.stderr.write(`Initialized vault at ${resolved}\n`);
         }
-        const dbPath = path.join(resolved, '.kg', 'graph.db');
+        const dbPath = path.join(resolved, '.synapse', 'graph.db');
         if (!fs.existsSync(dbPath)) {
           return { content: [{ type: 'text', text: JSON.stringify({ error: `No graph.db at ${dbPath}. Use init: true to create one.` }) }], isError: true };
         }

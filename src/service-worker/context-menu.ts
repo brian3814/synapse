@@ -2,13 +2,13 @@ export function registerContextMenus(): void {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'extract-page',
-      title: 'Extract page to Knowledge Graph',
+      title: 'Extract page to Synapse',
       contexts: ['page'],
     });
 
     chrome.contextMenus.create({
       id: 'extract-selection',
-      title: 'Extract selection to Knowledge Graph',
+      title: 'Extract selection to Synapse',
       contexts: ['selection'],
     });
   });

@@ -12,7 +12,7 @@ let root: string | null = null;
 
 /**
  * Set the root directory for file operations.
- * Called when a vault is opened — points to `{vaultPath}/.kg/agent/`.
+ * Called when a vault is opened — points to `{vaultPath}/.synapse/agent/`.
  */
 export function setRoot(newRoot: string): void {
   root = newRoot;

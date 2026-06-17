@@ -16,7 +16,7 @@ export interface VaultConfig {
 
 export interface VaultContext {
   readonly path: string;
-  readonly kgPath: string;
+  readonly synapsePath: string;
   readonly name: string;
   readonly id: string;
   readonly db: Database.Database;
@@ -31,8 +31,8 @@ export interface VaultContext {
 // ── Factory ─────────────────────────────────────────────────────────────
 
 export function createVaultContext(vaultPath: string, db: Database.Database): VaultContext {
-  const kgPath = join(vaultPath, '.kg');
-  const configPath = join(kgPath, 'config.json');
+  const synapsePath = join(vaultPath, '.synapse');
+  const configPath = join(synapsePath, 'config.json');
 
   if (!existsSync(configPath)) {
     throw new Error(`Not a valid vault: ${configPath} not found`);
@@ -42,7 +42,7 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
   const eventBus = new VaultEventBus();
 
   // Load sandbox config
-  const agentConfigPath = join(kgPath, 'agent-config.json');
+  const agentConfigPath = join(synapsePath, 'agent-config.json');
   let sandboxConfig: VaultSandboxConfig = { ...DEFAULT_SANDBOX_CONFIG };
   if (existsSync(agentConfigPath)) {
     try {
@@ -54,7 +54,7 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
 
   return {
     path: vaultPath,
-    kgPath,
+    synapsePath,
     name: config.name,
     id: config.id,
     db,
@@ -78,13 +78,13 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
 // ── Scaffold ────────────────────────────────────────────────────────────
 
 export function scaffoldVault(vaultPath: string, name: string): VaultConfig {
-  const kgPath = join(vaultPath, '.kg');
+  const synapsePath = join(vaultPath, '.synapse');
   const notesPath = join(vaultPath, 'notes');
-  const embeddingsPath = join(kgPath, 'embeddings');
-  const agentPath = join(kgPath, 'agent');
+  const embeddingsPath = join(synapsePath, 'embeddings');
+  const agentPath = join(synapsePath, 'agent');
   const artifactsPath = join(agentPath, 'artifacts');
 
-  mkdirSync(kgPath, { recursive: true });
+  mkdirSync(synapsePath, { recursive: true });
   mkdirSync(notesPath, { recursive: true });
   mkdirSync(embeddingsPath, { recursive: true });
   mkdirSync(artifactsPath, { recursive: true });
@@ -96,12 +96,12 @@ export function scaffoldVault(vaultPath: string, name: string): VaultConfig {
     createdAt: new Date().toISOString(),
   };
 
-  writeFileSync(join(kgPath, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
+  writeFileSync(join(synapsePath, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
 
-  // Create .gitignore at vault root to exclude .kg/
+  // Create .gitignore at vault root to exclude .synapse/
   const gitignorePath = join(vaultPath, '.gitignore');
   if (!existsSync(gitignorePath)) {
-    writeFileSync(gitignorePath, '.kg/\n', 'utf-8');
+    writeFileSync(gitignorePath, '.synapse/\n', 'utf-8');
   }
 
   return config;

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import type { VaultContext } from './vault-context';
 import { computeFileHash, stripMarkdownForSearch } from './content-hash';
 
-const IGNORE_DIRS = new Set(['.kg', '.git', 'node_modules']);
+const IGNORE_DIRS = new Set(['.synapse', '.git', 'node_modules']);
 const IGNORE_FILES = new Set(['.DS_Store', 'Thumbs.db', '.gitignore']);
 
 interface ReconciliationResult {

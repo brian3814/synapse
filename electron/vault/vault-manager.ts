@@ -64,13 +64,13 @@ export class VaultManager {
       throw new Error(`VAULT_DIR_MISSING:${vaultPath}`);
     }
 
-    const configPath = join(vaultPath, '.kg', 'config.json');
+    const configPath = join(vaultPath, '.synapse', 'config.json');
     if (!existsSync(configPath)) {
       throw new Error(`VAULT_KG_MISSING:${vaultPath}`);
     }
 
     // Point the shared DB engine at the vault's graph.db and run migrations
-    const dbPath = join(vaultPath, '.kg', 'graph.db');
+    const dbPath = join(vaultPath, '.synapse', 'graph.db');
     await resetBetterSQLite(dbPath);
     await runMigrations();
 

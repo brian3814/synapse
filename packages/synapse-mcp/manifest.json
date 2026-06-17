@@ -19,7 +19,7 @@
     "vault_path": {
       "type": "directory",
       "required": true,
-      "description": "Path to your Synapse vault (the folder containing .kg/graph.db)"
+      "description": "Path to your Synapse vault (the folder containing .synapse/graph.db)"
     }
   },
   "tools": [
