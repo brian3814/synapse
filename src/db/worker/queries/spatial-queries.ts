@@ -128,3 +128,19 @@ export async function getTotalNodeCount(): Promise<number> {
   );
   return rows[0]?.cnt ?? 0;
 }
+
+export interface NodeDegreeRow {
+  node_id: string;
+  degree: number;
+}
+
+export async function getNodeDegrees(): Promise<NodeDegreeRow[]> {
+  const { rows } = await executeQuery<NodeDegreeRow>(
+    `SELECT node_id, SUM(cnt) as degree FROM (
+       SELECT source_id AS node_id, COUNT(*) AS cnt FROM edges GROUP BY source_id
+       UNION ALL
+       SELECT target_id AS node_id, COUNT(*) AS cnt FROM edges GROUP BY target_id
+     ) GROUP BY node_id;`
+  );
+  return rows;
+}

@@ -374,6 +374,11 @@ export function createActionHandler(dataStore: DataStore) {
         return { result: await dataStore.spatial.totalNodeCount() };
       }
 
+      case 'spatial.nodeDegrees': {
+        ensureInit();
+        return { result: await dataStore.spatial.nodeDegrees() };
+      }
+
       // Reading list history operations
       case 'readingList.save': {
         ensureInit();
