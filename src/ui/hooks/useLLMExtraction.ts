@@ -36,6 +36,7 @@ import { generateNoteMarkdown } from '../../notes/markdown-utils';
 import { stripMarkdownToPlainText } from '../../notes/markdown-utils';
 import { parseMarkdown } from '../../filesystem/markdown-parser';
 import type { DiffItem, ExtractedNoteCandidate, EntityMatch } from '../../shared/types';
+import type { SimilarityMatch } from '../../shared/reading-list-types';
 import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 import { getProcessor } from '../../ingestion/processor-factory';
 import { runIngestionPipeline } from '../../ingestion/ingestion-pipeline';
@@ -143,7 +144,8 @@ export async function buildDiffItems(
       about?: string[];
       mentions?: string[];
     }>;
-  }
+  },
+  similarityMatches?: SimilarityMatch[],
 ): Promise<{ items: DiffItem[]; notes: ExtractedNoteCandidate[] }> {
   const graph = useGraphStore.getState();
 
@@ -173,6 +175,26 @@ export async function buildDiffItems(
       }
     } catch {
       // DB not ready or entity resolution failed, fall through to 'add'
+    }
+
+    // Check pre-computed similarity matches
+    if (similarityMatches) {
+      const simMatch = similarityMatches.find(
+        (m) => m.extractedNodeName.toLowerCase() === node.name.toLowerCase()
+      );
+      if (simMatch) {
+        const existingNode = graph.nodes.find((n) => n.id === simMatch.existingNodeId);
+        if (existingNode) {
+          const autoAccept = simMatch.matchType === 'exact';
+          return {
+            action: 'merge',
+            type: 'node',
+            extracted: node,
+            existingMatch: existingNode,
+            accepted: autoAccept,
+          };
+        }
+      }
     }
 
     return { action: 'add', type: 'node', extracted: node, accepted: true };
