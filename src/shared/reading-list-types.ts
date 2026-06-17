@@ -113,8 +113,8 @@ export interface SimilarityMatch {
 // ---------------------------------------------------------------------------
 
 export type ExtractionProgressEvent =
-  | { type: 'stage-start'; resourceId: string; stage: ExtractionStage }
-  | { type: 'stage-complete'; resourceId: string; stage: ExtractionStage; meta?: { bytes?: number; chars?: number; ms?: number } }
+  | { type: 'stage-start'; resourceId: string; stage: ExtractionStage; statusText?: string }
+  | { type: 'stage-complete'; resourceId: string; stage: ExtractionStage; meta?: { bytes?: number; chars?: number; ms?: number }; statusText?: string }
   | { type: 'llm-chunk'; resourceId: string; text: string }
   | { type: 'chunk-progress'; resourceId: string; current: number; total: number; label?: string }
   | { type: 'strategy-selected'; resourceId: string; strategy: ExtractionStrategy; reason: string }

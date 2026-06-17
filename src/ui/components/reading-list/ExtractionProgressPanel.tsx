@@ -7,6 +7,7 @@ interface StageInfo {
   label: string;
   status: 'pending' | 'active' | 'complete' | 'error';
   meta?: Record<string, unknown>;
+  statusText?: string;
   errorMessage?: string;
 }
 
@@ -50,14 +51,14 @@ export function ExtractionProgressPanel({ resourceId }: Props) {
       if (event.type === 'stage-start') {
         setStages((prev) =>
           prev.map((s) =>
-            s.stage === event.stage ? { ...s, status: 'active' } : s
+            s.stage === event.stage ? { ...s, status: 'active', statusText: event.statusText } : s
           )
         );
       } else if (event.type === 'stage-complete') {
         setStages((prev) =>
           prev.map((s) =>
             s.stage === event.stage
-              ? { ...s, status: 'complete', meta: event.meta as Record<string, unknown> | undefined }
+              ? { ...s, status: 'complete', meta: event.meta as Record<string, unknown> | undefined, statusText: event.statusText ?? s.statusText }
               : s
           )
         );
@@ -172,7 +173,7 @@ interface StageRowProps {
 }
 
 function StageRow({ stage, chunkProgress }: StageRowProps) {
-  const { status, label, meta, errorMessage } = stage;
+  const { status, label, meta, statusText, errorMessage } = stage;
 
   return (
     <div className="flex items-start gap-3">
@@ -200,7 +201,7 @@ function StageRow({ stage, chunkProgress }: StageRowProps) {
         )}
       </div>
 
-      {/* Label + meta */}
+      {/* Label + status text + meta */}
       <div className="flex-1 min-w-0">
         <span
           className={`text-sm ${
@@ -213,6 +214,15 @@ function StageRow({ stage, chunkProgress }: StageRowProps) {
         >
           {label}
         </span>
+
+        {/* Status text — inline context for each step */}
+        {statusText && (
+          <p className={`text-xs mt-0.5 ${
+            status === 'active' ? 'text-indigo-400' : status === 'complete' ? 'text-zinc-400' : 'text-zinc-500'
+          }`}>
+            {statusText}
+          </p>
+        )}
 
         {/* Meta info for complete stages */}
         {status === 'complete' && meta && (

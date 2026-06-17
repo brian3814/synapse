@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ReadingListResource, ResourceSource, ResourceError } from '../../shared/reading-list-types';
 import { migrateReadingListItem } from '../../shared/reading-list-types';
 import { extractionProgress } from '../../core/extraction-progress-service';
+import { findSimilarityMatches, type ExistingNodeInfo } from '../../core/similarity-service';
 import type { ReadingListItem } from '../../shared/types';
 import { storage, browser, platformId, llm, vaultWorkspace } from '@platform';
 import { readingListExtractionSchema, type ReadingListExtractionResult } from '../../shared/schema';
@@ -285,29 +286,30 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
         const url = item.source.url;
         const ipc = (window as any).electronIPC;
 
+        const domain = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })();
+
         // Stage: fetch
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch' });
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch', statusText: `Fetching ${domain}...` });
         const fetchStart = Date.now();
         const { html, error: fetchError } = await ipc.invoke('fetch-url-content', url);
         if (fetchError || !html) throw new Error(fetchError ?? 'Empty response');
+        const fetchKB = (html.length / 1024).toFixed(1);
         extractionProgress.emit({
-          type: 'stage-complete',
-          resourceId: id,
-          stage: 'fetch',
+          type: 'stage-complete', resourceId: id, stage: 'fetch',
           meta: { bytes: html.length, ms: Date.now() - fetchStart },
+          statusText: `Retrieved ${fetchKB}KB from ${domain}`,
         });
 
         // Stage: parse
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse' });
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse', statusText: 'Parsing HTML content...' });
         const parseStart = Date.now();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const textContent = doc.body?.textContent?.slice(0, 100_000) ?? '';
         if (!textContent.trim()) throw new Error('Page content is empty');
         extractionProgress.emit({
-          type: 'stage-complete',
-          resourceId: id,
-          stage: 'parse',
+          type: 'stage-complete', resourceId: id, stage: 'parse',
           meta: { chars: textContent.length, ms: Date.now() - parseStart },
+          statusText: `Extracted ${textContent.length.toLocaleString()} characters`,
         });
 
         const configResult = await storage.get('llmConfig') as Record<string, any>;
@@ -333,7 +335,7 @@ Rules:
 - Ensure all edges reference nodes by exact name.`;
 
         // Stage: extract
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'extract' });
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'extract', statusText: 'Streaming LLM response...' });
         const extractStart = Date.now();
         const result = await llm.streamChat({
           requestId: crypto.randomUUID(),
@@ -344,9 +346,7 @@ Rules:
           extractionProgress.emit({ type: 'llm-chunk', resourceId: id, text: chunk });
         });
         extractionProgress.emit({
-          type: 'stage-complete',
-          resourceId: id,
-          stage: 'extract',
+          type: 'stage-complete', resourceId: id, stage: 'extract',
           meta: { ms: Date.now() - extractStart },
         });
 
@@ -354,7 +354,7 @@ Rules:
         if (!jsonMatch) throw new Error('No JSON in LLM response');
 
         // Stage: validate (with retry loop)
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'validate' });
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'validate', statusText: 'Validating JSON schema...' });
         const validateStart = Date.now();
 
         let parsed: ReadingListExtractionResult | undefined;
@@ -384,11 +384,45 @@ Rules:
         }
         if (!parsed) throw lastError ?? new Error('Validation failed after retries');
 
+        const nodeCount = parsed.nodes.length;
+        const edgeCount = parsed.edges.length;
         extractionProgress.emit({
-          type: 'stage-complete',
-          resourceId: id,
-          stage: 'validate',
+          type: 'stage-complete', resourceId: id, stage: 'validate',
           meta: { ms: Date.now() - validateStart },
+          statusText: `Valid — ${nodeCount} entities, ${edgeCount} relationships`,
+        });
+
+        const extractedNodes = parsed.nodes.map((n) => ({ name: n.name, type: n.type ?? 'entity', label: n.label, properties: n.properties, tags: n.tags }));
+        const extractedEdges = parsed.edges.map((e) => ({ sourceName: e.sourceName, targetName: e.targetName, label: e.label, type: e.type }));
+
+        // Stage: similarity
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'similarity', statusText: `Checking ${nodeCount} entities against graph...` });
+        const simStart = Date.now();
+        let similarityMatches: import('../../shared/reading-list-types').SimilarityMatch[] = [];
+        try {
+          const { useGraphStore } = await import('./graph-store');
+          const graphNodes = useGraphStore.getState().nodes;
+          const existingNodes: ExistingNodeInfo[] = graphNodes
+            .filter((n) => n.type === 'entity')
+            .map((n) => ({ id: n.id, name: n.name, label: n.label, summary: n.summary }));
+
+          let embeddingSearch;
+          try {
+            const available = await ipc.invoke('embedding:is-available');
+            if (available) {
+              embeddingSearch = async (text: string, topK: number) => ipc.invoke('embedding:search-similar', text, topK);
+            }
+          } catch {}
+
+          similarityMatches = await findSimilarityMatches(extractedNodes, existingNodes, embeddingSearch);
+        } catch {
+          similarityMatches = [];
+        }
+        const matchCount = similarityMatches.length;
+        extractionProgress.emit({
+          type: 'stage-complete', resourceId: id, stage: 'similarity',
+          meta: { ms: Date.now() - simStart },
+          statusText: matchCount > 0 ? `${matchCount} potential match${matchCount > 1 ? 'es' : ''} found` : 'No matches found',
         });
 
         set((state) => ({
@@ -400,11 +434,12 @@ Rules:
               extraction: {
                 summary: parsed.summary,
                 keyTopics: parsed.keyTopics,
-                nodes: parsed.nodes.map((n) => ({ name: n.name, type: n.type ?? 'entity', label: n.label, properties: n.properties, tags: n.tags })),
-                edges: parsed.edges.map((e) => ({ sourceName: e.sourceName, targetName: e.targetName, label: e.label, type: e.type })),
+                nodes: extractedNodes,
+                edges: extractedEdges,
                 pageContent: textContent,
                 extractedAt: Date.now(),
               },
+              similarityMatches: similarityMatches.length > 0 ? similarityMatches : undefined,
               error: undefined,
             },
           },

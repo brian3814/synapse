@@ -2,26 +2,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
-import { useGraphStore } from '../../graph/store/graph-store';
 import { useLLMExtraction, buildDiffItems } from './useLLMExtraction';
 import { readingList as readingListDb } from '../../db/client/db-client';
 import type { ReadingListResource } from '../../shared/reading-list-types';
-import { findSimilarityMatches, type ExistingNodeInfo } from '../../core/similarity-service';
-import { extractionProgress } from '../../core/extraction-progress-service';
 import { browser } from '@platform';
-
-async function getEmbeddingSearch(): Promise<((text: string, topK: number) => Promise<Array<{ nodeId: string; score: number }>>) | undefined> {
-  try {
-    const ipc = (window as any).electronIPC;
-    const available = await ipc.invoke('embedding:is-available');
-    if (!available) return undefined;
-    return async (text: string, topK: number) => {
-      return ipc.invoke('embedding:search-similar', text, topK);
-    };
-  } catch {
-    return undefined;
-  }
-}
 
 export function useReadingListMerge() {
   const { proceedToReview } = useLLMExtraction();
@@ -39,34 +23,12 @@ export function useReadingListMerge() {
     llm.setSourceUrl(item.source.kind === 'url' ? item.source.url : item.id);
     llm.setInputText(item.extraction?.pageContent ?? '');
 
-    // Run similarity detection
-    extractionProgress.emit({ type: 'stage-start', resourceId: item.id, stage: 'similarity' });
-    let similarityMatches = item.similarityMatches;
-    if (!similarityMatches) {
-      try {
-        const graphNodes = useGraphStore.getState().nodes;
-        const existingNodes: ExistingNodeInfo[] = graphNodes
-          .filter((n) => n.type === 'entity')
-          .map((n) => ({ id: n.id, name: n.name, label: n.label, summary: n.summary }));
-
-        const embeddingSearch = await getEmbeddingSearch();
-        similarityMatches = await findSimilarityMatches(
-          item.extraction!.nodes,
-          existingNodes,
-          embeddingSearch,
-        );
-      } catch {
-        similarityMatches = [];
-      }
-      extractionProgress.emit({ type: 'stage-complete', resourceId: item.id, stage: 'similarity' });
-    }
-
-    // Build diff items using existing entity resolution + similarity matches
+    // Build diff items using existing entity resolution + similarity matches (populated during extraction pipeline)
     const validated = {
       nodes: item.extraction.nodes,
       edges: item.extraction.edges,
     };
-    const { items, notes } = await buildDiffItems(validated, similarityMatches);
+    const { items, notes } = await buildDiffItems(validated, item.similarityMatches);
 
     // Set diff and advance to extracted status
     llm.setDiff({ items, notes });
