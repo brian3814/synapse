@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { RenderNode, RenderTheme, ZoomLevel } from './types';
 import { selectVisibleLabels } from './label-visibility';
 
-const FONT_SIZE = 16;
-const LABEL_Y_OFFSET_PX = 18;
+const FONT_SIZE = 14;
+const LABEL_Y_OFFSET_PX = 16;
 
 export class LabelLayer {
   private canvas: HTMLCanvasElement;
