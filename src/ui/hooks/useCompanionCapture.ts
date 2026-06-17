@@ -3,7 +3,7 @@ import { useLLMStore } from '../../graph/store/llm-store';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { browser, storage, platformId, vaultWorkspace } from '@platform';
-import type { ReadingListItem } from '../../shared/types';
+import type { ReadingListResource } from '../../shared/reading-list-types';
 
 export function useCompanionCapture() {
   useEffect(() => {
@@ -17,10 +17,11 @@ export function useCompanionCapture() {
       console.log(`[Companion] Reading queue add: ${data.url}`);
       try {
         const result = await storage.get('readingListItems') as Record<string, any>;
-        const items: Record<string, ReadingListItem> = result.readingListItems ?? {};
+        const items: Record<string, ReadingListResource> = result.readingListItems ?? {};
         const vault = platformId === 'electron' ? await vaultWorkspace.getStatus() : null;
         items[data.url] = {
-          url: data.url,
+          id: data.url,
+          source: { kind: 'url', url: data.url },
           title: data.title,
           addedAt: Date.now(),
           status: 'pending',
