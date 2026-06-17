@@ -45,7 +45,7 @@ export function VaultExplorer({ rootPath, onOpenFile }: VaultExplorerProps) {
   }, []);
 
   const handleActivate = useCallback((entry: VaultFileEntry) => {
-    if (entry.isFolder || entry.isInternal) return;
+    if (entry.isFolder) return;
     const fileType = resolveFileType(entry.name);
     onOpenFile(entry.id, fileType);
   }, [onOpenFile]);
