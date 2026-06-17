@@ -8,7 +8,7 @@ import { PanelHeader } from '../shared/PanelHeader';
 import { platformId, vaultWorkspace } from '@platform';
 import type { ReadingListResource } from '../../../shared/reading-list-types';
 import type { VaultStatus } from '@platform/vault-workspace';
-import { AddUrlModal } from './AddUrlModal';
+import { AddResourceModal } from './AddResourceModal';
 
 type Tab = 'pending' | 'processing' | 'ready';
 
@@ -28,6 +28,7 @@ export function ReadingListPanel() {
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ name: string; path: string }> | null>(null);
 
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
   useEffect(() => {
@@ -120,14 +121,20 @@ export function ReadingListPanel() {
             onClick={() => setShowAddModal(true)}
             className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
           >
-            + Add URL
+            + Add
           </button>
         </PanelHeader>
       </div>
 
-      {/* Add URL modal */}
+      {/* Add resource modal */}
       {showAddModal && (
-        <AddUrlModal onClose={() => setShowAddModal(false)} />
+        <AddResourceModal
+          onClose={() => setShowAddModal(false)}
+          onFilesSelected={(files) => {
+            setPendingFiles(files.map((f) => ({ name: f.name, path: (f as any).path ?? f.name })));
+            setShowAddModal(false);
+          }}
+        />
       )}
 
       {/* Tabs */}
@@ -221,7 +228,7 @@ export function ReadingListPanel() {
         {sorted.length === 0 ? (
           <div className="p-4 text-center text-xs text-zinc-500">
             {filterText ? 'No items match your filter.' :
-              activeTab === 'pending' ? 'No pending items. Click "+ Add URL" to add a page.' :
+              activeTab === 'pending' ? 'No pending items. Click "+ Add" to add a page.' :
               activeTab === 'processing' ? 'No items being processed.' :
               'No items ready for merge.'}
           </div>
