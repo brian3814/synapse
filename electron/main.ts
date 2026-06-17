@@ -877,6 +877,28 @@ app.whenReady().then(() => {
     spawnVaultProcess(result.filePaths[0]);
   });
 
+  ipcMain.handle('dialog:open-files', async (_event, extensions: string[]) => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return { canceled: true, filePaths: [] };
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Choose files to add to Reading List',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Supported Files', extensions }],
+    });
+    return result;
+  });
+
+  ipcMain.handle('file:copy-to-vault', async (_event, sourcePath: string, vaultPath: string, destFolder: string) => {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const destDir = path.join(vaultPath, destFolder);
+    await fs.mkdir(destDir, { recursive: true });
+    const filename = path.basename(sourcePath);
+    const destPath = path.join(destDir, filename);
+    await fs.copyFile(sourcePath, destPath);
+    return { vaultRelativePath: `${destFolder}/${filename}` };
+  });
+
   vaultReadyPromise.then(() => createWindow());
 
   app.on('activate', () => {

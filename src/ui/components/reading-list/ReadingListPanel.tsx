@@ -7,8 +7,11 @@ import { ReadyCard } from './ReadyCard';
 import { PanelHeader } from '../shared/PanelHeader';
 import { platformId, vaultWorkspace } from '@platform';
 import type { ReadingListResource } from '../../../shared/reading-list-types';
+import { SUPPORTED_FILE_EXTENSIONS } from '../../../shared/reading-list-types';
 import type { VaultStatus } from '@platform/vault-workspace';
 import { AddResourceModal } from './AddResourceModal';
+import { FileImportDialog } from './FileImportDialog';
+import { DropZoneOverlay } from './DropZoneOverlay';
 
 type Tab = 'pending' | 'processing' | 'ready';
 
@@ -21,7 +24,7 @@ function getDomain(url: string): string {
 }
 
 export function ReadingListPanel() {
-  const { items, loading, selectedId, selectItem, selectedIds, toggleSelectId, selectAllPending, clearSelection, startBatchExtraction } = useReadingListStore();
+  const { items, loading, selectedId, selectItem, selectedIds, toggleSelectId, selectAllPending, clearSelection, startBatchExtraction, addResource } = useReadingListStore();
   const { startMerge } = useReadingListMerge();
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [filterText, setFilterText] = useState('');
@@ -29,6 +32,7 @@ export function ReadingListPanel() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<Array<{ name: string; path: string }> | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
   useEffect(() => {
@@ -60,6 +64,45 @@ export function ReadingListPanel() {
     } finally {
       setMergingId(null);
     }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => {
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+      return SUPPORTED_FILE_EXTENSIONS.has('.' + ext);
+    });
+    if (files.length > 0) {
+      setPendingFiles(files.map((f) => ({ name: f.name, path: (f as any).path ?? f.name })));
+    }
+  };
+
+  const handleFileImportConfirm = async (opts: { imported: boolean; keepOriginal: boolean }) => {
+    if (!pendingFiles) return;
+    const ipc = (window as any).electronIPC;
+
+    for (const file of pendingFiles) {
+      let source: any;
+      if (opts.imported && currentVaultPath) {
+        const { vaultRelativePath } = await ipc.invoke('file:copy-to-vault', file.path, currentVaultPath, 'raw');
+        source = { kind: 'file', filePath: file.path, imported: true, vaultPath: vaultRelativePath, keepOriginal: opts.keepOriginal };
+      } else {
+        source = { kind: 'file', filePath: file.path, imported: false };
+      }
+      await addResource(source, file.name.replace(/\.[^.]+$/, ''));
+    }
+    setPendingFiles(null);
   };
 
   if (loading) {
@@ -114,7 +157,21 @@ export function ReadingListPanel() {
   ).length;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div
+      className="flex flex-col h-full overflow-hidden relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <DropZoneOverlay visible={isDragging} />
+      {pendingFiles && (
+        <FileImportDialog
+          files={pendingFiles}
+          onConfirm={handleFileImportConfirm}
+          onCancel={() => setPendingFiles(null)}
+        />
+      )}
+
       <div className="px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
         <PanelHeader title="Reading List">
           <button
