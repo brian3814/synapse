@@ -1,44 +1,61 @@
 import { create } from 'zustand';
+import type { ReadingListResource, ResourceSource, ResourceError } from '../../shared/reading-list-types';
+import { migrateReadingListItem } from '../../shared/reading-list-types';
+import { extractionProgress } from '../../core/extraction-progress-service';
 import type { ReadingListItem } from '../../shared/types';
 import { storage, browser, platformId, llm, vaultWorkspace } from '@platform';
-import { readingListExtractionSchema } from '../../shared/schema';
+import { readingListExtractionSchema, type ReadingListExtractionResult } from '../../shared/schema';
 
 interface ReadingListStore {
-  items: Record<string, ReadingListItem>;
+  items: Record<string, ReadingListResource>;
   loading: boolean;
-  selectedUrl: string | null;
-  selectedUrls: string[];
+  selectedId: string | null;
+  selectedIds: string[];
 
   loadFromStorage: () => Promise<void>;
   startSyncListener: () => () => void;
 
-  selectItem: (url: string | null) => void;
-  toggleSelectUrl: (url: string) => void;
+  selectItem: (id: string | null) => void;
+  toggleSelectId: (id: string) => void;
   selectAllPending: () => void;
   clearSelection: () => void;
-  addItem: (url: string, title: string) => Promise<void>;
-  fetchTitles: (urls: string[]) => Promise<void>;
+  addResource: (source: ResourceSource, title: string) => Promise<void>;
+  fetchTitles: (ids: string[]) => Promise<void>;
   startBatchExtraction: () => void;
-  retryExtraction: (url: string) => Promise<void>;
-  markComplete: (url: string) => void;
-  removeItem: (url: string) => void;
+  retryResource: (id: string) => Promise<void>;
+  markComplete: (id: string) => void;
+  removeItem: (id: string) => void;
 }
 
-function isProcessing(status: string): boolean {
-  return status === 'processing' || status === 'fetching' || status === 'extracting';
+function generateFileId(): string {
+  return `file-${crypto.randomUUID()}`;
+}
+
+function migrateItems(raw: Record<string, any>): Record<string, ReadingListResource> {
+  const result: Record<string, ReadingListResource> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value && typeof value === 'object' && 'source' in value && 'id' in value) {
+      result[key] = value as ReadingListResource;
+    } else {
+      const migrated = migrateReadingListItem(key, value as ReadingListItem);
+      result[migrated.id] = migrated;
+    }
+  }
+  return result;
 }
 
 export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   items: {},
   loading: true,
-  selectedUrl: null,
-  selectedUrls: [],
+  selectedId: null,
+  selectedIds: [],
 
   loadFromStorage: async () => {
     set({ loading: true });
     try {
       const result = await storage.get('readingListItems') as Record<string, any>;
-      const items = (result.readingListItems as Record<string, ReadingListItem>) ?? {};
+      const raw = (result.readingListItems as Record<string, any>) ?? {};
+      const items = migrateItems(raw);
       set({ items, loading: false });
     } catch (e) {
       console.error('[ReadingListStore] Failed to load from storage:', e);
@@ -49,8 +66,9 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
   startSyncListener: () => {
     const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
       if (areaName === 'local' && changes.readingListItems) {
-        const newItems = (changes.readingListItems.newValue as Record<string, ReadingListItem>) ?? {};
-        set({ items: newItems });
+        const raw = (changes.readingListItems.newValue as Record<string, any>) ?? {};
+        const items = migrateItems(raw);
+        set({ items });
       }
     };
     const cleanupStorage = storage.onChange(storageListener);
@@ -60,27 +78,38 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
         const payload = message.payload;
         set((state) => {
           const items = { ...state.items };
-          const item = items[payload.url];
+          // Find item by URL in source (not by key)
+          const item = Object.values(items).find(
+            (i) => i.source.kind === 'url' && i.source.url === payload.url,
+          );
           if (!item) return state;
 
           if (payload.success) {
-            items[payload.url] = {
+            items[item.id] = {
               ...item,
               status: 'ready',
-              summary: payload.summary,
-              keyTopics: payload.keyTopics,
-              extractedNodes: payload.nodes,
-              extractedEdges: payload.edges,
-              pageContent: payload.pageContent,
-              pageTitle: payload.pageTitle,
-              extractedAt: Date.now(),
+              extraction: {
+                summary: payload.summary,
+                keyTopics: payload.keyTopics,
+                nodes: payload.nodes,
+                edges: payload.edges,
+                pageContent: payload.pageContent,
+                extractedAt: Date.now(),
+              },
               error: undefined,
             };
           } else {
-            items[payload.url] = {
+            const prevError = item.error;
+            const newError: ResourceError = {
+              message: payload.error ?? 'Extraction failed',
+              stage: 'extract',
+              failedAt: Date.now(),
+              attempts: (prevError?.attempts ?? 0) + 1,
+            };
+            items[item.id] = {
               ...item,
-              status: 'failed',
-              error: payload.error ?? 'Extraction failed',
+              status: 'pending',
+              error: newError,
             };
           }
           return { items };
@@ -95,29 +124,30 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
     };
   },
 
-  selectItem: (url) => set({ selectedUrl: url }),
+  selectItem: (id) => set({ selectedId: id }),
 
-  toggleSelectUrl: (url) => set((state) => {
-    const idx = state.selectedUrls.indexOf(url);
+  toggleSelectId: (id) => set((state) => {
+    const idx = state.selectedIds.indexOf(id);
     if (idx >= 0) {
-      return { selectedUrls: state.selectedUrls.filter((u) => u !== url) };
+      return { selectedIds: state.selectedIds.filter((i) => i !== id) };
     }
-    return { selectedUrls: [...state.selectedUrls, url] };
+    return { selectedIds: [...state.selectedIds, id] };
   }),
 
   selectAllPending: () => set((state) => {
-    const pendingUrls = Object.values(state.items)
-      .filter((i) => i.status === 'pending')
-      .map((i) => i.url);
-    return { selectedUrls: pendingUrls };
+    // Only select error-free pending items
+    const pendingIds = Object.values(state.items)
+      .filter((i) => i.status === 'pending' && !i.error)
+      .map((i) => i.id);
+    return { selectedIds: pendingIds };
   }),
 
-  clearSelection: () => set({ selectedUrls: [] }),
+  clearSelection: () => set({ selectedIds: [] }),
 
-  addItem: async (url, title) => {
-    const normalized = url.trim();
-    if (!normalized) return;
-    if (get().items[normalized]) return;
+  addResource: async (source, title) => {
+    const id = source.kind === 'url' ? source.url.trim() : generateFileId();
+    if (!id) return;
+    if (get().items[id]) return;
 
     let targetVaultPath: string | undefined;
     let targetVaultName: string | undefined;
@@ -131,27 +161,31 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
       } catch {}
     }
 
-    const item: ReadingListItem = {
-      url: normalized,
-      title: title.trim() || normalized,
+    const resource: ReadingListResource = {
+      id,
+      source,
+      title: title.trim() || id,
       addedAt: Date.now(),
       status: 'pending',
       targetVaultPath,
       targetVaultName,
     };
-    set((state) => ({ items: { ...state.items, [normalized]: item } }));
+    set((state) => ({ items: { ...state.items, [id]: resource } }));
     await storage.set({ readingListItems: get().items });
   },
 
-  fetchTitles: async (urls) => {
+  fetchTitles: async (ids) => {
     if (platformId !== 'electron') return;
 
     const ipc = (window as any).electronIPC;
     const BAD_TITLES = ['404', 'page not found', 'access denied', 'forbidden', 'not found', 'error', 'untitled'];
 
-    for (const url of urls) {
-      const item = get().items[url];
-      if (!item || item.pageTitle) continue;
+    for (const id of ids) {
+      const item = get().items[id];
+      if (!item || item.source.kind !== 'url') continue;
+      if (item.extraction?.pageContent) continue;
+
+      const url = item.source.url;
 
       try {
         const { html } = await ipc.invoke('fetch-url-content', url);
@@ -192,23 +226,26 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
           set((state) => ({
             items: {
               ...state.items,
-              [url]: { ...state.items[url], pageTitle: resolvedTitle },
+              [id]: { ...state.items[id], title: resolvedTitle },
             },
           }));
           await storage.set({ readingListItems: get().items });
         }
       } catch {}
 
-      if (urls.indexOf(url) < urls.length - 1) {
+      if (ids.indexOf(id) < ids.length - 1) {
         await new Promise((r) => setTimeout(r, 500));
       }
     }
   },
 
   startBatchExtraction: async () => {
-    const { items, selectedUrls } = get();
-    const urls = selectedUrls.filter((url) => items[url]?.status === 'pending');
-    set({ selectedUrls: [] });
+    const { items, selectedIds } = get();
+    const ids = selectedIds.filter((id) => {
+      const item = items[id];
+      return item?.status === 'pending' && !item.error;
+    });
+    set({ selectedIds: [] });
 
     const configResult = await storage.get('maxParallelExtractions') as Record<string, any>;
     const cap = configResult.maxParallelExtractions ?? 4;
@@ -217,38 +254,61 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
     let idx = 0;
     await new Promise<void>((resolve) => {
       const next = () => {
-        while (active < cap && idx < urls.length) {
-          const url = urls[idx++];
+        while (active < cap && idx < ids.length) {
+          const id = ids[idx++];
           active++;
-          get().retryExtraction(url).finally(() => {
+          get().retryResource(id).finally(() => {
             active--;
-            if (idx >= urls.length && active === 0) resolve();
+            if (idx >= ids.length && active === 0) resolve();
             else next();
           });
         }
-        if (urls.length === 0) resolve();
+        if (ids.length === 0) resolve();
       };
       next();
     });
   },
 
-  retryExtraction: async (url) => {
+  retryResource: async (id) => {
     if (platformId === 'electron') {
-      const item = get().items[url];
+      const item = get().items[id];
       if (!item) return;
 
       set((state) => ({
-        items: { ...state.items, [url]: { ...state.items[url], status: 'processing', error: undefined } },
+        items: { ...state.items, [id]: { ...state.items[id], status: 'processing', error: undefined } },
       }));
 
       try {
+        if (item.source.kind !== 'url') {
+          throw new Error('File-based extraction not yet supported in retryResource');
+        }
+        const url = item.source.url;
         const ipc = (window as any).electronIPC;
+
+        // Stage: fetch
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch' });
+        const fetchStart = Date.now();
         const { html, error: fetchError } = await ipc.invoke('fetch-url-content', url);
         if (fetchError || !html) throw new Error(fetchError ?? 'Empty response');
+        extractionProgress.emit({
+          type: 'stage-complete',
+          resourceId: id,
+          stage: 'fetch',
+          meta: { bytes: html.length, ms: Date.now() - fetchStart },
+        });
 
+        // Stage: parse
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse' });
+        const parseStart = Date.now();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const textContent = doc.body?.textContent?.slice(0, 100_000) ?? '';
         if (!textContent.trim()) throw new Error('Page content is empty');
+        extractionProgress.emit({
+          type: 'stage-complete',
+          resourceId: id,
+          stage: 'parse',
+          meta: { chars: textContent.length, ms: Date.now() - parseStart },
+        });
 
         const configResult = await storage.get('llmConfig') as Record<string, any>;
         const config = configResult.llmConfig;
@@ -272,30 +332,79 @@ Rules:
 - Use consistent, lowercase relationship labels.
 - Ensure all edges reference nodes by exact name.`;
 
+        // Stage: extract
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'extract' });
+        const extractStart = Date.now();
         const result = await llm.streamChat({
           requestId: crypto.randomUUID(),
           model: config.model,
           systemPrompt,
           messages: [{ role: 'user', content: `Page title: ${item.title}\nURL: ${url}\n\nPage content:\n${textContent}` }],
-        }, () => {});
+        }, (chunk) => {
+          extractionProgress.emit({ type: 'llm-chunk', resourceId: id, text: chunk });
+        });
+        extractionProgress.emit({
+          type: 'stage-complete',
+          resourceId: id,
+          stage: 'extract',
+          meta: { ms: Date.now() - extractStart },
+        });
 
         const jsonMatch = result.textContent.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('No JSON in LLM response');
-        const parsed = readingListExtractionSchema.parse(JSON.parse(jsonMatch[0]));
+
+        // Stage: validate (with retry loop)
+        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'validate' });
+        const validateStart = Date.now();
+
+        let parsed: ReadingListExtractionResult | undefined;
+        const MAX_RETRIES = 2;
+        let lastError: Error | null = null;
+        let rawJson = jsonMatch[0];
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            parsed = readingListExtractionSchema.parse(JSON.parse(rawJson));
+            break;
+          } catch (validationError: any) {
+            lastError = validationError;
+            if (attempt < MAX_RETRIES) {
+              const retryResult = await llm.streamChat({
+                requestId: crypto.randomUUID(),
+                model: config.model,
+                systemPrompt: 'Fix the JSON below so it matches the required schema. Return ONLY the corrected JSON.',
+                messages: [{ role: 'user', content: `JSON:\n${rawJson}\n\nValidation error:\n${validationError.message}\n\nFix the JSON and return only valid JSON.` }],
+              }, (chunk) => {
+                extractionProgress.emit({ type: 'llm-chunk', resourceId: id, text: chunk });
+              });
+              const retryMatch = retryResult.textContent.match(/\{[\s\S]*\}/);
+              if (retryMatch) rawJson = retryMatch[0];
+            }
+          }
+        }
+        if (!parsed) throw lastError ?? new Error('Validation failed after retries');
+
+        extractionProgress.emit({
+          type: 'stage-complete',
+          resourceId: id,
+          stage: 'validate',
+          meta: { ms: Date.now() - validateStart },
+        });
 
         set((state) => ({
           items: {
             ...state.items,
-            [url]: {
-              ...state.items[url],
+            [id]: {
+              ...state.items[id],
               status: 'ready',
-              summary: parsed.summary,
-              keyTopics: parsed.keyTopics,
-              extractedNodes: parsed.nodes.map((n) => ({ name: n.name, type: n.type ?? 'entity', properties: n.properties })),
-              extractedEdges: parsed.edges.map((e) => ({ sourceName: e.sourceName, targetName: e.targetName, label: e.label })),
-              pageContent: textContent,
-              pageTitle: item.title,
-              extractedAt: Date.now(),
+              extraction: {
+                summary: parsed.summary,
+                keyTopics: parsed.keyTopics,
+                nodes: parsed.nodes.map((n) => ({ name: n.name, type: n.type ?? 'entity', label: n.label, properties: n.properties, tags: n.tags })),
+                edges: parsed.edges.map((e) => ({ sourceName: e.sourceName, targetName: e.targetName, label: e.label, type: e.type })),
+                pageContent: textContent,
+                extractedAt: Date.now(),
+              },
               error: undefined,
             },
           },
@@ -303,37 +412,45 @@ Rules:
         await storage.set({ readingListItems: get().items });
       } catch (e: any) {
         console.error('[ReadingListStore] Electron extraction failed:', e);
+        const prevItem = get().items[id];
+        const prevError = prevItem?.error;
+        const newError: ResourceError = {
+          message: e.message,
+          failedAt: Date.now(),
+          attempts: (prevError?.attempts ?? 0) + 1,
+        };
         set((state) => ({
-          items: { ...state.items, [url]: { ...state.items[url], status: 'failed', error: e.message } },
+          items: { ...state.items, [id]: { ...state.items[id], status: 'pending', error: newError } },
         }));
       }
     } else {
-      (browser as any).sendReadingListRetry(url).catch(console.error);
+      const item = get().items[id];
+      if (item?.source.kind === 'url') {
+        (browser as any).sendReadingListRetry(item.source.url).catch(console.error);
+      }
     }
   },
 
-  markComplete: async (url) => {
+  markComplete: async (id) => {
     set((state) => {
-      const item = state.items[url];
+      const item = state.items[id];
       if (!item) return state;
       return {
-        items: { ...state.items, [url]: { ...item, status: 'complete' as const } },
-        selectedUrl: state.selectedUrl === url ? null : state.selectedUrl,
+        items: { ...state.items, [id]: { ...item, status: 'complete' as const } },
+        selectedId: state.selectedId === id ? null : state.selectedId,
       };
     });
     await storage.set({ readingListItems: get().items });
   },
 
-  removeItem: (url) => {
+  removeItem: (id) => {
     set((state) => {
       const items = { ...state.items };
-      delete items[url];
+      delete items[id];
       return {
         items,
-        selectedUrl: state.selectedUrl === url ? null : state.selectedUrl,
+        selectedId: state.selectedId === id ? null : state.selectedId,
       };
     });
   },
 }));
-
-export { isProcessing };
