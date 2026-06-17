@@ -7,6 +7,7 @@ export interface RenderNode {
   color: string; // hex
   size: number;
   data?: Record<string, unknown>;
+  tier?: number;
 }
 
 export interface RenderEdge {
