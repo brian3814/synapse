@@ -16,7 +16,7 @@ export const TIER_FLOOR_THRESHOLD = 40;
 export const TIER_FULL_THRESHOLD = 200;
 
 /** Zoom level at which each tier (1-indexed) becomes visible. */
-export const TIER_ZOOM_THRESHOLDS: readonly number[] = [0.05, 0.15, 0.45, 1.2, 3.5, 10.0];
+export const TIER_ZOOM_THRESHOLDS: readonly number[] = [0.003, 0.008, 0.02, 0.06, 0.15, 0.5];
 
 /** Per-tier maximum label render cap. */
 export const TIER_MAX_LABELS: readonly number[] = [50, 60, 70, 80, 80, 80];
