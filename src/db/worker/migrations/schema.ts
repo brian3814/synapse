@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS edges (
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_edges_label ON edges(label);
+CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(type);
 
 CREATE TABLE IF NOT EXISTS entity_aliases (
     id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS entity_aliases (
     alias_lower TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_aliases_lower ON entity_aliases(alias_lower);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aliases_node_lower ON entity_aliases(node_id, alias_lower);
 
 CREATE TABLE IF NOT EXISTS ontology_node_types (
     type        TEXT PRIMARY KEY,
@@ -97,7 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_node_tags_tag ON node_tags(tag);
 
 CREATE TABLE IF NOT EXISTS entity_sources (
     entity_id     TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    resource_id   TEXT NOT NULL,
+    resource_id   TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     relation_type TEXT NOT NULL DEFAULT 'about',
     location      TEXT,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
@@ -110,7 +112,7 @@ CREATE TABLE IF NOT EXISTS edge_sources (
     edge_id      TEXT NOT NULL REFERENCES edges(id) ON DELETE CASCADE,
     source_type  TEXT NOT NULL CHECK(source_type IN ('note', 'extraction', 'user')),
     source_id    TEXT,
-    resource_id  TEXT,
+    resource_id  TEXT REFERENCES nodes(id) ON DELETE CASCADE,
     location     TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(edge_id, source_type, source_id, resource_id)
@@ -134,6 +136,7 @@ CREATE TABLE IF NOT EXISTS note_search (
     title   TEXT NOT NULL,
     body    TEXT NOT NULL
 );
+-- node_id UNIQUE already provides an index; no separate idx needed
 
 CREATE TABLE IF NOT EXISTS source_content (
     id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

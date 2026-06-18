@@ -114,10 +114,16 @@ export async function addAlias(nodeId: string, alias: string): Promise<DbEntityA
   const { rows } = await executeQuery<DbEntityAlias>(
     `INSERT INTO entity_aliases (id, node_id, alias, alias_lower)
      VALUES (?, ?, ?, ?)
+     ON CONFLICT(node_id, alias_lower) DO NOTHING
      RETURNING *;`,
     [id, nodeId, alias, aliasLower]
   );
-  return rows[0];
+  if (rows[0]) return rows[0];
+  const { rows: existing } = await executeQuery<DbEntityAlias>(
+    'SELECT * FROM entity_aliases WHERE node_id = ? AND alias_lower = ?;',
+    [nodeId, aliasLower]
+  );
+  return existing[0];
 }
 
 /** Get all aliases for a node */
