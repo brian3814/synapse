@@ -10,6 +10,7 @@ export type ContentTabType =
   | { kind: 'graph' }
   | { kind: 'noteEditor'; noteId: string }
   | { kind: 'extractionReview' }
+  | { kind: 'extractionProgress'; resourceId: string }
   | { kind: 'viewer'; filePath: string }
   | { kind: 'artifact'; artifactId: string };
 
@@ -29,6 +30,7 @@ export interface ContentColumn {
 function contentTabId(type: ContentTabType): string {
   if (type.kind === 'graph') return 'graph';
   if (type.kind === 'extractionReview') return 'extraction-review';
+  if (type.kind === 'extractionProgress') return `extraction-progress-${type.resourceId}`;
   if (type.kind === 'noteEditor') return `note-${type.noteId}`;
   if (type.kind === 'viewer') return `viewer-${type.filePath}`;
   if (type.kind === 'artifact') return `artifact-${type.artifactId}`;

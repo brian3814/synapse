@@ -25,8 +25,8 @@ export function AgentListView({ onEditAgent }: AgentListViewProps) {
     if (items.length > 0) grouped.set(scope, items);
   }
 
-  const handleCreate = async () => {
-    const newAgent = await duplicateAgent('chat');
+  const handleCreate = async (kind: 'chat' | 'extraction') => {
+    const newAgent = await duplicateAgent(kind === 'chat' ? 'chat' : 'extraction');
     onEditAgent(newAgent.id);
   };
 
@@ -34,12 +34,20 @@ export function AgentListView({ onEditAgent }: AgentListViewProps) {
     <div className="p-3 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold text-zinc-200">Agents</h3>
-        <button
-          onClick={handleCreate}
-          className="text-[10px] text-indigo-400 hover:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-zinc-700"
-        >
-          + New
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => handleCreate('chat')}
+            className="text-[10px] text-indigo-400 hover:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-zinc-700"
+          >
+            + Chat
+          </button>
+          <button
+            onClick={() => handleCreate('extraction')}
+            className="text-[10px] text-indigo-400 hover:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-zinc-700"
+          >
+            + Extraction
+          </button>
+        </div>
       </div>
 
       {[...grouped.entries()].map(([scope, items]) => (

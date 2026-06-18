@@ -15,10 +15,10 @@ import type { VaultContext } from '../../electron/vault/vault-context';
 
 function createTestVault(): { vaultPath: string; db: Database.Database; ctx: VaultContext; events: VaultEvent[] } {
   const vaultPath = join(tmpdir(), `synapse-test-${randomUUID()}`);
-  mkdirSync(join(vaultPath, '.kg'), { recursive: true });
+  mkdirSync(join(vaultPath, '.synapse'), { recursive: true });
   mkdirSync(join(vaultPath, 'notes'), { recursive: true });
 
-  writeFileSync(join(vaultPath, '.kg', 'config.json'), JSON.stringify({
+  writeFileSync(join(vaultPath, '.synapse', 'config.json'), JSON.stringify({
     name: 'Test Vault',
     id: `vault_test_${randomUUID().slice(0, 8)}`,
     schemaVersion: 1,
@@ -84,7 +84,7 @@ function createTestVault(): { vaultPath: string; db: Database.Database; ctx: Vau
 
   const ctx: VaultContext = {
     path: vaultPath,
-    kgPath: join(vaultPath, '.kg'),
+    synapsePath: join(vaultPath, '.synapse'),
     name: 'Test Vault',
     id: 'vault_test',
     db,
@@ -495,10 +495,10 @@ describe('reconcileVault', () => {
   });
 
   describe('ignored paths', () => {
-    it('ignores .kg directory contents', () => {
+    it('ignores .synapse directory contents', () => {
       const { vaultPath, ctx } = testState;
 
-      writeFileSync(join(vaultPath, '.kg', 'internal.db'), 'database');
+      writeFileSync(join(vaultPath, '.synapse', 'internal.db'), 'database');
 
       const result = reconcileVault(ctx);
 

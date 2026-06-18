@@ -17,7 +17,7 @@ export interface ReviewNode {
   mergeRecommendation?: {
     existingNodeId: string;
     existingName: string;
-    matchType: 'exact' | 'alias' | 'fuzzy';
+    matchType: 'exact' | 'alias' | 'fuzzy' | 'normalized' | 'acronym' | 'embedding';
     similarity: number;
     status: 'pending' | 'accepted' | 'dismissed';
   };

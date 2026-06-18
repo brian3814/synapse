@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { LLM_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
-import { storage, platformId, notes, vaultWorkspace } from '@platform';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { FALLBACK_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
+import { storage, platformId, notes, vaultWorkspace, llm } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
+import type { ModelInfo } from '../../../core/model-provider';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
 import { useGraphStore } from '../../../graph/store/graph-store';
 import { stressTest } from '../../../db/client/db-client';
@@ -9,30 +10,73 @@ import { MemorySection } from './MemorySection';
 import { EmbeddingSettings } from './EmbeddingSettings';
 import { VaultSandboxSection } from './VaultSandboxSection';
 import type { SettingsTab } from './SettingsModal';
+import { AgentAssignmentsTab } from './AgentAssignmentsTab';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
+  const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
   const [provider, setProvider] = useState<LLMProvider>('anthropic');
-  const [model, setModel] = useState<string>(LLM_MODELS.anthropic[0].id);
+  const [model, setModel] = useState<string>('');
   const [apiKey, setApiKey] = useState('');
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   useEffect(() => {
-    storage.get(LLM_CONFIG_STORAGE_KEY).then((result: Record<string, any>) => {
-      const config = result[LLM_CONFIG_STORAGE_KEY];
-      if (config) {
-        setProvider(config.provider);
-        setModel(config.model);
-        setApiKey(config.apiKey);
-      }
-    }).catch(() => {
-      // Not in extension context
+    llm.listProviders().then(setProviders).catch(() => {
+      setProviders([{ id: 'anthropic', label: 'Anthropic' }]);
     });
+
+    storage.get([LLM_CONFIG_STORAGE_KEY, 'llmApiKeys']).then((result: Record<string, any>) => {
+      const config = result[LLM_CONFIG_STORAGE_KEY];
+      const keys = result.llmApiKeys ?? {};
+      if (config) {
+        setProvider(config.provider ?? 'anthropic');
+        setModel(config.model ?? '');
+        setApiKey(keys[config.provider ?? 'anthropic'] ?? config.apiKey ?? '');
+      }
+    }).catch(() => {});
   }, []);
 
-  const handleSave = async () => {
-    const config = { provider, model, apiKey };
+  const fetchModels = useCallback(async (prov: string, key: string) => {
+    if (!key || key.length < 10) {
+      const fallback = (FALLBACK_MODELS[prov] ?? []).map(m => ({
+        ...m, provider: prov, supportsTools: true,
+      }));
+      setModels(fallback);
+      return;
+    }
+    setModelsLoading(true);
     try {
-      await storage.set({ [LLM_CONFIG_STORAGE_KEY]: config });
+      const fetched = await llm.listModels(prov, key);
+      setModels(fetched);
+    } catch {
+      const fallback = (FALLBACK_MODELS[prov] ?? []).map(m => ({
+        ...m, provider: prov, supportsTools: true,
+      }));
+      setModels(fallback);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchModels(provider, apiKey);
+  }, [provider]);
+
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    fetchTimerRef.current = setTimeout(() => fetchModels(provider, value), 800);
+  };
+
+  const handleSave = async () => {
+    try {
+      await storage.set({
+        [LLM_CONFIG_STORAGE_KEY]: { provider, model, apiKey },
+        llmApiKeys: { [provider]: apiKey },
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -43,13 +87,15 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   const handleClearKey = async () => {
     setApiKey('');
     try {
+      await storage.set({ llmApiKeys: {} });
       await storage.remove(LLM_CONFIG_STORAGE_KEY);
-    } catch (e) {
-      // Not in extension context
-    }
+    } catch {}
+    fetchModels(provider, '');
   };
 
-  const models = LLM_MODELS[provider] ?? [];
+  if (activeTab === 'agents') {
+    return <AgentAssignmentsTab />;
+  }
 
   if (activeTab === 'model') {
     return (
@@ -63,25 +109,12 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
               onChange={(e) => {
                 const p = e.target.value as LLMProvider;
                 setProvider(p);
-                setModel(LLM_MODELS[p][0]?.id ?? '');
+                setModel('');
               }}
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
             >
-              <option value="anthropic">Anthropic</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-zinc-400 block mb-1">Model</label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
           </div>
@@ -92,7 +125,7 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
               <input
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
                 placeholder="Enter API key..."
                 className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500 placeholder-zinc-600"
               />
@@ -103,6 +136,24 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
                 {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-zinc-400 block mb-1">
+              Model {modelsLoading && <span className="text-zinc-600 ml-1">loading...</span>}
+            </label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+            >
+              {models.length === 0 && <option value="">No models available</option>}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}{m.pricing ? ` ($${m.pricing.inputPer1M}/$${m.pricing.outputPer1M} per 1M)` : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex gap-2">
@@ -139,7 +190,7 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
       <div className="p-5 space-y-4">
         <div>
           <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">About</h3>
-          <p className="text-sm text-zinc-200 font-medium">Knowledge Graph Extension</p>
+          <p className="text-sm text-zinc-200 font-medium">Synapse</p>
           <p className="text-xs text-zinc-500 mt-1">Version 0.1.0</p>
         </div>
         <div className="space-y-2">

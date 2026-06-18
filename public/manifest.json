@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Knowledge Graph",
+  "name": "Synapse",
   "version": "0.1.0",
   "description": "A knowledge graph extension with LLM-powered entity extraction",
   "minimum_chrome_version": "124",
@@ -18,7 +18,7 @@
     "<all_urls>"
   ],
   "action": {
-    "default_title": "Knowledge Graph"
+    "default_title": "Synapse"
   },
   "side_panel": {
     "default_path": "index.html?mode=sidePanel"

@@ -1,32 +1,27 @@
 import * as THREE from 'three';
 import type { RenderNode, RenderTheme, ZoomLevel } from './types';
+import { selectVisibleLabels } from './label-visibility';
 
-const FONT_SIZE = 11;
-const FONT = `${FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-const LABEL_Y_OFFSET_PX = 14; // pixels below node center
+const FONT_SIZE = 14;
+const LABEL_Y_OFFSET_PX = 16;
 
-/**
- * Label layer using a 2D canvas overlay on top of the WebGL canvas.
- * This avoids needing custom shaders or per-instance UV mapping.
- * Labels are drawn with native canvas text rendering (CSP-safe, fast).
- */
 export class LabelLayer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
   private zoomLevel: ZoomLevel = 'close';
+  private rawZoom = 1;
 
-  // Dirty tracking: skip redraw if world-space view bounds and node count haven't changed
   private lastWorldLeft = NaN;
   private lastWorldRight = NaN;
   private lastWorldTop = NaN;
   private lastWorldBottom = NaN;
   private lastNodeCount = -1;
+  private lastRawZoom = NaN;
   dirty = true;
 
   constructor(container: HTMLElement) {
     this.dpr = window.devicePixelRatio || 1;
-
     this.canvas = document.createElement('canvas');
     this.canvas.style.position = 'absolute';
     this.canvas.style.top = '0';
@@ -35,12 +30,18 @@ export class LabelLayer {
     this.canvas.style.height = '100%';
     this.canvas.style.pointerEvents = 'none';
     container.appendChild(this.canvas);
-
     this.ctx = this.canvas.getContext('2d')!;
   }
 
   setZoomLevel(level: ZoomLevel) {
     this.zoomLevel = level;
+  }
+
+  setRawZoom(zoom: number) {
+    if (zoom !== this.rawZoom) {
+      this.rawZoom = zoom;
+      this.dirty = true;
+    }
   }
 
   resize(width: number, height: number) {
@@ -59,21 +60,19 @@ export class LabelLayer {
     const ctx = this.ctx;
     const dpr = this.dpr;
 
-    // Compute world-space view bounds (camera frustum is symmetric;
-    // camera.position provides the pan offset).
     const worldLeft = camera.position.x + camera.left;
     const worldRight = camera.position.x + camera.right;
     const worldTop = camera.position.y + camera.top;
     const worldBottom = camera.position.y + camera.bottom;
 
-    // Skip if world bounds and data haven't changed
     if (
       !this.dirty &&
       worldLeft === this.lastWorldLeft &&
       worldRight === this.lastWorldRight &&
       worldTop === this.lastWorldTop &&
       worldBottom === this.lastWorldBottom &&
-      nodes.length === this.lastNodeCount
+      nodes.length === this.lastNodeCount &&
+      this.rawZoom === this.lastRawZoom
     ) {
       return;
     }
@@ -82,48 +81,52 @@ export class LabelLayer {
     this.lastWorldTop = worldTop;
     this.lastWorldBottom = worldBottom;
     this.lastNodeCount = nodes.length;
+    this.lastRawZoom = this.rawZoom;
     this.dirty = false;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    // Skip labels at far/medium zoom — they become unreadable noise
-    if (this.zoomLevel === 'far' || this.zoomLevel === 'medium') return;
-
     if (nodes.length === 0) return;
-
-    ctx.font = `${FONT_SIZE * dpr}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = theme.labelColor;
 
     const viewWidth = worldRight - worldLeft;
     const viewHeight = worldTop - worldBottom;
 
-    // Only show labels when zoomed in enough (skip when too many visible)
-    // At wide zoom, labels become unreadable noise
-    const maxLabelsToRender = 200;
-    let rendered = 0;
-
+    // Frustum-cull nodes first
+    const culled: RenderNode[] = [];
     for (const node of nodes) {
-      if (rendered >= maxLabelsToRender) break;
-
-      // Project world position to screen
       const screenX = ((node.x - worldLeft) / viewWidth) * canvasWidth;
       const screenY = ((worldTop - node.y) / viewHeight) * canvasHeight;
-
-      // Frustum cull
-      if (screenX < -50 || screenX > canvasWidth + 50 ||
-          screenY < -20 || screenY > canvasHeight + 20) {
-        continue;
+      if (screenX >= -50 && screenX <= canvasWidth + 50 &&
+          screenY >= -20 && screenY <= canvasHeight + 20) {
+        culled.push(node);
       }
+    }
+
+    const visible = selectVisibleLabels(culled, this.rawZoom);
+    if (visible.length === 0) return;
+
+    ctx.font = `${FONT_SIZE * dpr}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    let currentOpacity = -1;
+    for (const { node, opacity } of visible) {
+      if (opacity !== currentOpacity) {
+        currentOpacity = opacity;
+        ctx.globalAlpha = opacity;
+        ctx.fillStyle = theme.labelColor;
+      }
+
+      const screenX = ((node.x - worldLeft) / viewWidth) * canvasWidth;
+      const screenY = ((worldTop - node.y) / viewHeight) * canvasHeight;
 
       ctx.fillText(
         node.name,
         screenX * dpr,
         (screenY + LABEL_Y_OFFSET_PX) * dpr
       );
-      rendered++;
     }
+
+    ctx.globalAlpha = 1.0;
   }
 
   getCanvas(): HTMLCanvasElement {

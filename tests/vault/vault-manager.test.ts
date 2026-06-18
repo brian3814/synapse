@@ -73,7 +73,7 @@ describe('VaultManager.open — error cases', () => {
     await expect(manager.open(missingDir)).rejects.toThrow(`VAULT_DIR_MISSING:${missingDir}`);
   });
 
-  it('throws VAULT_KG_MISSING when directory exists but .kg/config.json is absent', async () => {
+  it('throws VAULT_KG_MISSING when directory exists but .synapse/config.json is absent', async () => {
     const vaultDir = join(tmpPath, 'empty-vault');
     mkdirSync(vaultDir);
 
@@ -82,12 +82,12 @@ describe('VaultManager.open — error cases', () => {
 
   it('throws VAULT_KG_MISSING when .kg dir exists but config.json is missing', async () => {
     const vaultDir = join(tmpPath, 'partial-vault');
-    mkdirSync(join(vaultDir, '.kg'), { recursive: true });
+    mkdirSync(join(vaultDir, '.synapse'), { recursive: true });
 
     await expect(manager.open(vaultDir)).rejects.toThrow(`VAULT_KG_MISSING:${vaultDir}`);
   });
 
-  it('succeeds when .kg/config.json exists', async () => {
+  it('succeeds when .synapse/config.json exists', async () => {
     const vaultDir = join(tmpPath, 'good-vault');
     scaffoldVault(vaultDir, 'Good Vault');
 
@@ -103,25 +103,25 @@ describe('VaultManager.reinitialize', () => {
     const vaultDir = join(tmpPath, 'broken-vault');
     mkdirSync(vaultDir);
 
-    expect(existsSync(join(vaultDir, '.kg', 'config.json'))).toBe(false);
+    expect(existsSync(join(vaultDir, '.synapse', 'config.json'))).toBe(false);
 
     const ctx = await manager.reinitialize(vaultDir);
 
-    expect(existsSync(join(vaultDir, '.kg', 'config.json'))).toBe(true);
+    expect(existsSync(join(vaultDir, '.synapse', 'config.json'))).toBe(true);
     expect(ctx.path).toBe(vaultDir);
     expect(ctx.name).toBe('broken-vault');
   });
 
   it('works even when .kg partially exists', async () => {
     const vaultDir = join(tmpPath, 'partial-kg');
-    mkdirSync(join(vaultDir, '.kg'), { recursive: true });
-    writeFileSync(join(vaultDir, '.kg', 'stale-file.txt'), 'leftover');
+    mkdirSync(join(vaultDir, '.synapse'), { recursive: true });
+    writeFileSync(join(vaultDir, '.synapse', 'stale-file.txt'), 'leftover');
 
     const ctx = await manager.reinitialize(vaultDir);
 
     expect(ctx.path).toBe(vaultDir);
-    expect(existsSync(join(vaultDir, '.kg', 'config.json'))).toBe(true);
-    expect(existsSync(join(vaultDir, '.kg', 'stale-file.txt'))).toBe(true);
+    expect(existsSync(join(vaultDir, '.synapse', 'config.json'))).toBe(true);
+    expect(existsSync(join(vaultDir, '.synapse', 'stale-file.txt'))).toBe(true);
   });
 
   it('preserves existing user files in the vault directory', async () => {

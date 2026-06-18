@@ -63,6 +63,14 @@ export class StorageBackend {
         __keyEncrypted: true,
       };
     }
+    if (key === 'llmApiKeys' && value && typeof value === 'object') {
+      const encrypted: Record<string, any> = { __keysEncrypted: true };
+      for (const [providerId, apiKey] of Object.entries(value)) {
+        if (providerId === '__keysEncrypted') continue;
+        encrypted[providerId] = apiKey ? this.encrypt(apiKey as string) : apiKey;
+      }
+      return encrypted;
+    }
     return value;
   }
 
@@ -77,6 +85,14 @@ export class StorageBackend {
     if (raw && typeof raw === 'object' && '__keyEncrypted' in raw) {
       const { __keyEncrypted, apiKey, ...rest } = raw;
       return { ...rest, apiKey: apiKey ? this.decrypt(apiKey) : apiKey };
+    }
+    if (raw && typeof raw === 'object' && '__keysEncrypted' in raw) {
+      const result: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (k === '__keysEncrypted') continue;
+        result[k] = v ? this.decrypt(v as string) : (v as string);
+      }
+      return result;
     }
     return raw;
   }

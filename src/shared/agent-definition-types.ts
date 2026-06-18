@@ -51,10 +51,28 @@ export interface AgentDefinition {
   skills?: string[];
   hooks?: Record<string, string>;
 
+  modelProvider?: string;
+  modelId?: string;
+
   maxIterations: number;
 
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ResolvedModelConfig {
+  provider: string;
+  model: string;
+}
+
+export function resolveAgentModel(
+  agent: AgentDefinition,
+  globalConfig: { provider: string; model: string },
+): ResolvedModelConfig {
+  return {
+    provider: agent.modelProvider ?? globalConfig.provider,
+    model: agent.modelId ?? globalConfig.model,
+  };
 }
 
 export const AGENT_OVERRIDES_KEY = 'agentOverrides';
@@ -115,6 +133,55 @@ export function toToolFilter(agent: AgentDefinition): AgentToolFilter {
   }
 
   return filter;
+}
+
+// --- Per-feature agent assignment ---
+
+export type CoreFeature = 'extraction' | 'chat';
+
+export interface FeatureAgentMap {
+  extraction?: string;
+  chat?: string;
+}
+
+export const FEATURE_AGENTS_KEY = 'featureAgents';
+
+/**
+ * Prompt-relevant context derived from an agent definition. Extend this
+ * interface (and toPromptContext) when new per-agent context lands —
+ * consumers pick up new fields without signature changes.
+ */
+export interface AgentPromptContext {
+  instructions?: string;
+}
+
+export function toPromptContext(agent: AgentDefinition): AgentPromptContext {
+  const instructions = agent.customInstructions?.trim();
+  return { instructions: instructions ? instructions : undefined };
+}
+
+/**
+ * Resolve the extraction agent: explicit preference (if it exists, is enabled,
+ * and is extraction-kind) → builtin 'extraction' if enabled → first enabled
+ * extraction agent (vault agents merge into the list) → pristine builtin
+ * default. Never undefined: extraction must not break because of agent
+ * management actions.
+ */
+export function selectExtractionAgent(
+  agents: AgentDefinition[],
+  preferredId?: string,
+): AgentDefinition {
+  if (preferredId) {
+    const preferred = agents.find(
+      a => a.id === preferredId && a.enabled && a.kind === 'extraction',
+    );
+    if (preferred) return preferred;
+  }
+  const builtin = agents.find(a => a.id === 'extraction' && a.enabled);
+  if (builtin) return builtin;
+  const firstEnabled = agents.find(a => a.kind === 'extraction' && a.enabled);
+  if (firstEnabled) return firstEnabled;
+  return DEFAULT_AGENTS.find(a => a.id === 'extraction')!;
 }
 
 // --- Frontmatter Parser ---
@@ -208,6 +275,8 @@ export function parseAgentFile(content: string, filePath: string, scope: AgentSc
     graphScope: fm.graphScope as AgentGraphScope | undefined,
     skills: Array.isArray(fm.skills) ? fm.skills as string[] : undefined,
     hooks: (fm.hooks && typeof fm.hooks === 'object') ? fm.hooks as Record<string, string> : undefined,
+    modelProvider: typeof fm.modelProvider === 'string' ? fm.modelProvider : undefined,
+    modelId: typeof fm.modelId === 'string' ? fm.modelId : undefined,
     maxIterations: typeof fm.maxIterations === 'number' ? fm.maxIterations : 100,
     createdAt: now,
     updatedAt: now,
@@ -235,6 +304,9 @@ export function serializeAgentToMd(agent: AgentDefinition): string {
     lines.push('mcpServers:');
     for (const s of agent.mcpServers) lines.push(`  - ${s}`);
   }
+
+  if (agent.modelProvider) lines.push(`modelProvider: ${agent.modelProvider}`);
+  if (agent.modelId) lines.push(`modelId: ${agent.modelId}`);
 
   if (agent.maxIterations !== 100) lines.push(`maxIterations: ${agent.maxIterations}`);
 

@@ -17,12 +17,12 @@ export class ArtifactFileHandler {
   register(eventBus: VaultEventBus): void {
     this.unsubscribers.push(
       eventBus.on('file:added', (event) => {
-        if (event.relativePath.startsWith('.kg/artifacts/')) {
+        if (event.relativePath.startsWith('.synapse/artifacts/')) {
           this.handleArtifactChange(event.relativePath);
         }
       }),
       eventBus.on('file:removed', (event) => {
-        if (event.relativePath.startsWith('.kg/artifacts/')) {
+        if (event.relativePath.startsWith('.synapse/artifacts/')) {
           this.handleArtifactRemoved(event.relativePath);
         }
       }),

@@ -14,6 +14,7 @@ import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
 import { LeftSidebar } from '../components/layout/LeftSidebar';
 import { ViewerTab } from '../components/tabs/ViewerTab';
 import { ArtifactTab } from '../components/tabs/ArtifactTab';
+import { ExtractionProgressPanel } from '../components/reading-list/ExtractionProgressPanel';
 import { useUIStore } from '../../graph/store/ui-store';
 import { vaultWorkspace } from '@platform';
 import type { ContentColumn } from '../../graph/store/ui-store';
@@ -245,6 +246,8 @@ function ColumnWithDropZones({
                 <KnowledgeGraph />
               ) : tab.type.kind === 'extractionReview' ? (
                 <ExtractionReviewTab />
+              ) : tab.type.kind === 'extractionProgress' ? (
+                <ExtractionProgressPanel resourceId={tab.type.resourceId} />
               ) : tab.type.kind === 'viewer' ? (
                 <ViewerTab filePath={tab.type.filePath} />
               ) : tab.type.kind === 'artifact' ? (

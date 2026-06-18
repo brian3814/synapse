@@ -228,6 +228,8 @@ export const spatial = {
     sendRequest('spatial.nodeCountInBounds', { minX, minY, maxX, maxY }) as Promise<number>,
   totalNodeCount: () =>
     sendRequest('spatial.totalNodeCount') as Promise<number>,
+  nodeDegrees: () =>
+    sendRequest('spatial.nodeDegrees') as Promise<Array<{ node_id: string; degree: number }>>,
 };
 
 // Reading list history operations

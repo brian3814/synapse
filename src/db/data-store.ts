@@ -168,6 +168,7 @@ export interface SpatialRepository {
   interClusterEdges(): Promise<InterClusterEdge[]>;
   nodeCountInBounds(minX: number, minY: number, maxX: number, maxY: number): Promise<number>;
   totalNodeCount(): Promise<number>;
+  nodeDegrees(): Promise<Array<{ node_id: string; degree: number }>>;
 }
 
 export interface ReadingListRepository {

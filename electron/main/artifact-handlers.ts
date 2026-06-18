@@ -14,7 +14,7 @@ export function initArtifactHandlers(vaultPath: string): void {
 
 function getArtifactsDir(): string {
   if (!currentVaultPath) throw new Error('No vault open — cannot access artifacts');
-  return path.join(currentVaultPath, '.kg', 'artifacts');
+  return path.join(currentVaultPath, '.synapse', 'artifacts');
 }
 
 function extractTextContent(type: ArtifactType, content: string): string {
@@ -39,7 +39,7 @@ function extractTextContent(type: ArtifactType, content: string): string {
 }
 
 /**
- * Find or create a session directory under .kg/artifacts/.
+ * Find or create a session directory under .synapse/artifacts/.
  * Format: {YYYY-MM-DD}-{session-title-slug}
  * Reuses existing dir if a .meta.json inside matches sessionId.
  * Appends -2, -3 etc. on slug collision with a different session.

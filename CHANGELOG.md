@@ -2,7 +2,26 @@
 
 All notable changes to Synapse will be documented in this file.
 
-## [Unreleased]
+## [0.6.0] - 2026-06-18
+
+### Added
+- Tiered label visibility: H3-inspired progressive label disclosure — hub nodes (high relationship count) show labels first when zoomed out, lower-tier nodes fade in as you zoom closer
+- Adaptive tier bucketing: nodes ranked into 6 tiers by edge count using percentile-based assignment; small graphs (≤40 nodes) bypass tiering to keep all labels visible
+- Per-tier opacity fade-in: labels smoothly transition from transparent to opaque as each tier's zoom threshold is crossed
+- Debounced tier recomputation: tier assignments automatically update within 200ms of graph mutations (edge/node create/delete)
+- Settings → Agents page: assign which agent extraction uses and the default chat agent (chat header picker still overrides per conversation)
+- Custom extraction agents can be created from the Agents panel
+- Multi-provider LLM architecture: `ModelProvider` interface with provider registry, Anthropic implementation with dynamic model fetching via `/v1/models` API
+- Settings model dropdown now fetches available models from the provider API on key entry, with static fallback on error and inline pricing display
+- Per-provider API key storage with independent OS keychain encryption
+- Per-agent model override: `modelProvider` and `modelId` fields on agent definitions with resolution chain (agent → global fallback), supported in frontmatter
+
+### Fixed
+- Agent custom instructions now actually reach extraction: all four extraction modes (text, page, agent, file ingestion) read the configured extraction agent instead of a legacy settings key that nothing had written since 0.3.0
+- Artifact list in side rail not updating when artifacts are created during chat — `initArtifactStoreListener()` was implemented but never called at startup
+- Settings model dropdown showed deprecated Sonnet 4 and Haiku 4 model IDs; updated fallback list to current Anthropic lineup (Opus 4.8, Sonnet 4.6, Haiku 4.5)
+- Intelligence tools (domain synthesis, gap analysis) used hardcoded deprecated model ID instead of the user's configured model
+- Reading list handler fallback model updated from retired `claude-sonnet-4-5-20241022` to `claude-sonnet-4-6`
 
 ## [0.5.0] - 2026-06-11
 

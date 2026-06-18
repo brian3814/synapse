@@ -5,6 +5,8 @@ import { useNodeTypeStore } from '../graph/store/node-type-store';
 import { useUIStore } from '../graph/store/ui-store';
 import { useReadingListStore } from '../graph/store/reading-list-store';
 import { useAuthStore } from '../graph/store/auth-store';
+import { initArtifactStoreListener } from '../graph/store/artifact-store';
+import { useTierStore } from '../graph/store/tier-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { useCompanionCapture } from './hooks/useCompanionCapture';
 import { useLLMExtraction } from './hooks/useLLMExtraction';
@@ -131,13 +133,20 @@ function AppMain() {
   }, []);
 
   useEffect(() => {
+    return initArtifactStoreListener();
+  }, []);
+
+  useEffect(() => {
     if (ready) {
       loadAll();
       loadTypes();
+      useTierStore.getState().computeTiers();
       const cleanupSync = startSyncListener();
+      const cleanupTierSync = useTierStore.getState().startSyncListener();
       const cleanupQuery = registerQueryMessageHandler();
       return () => {
         cleanupSync();
+        cleanupTierSync();
         cleanupQuery();
       };
     }

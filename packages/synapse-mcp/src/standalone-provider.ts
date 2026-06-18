@@ -28,7 +28,7 @@ export class StandaloneGraphProvider {
 
   constructor(vaultPath: string, readonly: boolean = true) {
     this.vaultPath = vaultPath;
-    const dbPath = path.join(vaultPath, '.kg', 'graph.db');
+    const dbPath = path.join(vaultPath, '.synapse', 'graph.db');
     this.db = new Database(dbPath, { readonly });
   }
 
@@ -63,17 +63,17 @@ export class StandaloneGraphProvider {
   }
 
   static async initVault(vaultPath: string): Promise<void> {
-    const kgDir = path.join(vaultPath, '.kg');
+    const synapsePath = path.join(vaultPath, '.synapse');
     const notesDir = path.join(vaultPath, 'notes');
-    const agentDir = path.join(kgDir, 'agent', 'artifacts');
-    const embDir = path.join(kgDir, 'embeddings');
+    const agentDir = path.join(synapsePath, 'agent', 'artifacts');
+    const embDir = path.join(synapsePath, 'embeddings');
 
-    fs.mkdirSync(kgDir, { recursive: true });
+    fs.mkdirSync(synapsePath, { recursive: true });
     fs.mkdirSync(notesDir, { recursive: true });
     fs.mkdirSync(agentDir, { recursive: true });
     fs.mkdirSync(embDir, { recursive: true });
 
-    const dbPath = path.join(kgDir, 'graph.db');
+    const dbPath = path.join(synapsePath, 'graph.db');
     const db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -113,7 +113,7 @@ export class StandaloneGraphProvider {
       console.log = origLog;
     }
 
-    const configPath = path.join(kgDir, 'config.json');
+    const configPath = path.join(synapsePath, 'config.json');
     if (!fs.existsSync(configPath)) {
       fs.writeFileSync(configPath, JSON.stringify({
         name: path.basename(vaultPath),

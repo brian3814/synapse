@@ -5,13 +5,18 @@ import { clusterSummaryToRenderNodes, interClusterEdgesToRenderEdges } from '../
 import type { FrustumBounds, ZoomLevel, RenderNode, RenderEdge } from '../../graph/renderer/types';
 import type { GraphRenderer } from '../../graph/renderer/graph-renderer';
 import type { DbNodeSlim, DbEdgeSlim } from '../../shared/types';
+import { useTierStore } from '../../graph/store/tier-store';
 import {
   VIEWPORT_QUERY_DEBOUNCE_MS,
   VIEWPORT_PADDING,
   MAX_VIEWPORT_NODES,
 } from '../../shared/constants';
 
-function slimToRenderNode(row: DbNodeSlim, typeColorMap: Map<string, string>): RenderNode {
+function slimToRenderNode(
+  row: DbNodeSlim,
+  typeColorMap: Map<string, string>,
+  tierMap?: Map<string, number>
+): RenderNode {
   return {
     id: row.id,
     name: row.name,
@@ -21,6 +26,7 @@ function slimToRenderNode(row: DbNodeSlim, typeColorMap: Map<string, string>): R
     color: row.color ?? typeColorMap.get(row.type) ?? '#6B7280',
     size: row.size,
     data: { type: row.type, identifier: row.identifier },
+    tier: tierMap?.get(row.id) ?? 1,
   };
 }
 
@@ -107,7 +113,8 @@ export function useViewportSync(
             : [];
           if (seq !== seqRef.current) return;
 
-          const nodes = nodeRows.map((r: DbNodeSlim) => slimToRenderNode(r, typeColorMap));
+          const tierMap = useTierStore.getState().tierIndex?.tiers;
+          const nodes = nodeRows.map((r: DbNodeSlim) => slimToRenderNode(r, typeColorMap, tierMap));
           const edges = edgeRows.map((r: DbEdgeSlim) => slimToRenderEdge(r));
 
           // Compute diff vs current visible set
@@ -187,6 +194,21 @@ export function useViewportSync(
       cc.onFrustumChange = undefined;
     };
   }, [renderer, handleFrustumChange]);
+
+  // Re-query viewport when tier index changes
+  useEffect(() => {
+    if (!renderer) return;
+    return useTierStore.subscribe((state, prev) => {
+      if (state.tierIndex !== prev.tierIndex) {
+        const cc = renderer.getCameraController();
+        if (cc) {
+          const bounds = cc.getFrustumBounds();
+          const zoom = cc.getZoom();
+          queryViewport(bounds, zoom, store.getState().zoomLevel);
+        }
+      }
+    });
+  }, [renderer, queryViewport]);
 
   // Cleanup timers
   useEffect(() => {

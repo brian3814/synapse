@@ -138,7 +138,10 @@ export class GraphRenderer implements GraphRendererInstance {
         this.emit('nodeDragEnd', { nodeId, x: node.x, y: node.y });
       }
     };
-    this.cameraController.onFrustumChangeInternal = () => { this.needsRender = true; };
+    this.cameraController.onFrustumChangeInternal = () => {
+      this.needsRender = true;
+      this.labelLayer.setRawZoom(this.cameraController.getZoom());
+    };
     this.cameraController.onLassoUpdate = (start, end) => {
       this.lassoOverlay.update(
         start, end,

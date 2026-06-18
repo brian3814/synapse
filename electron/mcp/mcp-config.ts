@@ -35,7 +35,7 @@ export function loadMcpClientConfig(sources: ConfigSources): McpClientConfig {
 }
 
 export function loadMcpServerConfig(vaultPath: string): McpServerExposedConfig {
-  const configPath = path.join(vaultPath, '.kg', 'mcp-server.json');
+  const configPath = path.join(vaultPath, '.synapse', 'mcp-server.json');
   const config = readJsonFile<McpServerExposedConfig>(configPath);
   return config ?? {
     enabled: false,

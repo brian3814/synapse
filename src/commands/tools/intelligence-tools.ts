@@ -204,6 +204,15 @@ async function resolveDomain(
   return searchResults.map(n => ({ id: n.id, name: n.name, type: n.type, label: n.label }));
 }
 
+async function getConfiguredModel(ctx: CommandContext): Promise<string> {
+  try {
+    const result = await ctx.storage.get('llmConfig') as Record<string, any>;
+    return result.llmConfig?.model ?? 'claude-sonnet-4-6';
+  } catch {
+    return 'claude-sonnet-4-6';
+  }
+}
+
 async function execute(ctx: CommandContext, name: string, input: Record<string, unknown>): Promise<ToolExecResult | null> {
   switch (name) {
     case 'get_centrality_ranking': {
@@ -475,7 +484,7 @@ async function execute(ctx: CommandContext, name: string, input: Record<string, 
       const result = await ctx.llm.streamChat(
         {
           requestId,
-          model: 'claude-sonnet-4-20250514',
+          model: await getConfiguredModel(ctx),
           systemPrompt,
           messages: [{ role: 'user', content: userContent }],
           tools: [],
@@ -520,7 +529,7 @@ async function execute(ctx: CommandContext, name: string, input: Record<string, 
       const result = await ctx.llm.streamChat(
         {
           requestId,
-          model: 'claude-sonnet-4-20250514',
+          model: await getConfiguredModel(ctx),
           systemPrompt,
           messages: [{ role: 'user', content: userContent }],
           tools: [],

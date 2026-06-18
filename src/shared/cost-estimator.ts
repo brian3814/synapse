@@ -9,7 +9,7 @@ export function estimateExtractionCost(params: {
   inputChars: number;
   model: string;
 }): { cents: number; label: string } {
-  const pricing = MODEL_PRICING[params.model] ?? MODEL_PRICING['claude-sonnet-4-20250514'];
+  const pricing = MODEL_PRICING[params.model] ?? MODEL_PRICING['claude-sonnet-4-6'];
   const inputTokens = Math.ceil(params.inputChars / 4);
 
   let totalInput: number;

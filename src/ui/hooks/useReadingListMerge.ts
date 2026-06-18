@@ -3,32 +3,32 @@ import { useLLMStore } from '../../graph/store/llm-store';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { useLLMExtraction, buildDiffItems } from './useLLMExtraction';
-import { readingList as readingListDb, sourceContent } from '../../db/client/db-client';
-import type { ReadingListItem } from '../../shared/types';
+import { readingList as readingListDb } from '../../db/client/db-client';
+import type { ReadingListResource } from '../../shared/reading-list-types';
 import { browser } from '@platform';
 
 export function useReadingListMerge() {
-  const { proceedToReview, applyReview } = useLLMExtraction();
-  const mergingUrlRef = useRef<string | null>(null);
+  const { proceedToReview } = useLLMExtraction();
+  const mergingIdRef = useRef<string | null>(null);
 
-  const startMerge = useCallback(async (item: ReadingListItem) => {
-    if (!item.extractedNodes || !item.extractedEdges) return;
+  const startMerge = useCallback(async (item: ReadingListResource) => {
+    if (!item.extraction?.nodes || !item.extraction?.edges) return;
 
     const llm = useLLMStore.getState();
 
     // Track which item we're merging
-    mergingUrlRef.current = item.url;
+    mergingIdRef.current = item.id;
 
     // Set source context on LLM store
-    llm.setSourceUrl(item.url);
-    llm.setInputText(item.pageContent ?? '');
+    llm.setSourceUrl(item.source.kind === 'url' ? item.source.url : item.id);
+    llm.setInputText(item.extraction?.pageContent ?? '');
 
-    // Build diff items using existing entity resolution
+    // Build diff items using existing entity resolution + similarity matches (populated during extraction pipeline)
     const validated = {
-      nodes: item.extractedNodes,
-      edges: item.extractedEdges,
+      nodes: item.extraction.nodes,
+      edges: item.extraction.edges,
     };
-    const { items, notes } = await buildDiffItems(validated);
+    const { items, notes } = await buildDiffItems(validated, item.similarityMatches);
 
     // Set diff and advance to extracted status
     llm.setDiff({ items, notes });
@@ -44,35 +44,38 @@ export function useReadingListMerge() {
     const unsubscribe = useLLMStore.subscribe(async (state, prevState) => {
       // Detect: was merging/reviewing, now idle → review was applied
       if (
-        mergingUrlRef.current &&
+        mergingIdRef.current &&
         prevState.status === 'merging' &&
         state.status === 'idle'
       ) {
-        const url = mergingUrlRef.current;
-        mergingUrlRef.current = null;
+        const id = mergingIdRef.current;
+        mergingIdRef.current = null;
 
         // Post-merge cleanup
         const readingListItems = useReadingListStore.getState().items;
-        const item = readingListItems[url];
+        const item = readingListItems[id] as ReadingListResource | undefined;
 
         try {
           // 1. Save to reading list history in SQLite
           if (item) {
+            const url = item.source.kind === 'url' ? item.source.url : item.id;
             await readingListDb.save({
               url,
-              title: item.pageTitle || item.title,
-              summary: item.summary ?? '',
-              keyTopics: item.keyTopics ?? [],
+              title: item.title,
+              summary: item.extraction?.summary ?? '',
+              keyTopics: item.extraction?.keyTopics ?? [],
             });
           }
 
           // 2. Source content is already saved by applyReview (it checks llm.sourceUrl + llm.inputText)
 
-          // 3. Remove from Chrome reading list via service worker
-          await (browser as any).sendReadingListRemove(url);
+          // 3. Remove from Chrome reading list via service worker (URL resources only)
+          if (item?.source.kind === 'url') {
+            await (browser as any).sendReadingListRemove(item.source.url);
+          }
 
           // 4. Soft-delete: mark as complete in reading list store
-          await useReadingListStore.getState().markComplete(url);
+          useReadingListStore.getState().markComplete(id);
 
           // 5. Switch back to reading list panel
           useUIStore.getState().forceActivePanel('readingList');

@@ -3,9 +3,13 @@ import { storage, platformId, vaultWorkspace } from '@platform';
 import {
   type AgentDefinition,
   type AgentToolFilter,
+  type FeatureAgentMap,
+  type CoreFeature,
   DEFAULT_AGENTS,
   AGENT_OVERRIDES_KEY,
   ACTIVE_AGENT_KEY,
+  FEATURE_AGENTS_KEY,
+  selectExtractionAgent,
   toToolFilter,
 } from '../../shared/agent-definition-types';
 
@@ -18,9 +22,11 @@ interface AgentStore {
   agents: AgentDefinition[];
   activeAgentId: string;
   loaded: boolean;
+  featureAgents: FeatureAgentMap;
 
   loadAgents: () => Promise<void>;
   setActiveAgent: (id: string) => void;
+  setFeatureAgent: (feature: CoreFeature, agentId: string | null) => Promise<void>;
   saveAgent: (agent: AgentDefinition) => Promise<void>;
   deleteAgent: (id: string) => Promise<void>;
   duplicateAgent: (id: string) => Promise<AgentDefinition>;
@@ -29,13 +35,20 @@ interface AgentStore {
 }
 
 function getActiveAgent(state: AgentStore): AgentDefinition {
-  return state.agents.find(a => a.id === state.activeAgentId)
+  const resolve = (id?: string) =>
+    id ? state.agents.find(a => a.id === id && a.enabled && a.kind === 'chat') : undefined;
+  return resolve(state.activeAgentId)
+    ?? resolve(state.featureAgents.chat)
     ?? state.agents.find(a => a.id === 'chat')
     ?? state.agents[0];
 }
 
 function getActiveToolFilter(state: AgentStore): AgentToolFilter {
   return toToolFilter(getActiveAgent(state));
+}
+
+function getExtractionAgent(state: AgentStore): AgentDefinition {
+  return selectExtractionAgent(state.agents, state.featureAgents.extraction);
 }
 
 function getEnabledChatAgents(state: AgentStore): AgentDefinition[] {
@@ -155,10 +168,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   agents: [...DEFAULT_AGENTS],
   activeAgentId: 'chat',
   loaded: false,
+  featureAgents: {},
 
   loadAgents: async () => {
     let overrides: AgentOverrides;
-    const raw = await storage.get([AGENT_OVERRIDES_KEY, ACTIVE_AGENT_KEY]).catch(() => ({} as Record<string, any>));
+    const raw = await storage.get([AGENT_OVERRIDES_KEY, ACTIVE_AGENT_KEY, FEATURE_AGENTS_KEY]).catch(() => ({} as Record<string, any>));
     const stored = raw[AGENT_OVERRIDES_KEY] as AgentOverrides | undefined;
 
     if (stored?.migrated) {
@@ -170,14 +184,25 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     const vaultAgents = await loadVaultAgents();
     const agents = mergeAgents([...DEFAULT_AGENTS], overrides, vaultAgents);
-    const activeId = (raw[ACTIVE_AGENT_KEY] as string) || 'chat';
+    const featureAgents = (raw[FEATURE_AGENTS_KEY] as FeatureAgentMap) || {};
+    // The stored id may be stale (deleted/disabled agent); getActiveAgent
+    // validates lazily — don't trust state.activeAgentId raw.
+    const activeId = (raw[ACTIVE_AGENT_KEY] as string) || featureAgents.chat || 'chat';
 
-    set({ agents, activeAgentId: activeId, loaded: true });
+    set({ agents, activeAgentId: activeId, featureAgents, loaded: true });
   },
 
   setActiveAgent: (id) => {
     set({ activeAgentId: id });
     storage.set({ [ACTIVE_AGENT_KEY]: id }).catch(() => {});
+  },
+
+  setFeatureAgent: async (feature, agentId) => {
+    const next = { ...get().featureAgents };
+    if (agentId) next[feature] = agentId;
+    else delete next[feature];
+    set({ featureAgents: next });
+    await storage.set({ [FEATURE_AGENTS_KEY]: next }).catch(() => {});
   },
 
   saveAgent: async (agent) => {
@@ -200,7 +225,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       try {
         const status = await vaultWorkspace.getStatus();
         if (status.open && status.path) {
-          const filePath = `${status.path}/.kg/agents/${agent.name}.md`;
+          const filePath = `${status.path}/.synapse/agents/${agent.name}.md`;
           await (window as any).electronIPC.invoke('vault-explorer:delete-files', [filePath]);
         }
       } catch {}
@@ -250,4 +275,4 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 // Eagerly load agents on store creation so subscribers don't trigger async loads during render
 useAgentStore.getState().loadAgents().catch(() => {});
 
-export { getActiveAgent, getActiveToolFilter, getEnabledChatAgents };
+export { getActiveAgent, getActiveToolFilter, getExtractionAgent, getEnabledChatAgents };

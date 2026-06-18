@@ -124,7 +124,7 @@ export function VaultSetupScreen({ onVaultReady }: Props) {
               <>
                 <h3 className="text-sm font-semibold text-zinc-100 mb-2">Vault data missing</h3>
                 <p className="text-[12px] text-zinc-400 mb-1">
-                  This vault's data folder (<span className="text-zinc-300">.kg</span>) is missing.
+                  This vault's data folder (<span className="text-zinc-300">.synapse</span>) is missing.
                   It may have been deleted or cleaned up. Would you like to reinitialize it as a fresh vault?
                 </p>
                 <p className="text-[12px] text-zinc-500 mb-4 truncate">{vaultIssue.path}</p>

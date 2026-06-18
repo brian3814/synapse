@@ -145,6 +145,7 @@ export function createSqliteDataStore(
       nodeCountInBounds: (minX, minY, maxX, maxY) =>
         spatialQueries.getNodeCountInBounds(minX, minY, maxX, maxY),
       totalNodeCount: () => spatialQueries.getTotalNodeCount(),
+      nodeDegrees: () => spatialQueries.getNodeDegrees(),
     },
 
     // ── Reading List Repository ─────────────────────────────────────

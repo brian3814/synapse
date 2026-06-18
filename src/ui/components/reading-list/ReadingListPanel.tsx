@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useReadingListStore, isProcessing } from '../../../graph/store/reading-list-store';
+import { useReadingListStore } from '../../../graph/store/reading-list-store';
 import { useReadingListMerge } from '../../hooks/useReadingListMerge';
-import { ReadingListItemCard } from './ReadingListItemCard';
+import { PendingCard } from './PendingCard';
+import { ProcessingCard } from './ProcessingCard';
+import { ReadyCard } from './ReadyCard';
 import { PanelHeader } from '../shared/PanelHeader';
 import { platformId, vaultWorkspace } from '@platform';
-import type { ReadingListItem } from '../../../shared/types';
+import type { ReadingListResource } from '../../../shared/reading-list-types';
+import { SUPPORTED_FILE_EXTENSIONS } from '../../../shared/reading-list-types';
 import type { VaultStatus } from '@platform/vault-workspace';
-import { AddUrlModal } from './AddUrlModal';
+import { AddResourceModal } from './AddResourceModal';
+import { FileImportDialog } from './FileImportDialog';
+import { DropZoneOverlay } from './DropZoneOverlay';
 
 type Tab = 'pending' | 'processing' | 'ready';
 
@@ -19,14 +24,15 @@ function getDomain(url: string): string {
 }
 
 export function ReadingListPanel() {
-  const { items, loading, selectedUrl, selectItem, selectedUrls, toggleSelectUrl, selectAllPending, clearSelection, startBatchExtraction } = useReadingListStore();
+  const { items, loading, selectedId, selectItem, selectedIds, toggleSelectId, selectAllPending, clearSelection, startBatchExtraction, addResource } = useReadingListStore();
   const { startMerge } = useReadingListMerge();
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [filterText, setFilterText] = useState('');
-  const [mergingUrl, setMergingUrl] = useState<string | null>(null);
-  const [expandedUrls, setExpandedUrls] = useState<string[]>([]);
+  const [mergingId, setMergingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ name: string; path: string }> | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
   useEffect(() => {
@@ -48,23 +54,55 @@ export function ReadingListPanel() {
   });
 
   const pending = allItems.filter((i) => i.status === 'pending');
-  const processing = allItems.filter((i) => isProcessing(i.status));
-  const ready = allItems.filter((i) => i.status === 'ready' || i.status === 'extracted');
-  const failed = allItems.filter((i) => i.status === 'failed');
+  const processing = allItems.filter((i) => i.status === 'processing');
+  const ready = allItems.filter((i) => i.status === 'ready');
 
-  const handleMerge = async (item: ReadingListItem) => {
-    setMergingUrl(item.url);
+  const handleMerge = async (item: ReadingListResource) => {
+    setMergingId(item.id);
     try {
-      await startMerge(item);
+      await startMerge(item as any);
     } finally {
-      setMergingUrl(null);
+      setMergingId(null);
     }
   };
 
-  const toggleExpanded = (url: string) => {
-    setExpandedUrls((prev) =>
-      prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
-    );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => {
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+      return SUPPORTED_FILE_EXTENSIONS.has('.' + ext);
+    });
+    if (files.length > 0) {
+      setPendingFiles(files.map((f) => ({ name: f.name, path: (f as any).path ?? f.name })));
+    }
+  };
+
+  const handleFileImportConfirm = async (opts: { imported: boolean; keepOriginal: boolean }) => {
+    if (!pendingFiles) return;
+    const ipc = (window as any).electronIPC;
+
+    for (const file of pendingFiles) {
+      let source: any;
+      if (opts.imported && currentVaultPath) {
+        const { vaultRelativePath } = await ipc.invoke('file:copy-to-vault', file.path, currentVaultPath, 'raw');
+        source = { kind: 'file', filePath: file.path, imported: true, vaultPath: vaultRelativePath, keepOriginal: opts.keepOriginal };
+      } else {
+        source = { kind: 'file', filePath: file.path, imported: false };
+      }
+      await addResource(source, file.name.replace(/\.[^.]+$/, ''));
+    }
+    setPendingFiles(null);
   };
 
   if (loading) {
@@ -72,44 +110,88 @@ export function ReadingListPanel() {
   }
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'pending', label: 'Pending', count: pending.length + failed.length },
+    { key: 'pending', label: 'Pending', count: pending.length },
     { key: 'processing', label: 'Processing', count: processing.length },
     { key: 'ready', label: 'Ready', count: ready.length },
   ];
 
   const currentItems = activeTab === 'pending'
-    ? [...pending, ...failed]
+    ? pending
     : activeTab === 'processing'
     ? processing
     : ready;
 
+  const getItemLabel = (item: ReadingListResource): string => {
+    if (item.source.kind === 'url') return getDomain(item.source.url);
+    if (item.source.kind === 'file') {
+      const path = item.source.filePath;
+      return path.split('/').pop() ?? path;
+    }
+    return '';
+  };
+
   const filtered = currentItems.filter((item) => {
     if (!filterText) return true;
     const q = filterText.toLowerCase();
-    const title = (item.pageTitle || item.title).toLowerCase();
-    const domain = getDomain(item.url).toLowerCase();
-    return title.includes(q) || domain.includes(q);
+    const title = item.title.toLowerCase();
+    const label = getItemLabel(item).toLowerCase();
+    return title.includes(q) || label.includes(q);
   });
 
-  const sorted = [...filtered].sort((a, b) => b.addedAt - a.addedAt);
-  const selectedPendingCount = selectedUrls.filter((url) => items[url]?.status === 'pending').length;
+  // Sort pending: errors first (most recent failure first), then by addedAt desc
+  const sorted = activeTab === 'pending'
+    ? [...filtered].sort((a, b) => {
+        const aHasError = Boolean(a.error);
+        const bHasError = Boolean(b.error);
+        if (aHasError && !bHasError) return -1;
+        if (!aHasError && bHasError) return 1;
+        if (aHasError && bHasError) {
+          return (b.error!.failedAt) - (a.error!.failedAt);
+        }
+        return b.addedAt - a.addedAt;
+      })
+    : [...filtered].sort((a, b) => b.addedAt - a.addedAt);
+
+  const selectedPendingCount = selectedIds.filter(
+    (id) => items[id]?.status === 'pending' && !items[id]?.error,
+  ).length;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div
+      className="flex flex-col h-full overflow-hidden relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <DropZoneOverlay visible={isDragging} />
+      {pendingFiles && (
+        <FileImportDialog
+          files={pendingFiles}
+          onConfirm={handleFileImportConfirm}
+          onCancel={() => setPendingFiles(null)}
+        />
+      )}
+
       <div className="px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
         <PanelHeader title="Reading List">
           <button
             onClick={() => setShowAddModal(true)}
             className="text-xs px-2.5 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
           >
-            + Add URL
+            + Add
           </button>
         </PanelHeader>
       </div>
 
-      {/* Add URL modal */}
+      {/* Add resource modal */}
       {showAddModal && (
-        <AddUrlModal onClose={() => setShowAddModal(false)} />
+        <AddResourceModal
+          onClose={() => setShowAddModal(false)}
+          onFilesSelected={(files) => {
+            setPendingFiles(files.map((f) => ({ name: f.name, path: (f as any).path ?? f.name })));
+            setShowAddModal(false);
+          }}
+        />
       )}
 
       {/* Tabs */}
@@ -144,7 +226,7 @@ export function ReadingListPanel() {
       </div>
 
       {/* Pending tab: select mode bar */}
-      {activeTab === 'pending' && pending.length > 0 && (
+      {activeTab === 'pending' && pending.filter((i) => !i.error).length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-700/50 flex-shrink-0">
           {!selectMode ? (
             <button
@@ -157,12 +239,13 @@ export function ReadingListPanel() {
             <>
               <button
                 onClick={() => {
-                  if (selectedUrls.length === pending.length) clearSelection();
+                  const nonErrorPending = pending.filter((i) => !i.error);
+                  if (selectedIds.length === nonErrorPending.length) clearSelection();
                   else selectAllPending();
                 }}
                 className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
               >
-                {selectedUrls.length === pending.length ? 'Deselect All' : 'Select All'}
+                {selectedIds.length === pending.filter((i) => !i.error).length ? 'Deselect All' : 'Select All'}
               </button>
               <button
                 onClick={() => { clearSelection(); setSelectMode(false); }}
@@ -202,27 +285,38 @@ export function ReadingListPanel() {
         {sorted.length === 0 ? (
           <div className="p-4 text-center text-xs text-zinc-500">
             {filterText ? 'No items match your filter.' :
-              activeTab === 'pending' ? 'No pending items. Click "+ Add URL" to add a page.' :
+              activeTab === 'pending' ? 'No pending items. Click "+ Add" to add a page.' :
               activeTab === 'processing' ? 'No items being processed.' :
               'No items ready for merge.'}
           </div>
         ) : (
-          sorted.map((item) => (
-            <ReadingListItemCard
-              key={item.url}
-              item={item}
-              mode={activeTab}
-              selectMode={selectMode}
-              selected={selectedUrl === item.url}
-              checked={selectedUrls.includes(item.url)}
-              expanded={expandedUrls.includes(item.url)}
-              onSelect={() => selectItem(selectedUrl === item.url ? null : item.url)}
-              onCheck={() => toggleSelectUrl(item.url)}
-              onToggleExpand={() => toggleExpanded(item.url)}
-              onMerge={handleMerge}
-              isMerging={mergingUrl === item.url}
-            />
-          ))
+          sorted.map((item) => {
+            if (activeTab === 'pending') {
+              return (
+                <PendingCard
+                  key={item.id}
+                  item={item}
+                  selectMode={selectMode}
+                  checked={selectedIds.includes(item.id)}
+                  onCheck={() => toggleSelectId(item.id)}
+                />
+              );
+            }
+            if (activeTab === 'processing') {
+              return <ProcessingCard key={item.id} item={item} />;
+            }
+            // ready
+            return (
+              <ReadyCard
+                key={item.id}
+                item={item}
+                selected={selectedId === item.id}
+                onSelect={() => selectItem(selectedId === item.id ? null : item.id)}
+                onMerge={handleMerge}
+                isMerging={mergingId === item.id}
+              />
+            );
+          })
         )}
       </div>
     </div>
