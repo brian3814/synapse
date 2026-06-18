@@ -5,6 +5,10 @@ All notable changes to Synapse will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Tiered label visibility: H3-inspired progressive label disclosure — hub nodes (high relationship count) show labels first when zoomed out, lower-tier nodes fade in as you zoom closer
+- Adaptive tier bucketing: nodes ranked into 6 tiers by edge count using percentile-based assignment; small graphs (≤40 nodes) bypass tiering to keep all labels visible
+- Per-tier opacity fade-in: labels smoothly transition from transparent to opaque as each tier's zoom threshold is crossed
+- Debounced tier recomputation: tier assignments automatically update within 200ms of graph mutations (edge/node create/delete)
 - Settings → Agents page: assign which agent extraction uses and the default chat agent (chat header picker still overrides per conversation)
 - Custom extraction agents can be created from the Agents panel
 - Multi-provider LLM architecture: `ModelProvider` interface with provider registry, Anthropic implementation with dynamic model fetching via `/v1/models` API
