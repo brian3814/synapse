@@ -2,7 +2,7 @@
 
 All notable changes to Synapse will be documented in this file.
 
-## [Unreleased]
+## [0.6.0] - 2026-06-18
 
 ### Added
 - Tiered label visibility: H3-inspired progressive label disclosure — hub nodes (high relationship count) show labels first when zoomed out, lower-tier nodes fade in as you zoom closer
