@@ -80,12 +80,14 @@ export function createVaultContext(vaultPath: string, db: Database.Database): Va
 export function scaffoldVault(vaultPath: string, name: string): VaultConfig {
   const synapsePath = join(vaultPath, '.synapse');
   const notesPath = join(vaultPath, 'notes');
+  const entitiesPath = join(vaultPath, 'entities');
   const embeddingsPath = join(synapsePath, 'embeddings');
   const agentPath = join(synapsePath, 'agent');
   const artifactsPath = join(agentPath, 'artifacts');
 
   mkdirSync(synapsePath, { recursive: true });
   mkdirSync(notesPath, { recursive: true });
+  mkdirSync(entitiesPath, { recursive: true });
   mkdirSync(embeddingsPath, { recursive: true });
   mkdirSync(artifactsPath, { recursive: true });
 

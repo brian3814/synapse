@@ -141,6 +141,16 @@ export interface TabInfo {
   title: string;
 }
 
+export interface PlatformEntityFiles {
+  generateAll(): Promise<{ generated: number }>;
+  listSyncIssues(): Promise<import('../shared/entity-sync-types').SyncNotification[]>;
+  dismissSyncIssue(id: string): Promise<void>;
+  resolveNotification(id: string, action: string): Promise<void>;
+  read(nodeId: string): Promise<{ path: string; content: string; contentHash: string | null } | null>;
+  append(nodeId: string, text: string, expectedHash?: string): Promise<{ contentHash: string }>;
+  patch(nodeId: string, patch: unknown, expectedHash?: string): Promise<{ contentHash: string }>;
+}
+
 export interface PlatformBrowser {
   getActiveTab(): Promise<TabInfo | null>;
   getPageContent(tabId: number): Promise<string>;

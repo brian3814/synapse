@@ -7,7 +7,7 @@ export type VaultEvent =
   | { type: 'node:updated'; node: DbNode; changes: string[] }
   | { type: 'node:deleted'; nodeId: string; filePath?: string }
   | { type: 'edge:created'; edge: DbEdge }
-  | { type: 'edge:deleted'; edgeId: string }
+  | { type: 'edge:deleted'; edgeId: string; edge?: DbEdge }
   | { type: 'file:added'; relativePath: string }
   | { type: 'file:changed'; relativePath: string }
   | { type: 'file:removed'; relativePath: string }

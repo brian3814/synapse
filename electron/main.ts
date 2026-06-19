@@ -33,6 +33,8 @@ import { loadMcpClientConfig, loadMcpServerConfig } from './mcp/mcp-config';
 import { McpServerBridge } from './mcp/mcp-server-bridge';
 import { initArtifactHandlers, registerArtifactIPC, createArtifactCore, updateArtifactCore } from './main/artifact-handlers';
 import * as artifactQueries from '../src/db/worker/queries/artifact-queries';
+import { EntityFileService } from './entity-files/entity-file-service';
+import { registerEntityFileIpc, unregisterEntityFileIpc } from './entity-files/ipc-handlers';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 
@@ -158,13 +160,11 @@ app.whenReady().then(() => {
       } catch { /* DB may not be ready */ }
     }
 
-    // Pre-lookup edge endpoints before deletion (edge is gone after action)
-    let deletedEdgeEndpoints: { source_id: string; target_id: string } | undefined;
+    // Pre-lookup full edge before deletion (edge is gone after action)
+    let deletedEdge: any;
     if (action === 'edges.delete') {
       try {
-        deletedEdgeEndpoints = getDb().prepare(
-          'SELECT source_id, target_id FROM edges WHERE id = ?'
-        ).get(params as string) as { source_id: string; target_id: string } | undefined;
+        deletedEdge = getDb().prepare('SELECT * FROM edges WHERE id = ?').get(params as string);
       } catch { /* DB may not be ready */ }
     }
 
@@ -213,8 +213,8 @@ app.whenReady().then(() => {
       } else if (eventType === 'edge_created' || eventType === 'edge_updated') {
         const edge = (outcome.syncEvent as any).edge;
         if (edge) embeddingService.handleEdgeMutation(edge.source_id, edge.target_id).catch(() => {});
-      } else if (eventType === 'edge_deleted' && deletedEdgeEndpoints) {
-        embeddingService.handleEdgeMutation(deletedEdgeEndpoints.source_id, deletedEdgeEndpoints.target_id).catch(() => {});
+      } else if (eventType === 'edge_deleted' && deletedEdge) {
+        embeddingService.handleEdgeMutation(deletedEdge.source_id, deletedEdge.target_id).catch(() => {});
       }
     }
 
@@ -225,6 +225,19 @@ app.whenReady().then(() => {
         .filter((r) => (r.action === 'created' || r.action === 'merged') && r.node?.id)
         .map((r) => r.node!.id as string);
       if (nodeIds.length > 0) embeddingService.handleNodeMutationBatch(nodeIds).catch(() => {});
+    }
+
+    // Handle bulk edge mutations for entity file relationship updates
+    if (action === 'mutation.execute' && outcome.result) {
+      const ctx = vaultManager.getContext();
+      if (ctx) {
+        const mutResult = outcome.result as { results?: Array<{ action: string; identifier: string; node?: Record<string, unknown> }> };
+        for (const r of mutResult.results ?? []) {
+          if (r.action === 'created' && r.identifier?.includes('->') && r.node) {
+            ctx.eventBus.emit({ type: 'edge:created', edge: r.node as any });
+          }
+        }
+      }
     }
 
     // Emit vault events for handlers (NoteFileHandler, etc.)
@@ -248,7 +261,7 @@ app.whenReady().then(() => {
       } else if (syncType === 'edge_created') {
         ctx.eventBus.emit({ type: 'edge:created', edge: (outcome.syncEvent as any).edge });
       } else if (syncType === 'edge_deleted') {
-        ctx.eventBus.emit({ type: 'edge:deleted', edgeId: (outcome.syncEvent as any).id });
+        ctx.eventBus.emit({ type: 'edge:deleted', edgeId: (outcome.syncEvent as any).id, edge: deletedEdge });
       }
     }
 
@@ -579,6 +592,7 @@ app.whenReady().then(() => {
   registerToolIpcHandlers(() => toolRegistry);
   registerMcpClientIpcHandlers(() => mcpClientManager);
   registerArtifactIPC();
+  registerEntityFileIpc(() => entityFileService);
 
   // ── Vault Workspace Management ──────────────────────────────────────
   const vaultManager = new VaultManager(storage);
@@ -594,6 +608,7 @@ app.whenReady().then(() => {
   let syncBroadcastHandler: SyncBroadcastHandler | null = null;
   let resourceDetectionHandler: ResourceDetectionHandler | null = null;
   let artifactFileHandler: ArtifactFileHandler | null = null;
+  let entityFileService: EntityFileService | null = null;
   let fileWatcher: VaultFileWatcher | null = null;
 
   function registerVaultHandlers() {
@@ -624,9 +639,17 @@ app.whenReady().then(() => {
     artifactFileHandler = new ArtifactFileHandler(ctx.path);
     artifactFileHandler.register(ctx.eventBus);
 
+    // Entity files — core feature, always active
+    entityFileService = new EntityFileService(ctx);
+    entityFileService.register(ctx.eventBus);
+
     // Start file watcher for live changes
     fileWatcher = new VaultFileWatcher(ctx.path, ctx.eventBus, getSandboxConfig);
     fileWatcher.start();
+
+    if (entityFileService && fileWatcher) {
+      entityFileService.setFileWatcher((p) => fileWatcher!.markAsAppWritten(p));
+    }
 
     // Forward file-watcher events to renderer for vault explorer
     ctx.eventBus.on('file:added', () => {
@@ -766,6 +789,8 @@ app.whenReady().then(() => {
     syncBroadcastHandler = null;
     resourceDetectionHandler?.unregister();
     resourceDetectionHandler = null;
+    entityFileService?.unregister();
+    entityFileService = null;
     // Reset so embedding service re-initializes with the new vault's DB
     embeddingInitStarted = false;
     embeddingService?.dispose();
@@ -919,6 +944,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  unregisterEntityFileIpc();
 });
 
 app.on('window-all-closed', () => {
