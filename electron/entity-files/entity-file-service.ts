@@ -15,6 +15,7 @@ import type { SyncNotification } from '../../src/shared/entity-sync-types';
 import { deriveEntityPath } from './entity-slug';
 import {
   generateEntityMarkdown,
+  parseEntityFrontmatter,
   rewriteTitle,
 } from './entity-markdown';
 import type { EntityEdgeInfo, EntitySourceInfo } from './entity-markdown';
@@ -294,6 +295,108 @@ export class EntityFileService {
     ).run(relativePath, Math.floor(stat.mtimeMs), stat.size, hash, node.id);
   }
 
+  // ── Sync-check helpers ─────────────────────────────────────────────
+
+  /**
+   * Reads `relativePath`, parses frontmatter, and returns any sync
+   * notifications that apply.  Returns an empty array when everything
+   * looks clean.
+   */
+  checkEntityFile(relativePath: string): SyncNotification[] {
+    const absolutePath = this.ctx.resolve(relativePath);
+    if (!existsSync(absolutePath)) return [];
+
+    const content = readFileSync(absolutePath, 'utf-8');
+    const { id: fileId, title: fileTitle } = parseEntityFrontmatter(content);
+
+    const now = new Date().toISOString();
+
+    // ── No id in frontmatter → new_file ─────────────────────────────
+    if (!fileId) {
+      const notification: SyncNotification = {
+        id: `new_file:${relativePath}`,
+        type: 'new_file',
+        filePath: relativePath,
+        entityName: fileTitle,
+        detectedAt: now,
+        dismissed: false,
+        detail: { kind: 'new_file', parsedTitle: fileTitle },
+      };
+      return [notification];
+    }
+
+    // ── id present but matches no DB node → unknown_id ──────────────
+    const nodeRow = this.ctx.db.prepare(
+      'SELECT id, name FROM nodes WHERE id = ?'
+    ).get(fileId) as { id: string; name: string } | undefined;
+
+    if (!nodeRow) {
+      const notification: SyncNotification = {
+        id: `unknown_id:${relativePath}`,
+        type: 'unknown_id',
+        filePath: relativePath,
+        entityName: fileTitle,
+        detectedAt: now,
+        dismissed: false,
+        detail: { kind: 'unknown_id', fileId },
+      };
+      return [notification];
+    }
+
+    // ── id resolves but title doesn't match DB name → title_mismatch ─
+    if (fileTitle !== null && fileTitle !== nodeRow.name) {
+      const notification: SyncNotification = {
+        id: `title_mismatch:${relativePath}`,
+        type: 'title_mismatch',
+        filePath: relativePath,
+        entityName: nodeRow.name,
+        detectedAt: now,
+        dismissed: false,
+        detail: { kind: 'title_mismatch', dbName: nodeRow.name, fileTitle },
+      };
+      return [notification];
+    }
+
+    return [];
+  }
+
+  /**
+   * Reads file metadata (mtime, size, hash) and updates the DB node
+   * that owns `relativePath`.  Emits `node:updated` so downstream
+   * services (e.g. EmbeddingService) can react.
+   *
+   * Returns `null` when no node owns the path or the file doesn't exist.
+   */
+  updateEntityFileMetadata(relativePath: string): { nodeId: string; contentHash: string } | null {
+    const absolutePath = this.ctx.resolve(relativePath);
+    if (!existsSync(absolutePath)) return null;
+
+    const nodeRow = this.ctx.db.prepare(
+      `SELECT id, identifier, name, type, label, summary, properties, x, y,
+              color, size, source_url, vault_path, file_mtime, file_size,
+              created_at, updated_at
+       FROM nodes WHERE vault_path = ?`
+    ).get(relativePath) as DbNode | undefined;
+
+    if (!nodeRow) return null;
+
+    const stat = statSync(absolutePath);
+    const contentHash = computeFileHash(absolutePath) ?? '';
+
+    this.ctx.db.prepare(
+      'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+    ).run(Math.floor(stat.mtimeMs), stat.size, contentHash, nodeRow.id);
+
+    // Let EmbeddingService and other listeners know content changed
+    this.ctx.eventBus.emit({
+      type: 'node:updated',
+      node: { ...nodeRow, file_mtime: Math.floor(stat.mtimeMs), file_size: stat.size },
+      changes: ['content_hash'],
+    });
+
+    return { nodeId: nodeRow.id, contentHash };
+  }
+
   // ── Private: Debounce ──────────────────────────────────────────────
 
   private debouncedGenerate(node: DbNode): void {
@@ -525,8 +628,15 @@ export class EntityFileService {
     // For now, do nothing
   }
 
-  private handleEntityFileChanged(_relativePath: string): void {
-    // Stub — will be implemented in a later task for bidirectional sync
+  private handleEntityFileChanged(relativePath: string): void {
+    // Update file metadata in DB (mtime, size, hash) and emit node:updated
+    this.updateEntityFileMetadata(relativePath);
+
+    // Check for sync issues (title mismatch, unknown id, new file) and upsert
+    const notifications = this.checkEntityFile(relativePath);
+    if (notifications.length > 0) {
+      this.syncIssueStore.upsertIssues(notifications);
+    }
   }
 
   private handleEntityFileRemoved(relativePath: string): void {

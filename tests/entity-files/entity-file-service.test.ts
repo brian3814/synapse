@@ -430,6 +430,74 @@ describe('EntityFileService', () => {
     });
   });
 
+  // ── checkEntityFile ────────────────────────────────────────────────
+
+  describe('checkEntityFile', () => {
+    it('returns title_mismatch when frontmatter title differs from DB name', async () => {
+      const node = makeNode({ name: 'Machine Learning' });
+      insertNode(env.db, node);
+
+      // Generate file so vault_path is set
+      service.generateFileForNode(node);
+
+      // Mutate the file's frontmatter title to differ from DB
+      const filePath = env.ctx.resolve('entities/machine_learning.md');
+      let content = readFileSync(filePath, 'utf-8');
+      content = content.replace('title: Machine Learning', 'title: ML (renamed)');
+      writeFileSync(filePath, content, 'utf-8');
+
+      const notifications = service.checkEntityFile('entities/machine_learning.md');
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].type).toBe('title_mismatch');
+      expect(notifications[0].detail).toMatchObject({
+        kind: 'title_mismatch',
+        dbName: 'Machine Learning',
+        fileTitle: 'ML (renamed)',
+      });
+    });
+
+    it('returns empty array when frontmatter title matches DB name', async () => {
+      const node = makeNode({ name: 'Machine Learning' });
+      insertNode(env.db, node);
+
+      service.generateFileForNode(node);
+
+      const notifications = service.checkEntityFile('entities/machine_learning.md');
+      expect(notifications).toHaveLength(0);
+    });
+
+    it('returns new_file when frontmatter has no id', () => {
+      // Create a file without frontmatter id
+      const entitiesDir = env.ctx.resolve('entities');
+      mkdirSync(entitiesDir, { recursive: true });
+      const filePath = env.ctx.resolve('entities/orphan.md');
+      writeFileSync(filePath, '---\ntitle: Orphan Entity\n---\n\n# Orphan Entity\n', 'utf-8');
+
+      const notifications = service.checkEntityFile('entities/orphan.md');
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].type).toBe('new_file');
+      expect(notifications[0].detail).toMatchObject({
+        kind: 'new_file',
+        parsedTitle: 'Orphan Entity',
+      });
+    });
+
+    it('returns unknown_id when id in frontmatter does not match any node', () => {
+      const entitiesDir = env.ctx.resolve('entities');
+      mkdirSync(entitiesDir, { recursive: true });
+      const filePath = env.ctx.resolve('entities/ghost.md');
+      writeFileSync(filePath, '---\nid: does-not-exist-000\ntitle: Ghost\n---\n\n# Ghost\n', 'utf-8');
+
+      const notifications = service.checkEntityFile('entities/ghost.md');
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].type).toBe('unknown_id');
+      expect(notifications[0].detail).toMatchObject({
+        kind: 'unknown_id',
+        fileId: 'does-not-exist-000',
+      });
+    });
+  });
+
   // ── collision handling ─────────────────────────────────────────────
 
   describe('collision handling', () => {
