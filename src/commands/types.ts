@@ -14,6 +14,11 @@ export interface CommandContext {
   embedding?: {
     searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
   };
+  entityFiles?: {
+    read(nodeId: string): Promise<{ path: string; content: string; contentHash: string | null } | null>;
+    append(nodeId: string, text: string, expectedHash?: string): Promise<{ contentHash: string }>;
+    patch(nodeId: string, patch: { oldText: string; newText: string }, expectedHash?: string): Promise<{ contentHash: string }>;
+  };
   getGraphSnapshot(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }>;
 }
 

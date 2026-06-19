@@ -351,10 +351,96 @@ export const CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
   },
 ];
 
+export const READ_ENTITY_FILE_TOOL: ChatToolDefinition = {
+  name: 'read_entity_file',
+  description:
+    "Read the full content of an entity's working memory file. Returns markdown body and content_hash for optimistic locking on subsequent writes.",
+  parameters: {
+    type: 'object',
+    properties: {
+      node_id: { type: 'string', description: 'The entity node ID' },
+    },
+    required: ['node_id'],
+  },
+  executionContext: 'ui',
+};
+
+export const APPEND_ENTITY_FILE_TOOL: ChatToolDefinition = {
+  name: 'append_entity_file',
+  description:
+    "Append text to an entity's working memory file. Pass expected_hash from a prior read_entity_file call for conflict detection.",
+  parameters: {
+    type: 'object',
+    properties: {
+      node_id: { type: 'string', description: 'The entity node ID' },
+      text: { type: 'string', description: 'Markdown text to append to the entity file body' },
+      expected_hash: { type: 'string', description: 'content_hash from read_entity_file for conflict detection' },
+    },
+    required: ['node_id', 'text'],
+  },
+  executionContext: 'ui',
+};
+
+export const PATCH_ENTITY_FILE_TOOL: ChatToolDefinition = {
+  name: 'patch_entity_file',
+  description:
+    "Replace a section in an entity's working memory file. Pass expected_hash from a prior read_entity_file call for conflict detection.",
+  parameters: {
+    type: 'object',
+    properties: {
+      node_id: { type: 'string', description: 'The entity node ID' },
+      old_text: { type: 'string', description: 'Exact text to find and replace' },
+      new_text: { type: 'string', description: 'Replacement text' },
+      expected_hash: { type: 'string', description: 'content_hash from read_entity_file' },
+    },
+    required: ['node_id', 'old_text', 'new_text'],
+  },
+  executionContext: 'ui',
+};
+
+export const ENTITY_FILE_TOOLS: ChatToolDefinition[] = [
+  READ_ENTITY_FILE_TOOL,
+  APPEND_ENTITY_FILE_TOOL,
+  PATCH_ENTITY_FILE_TOOL,
+];
+
 export const ALL_CHAT_AGENT_TOOLS: ChatToolDefinition[] = [
   ...CHAT_AGENT_TOOLS,
   ...EXTENDED_TOOL_DEFINITIONS,
+  ...ENTITY_FILE_TOOLS,
 ];
+
+/** Tool names that only read data */
+export const READ_TOOLS = new Set([
+  'search_knowledge',
+  'search_nodes',
+  'get_node_details',
+  'get_neighbors',
+  'get_edges_for_node',
+  'search_sources',
+  'get_source_content',
+  'semantic_search',
+  'get_nodes_batch',
+  'get_node_tags',
+  'get_aliases',
+  'find_similar_entities',
+  'read_entity_file',
+]);
+
+/** Tool names that modify data */
+export const WRITE_TOOLS = new Set([
+  'create_node',
+  'update_node',
+  'create_edge',
+  'delete_node',
+  'delete_nodes_batch',
+  'merge_nodes',
+  'manage_memory',
+  'tag_node',
+  'add_alias',
+  'append_entity_file',
+  'patch_entity_file',
+]);
 
 /** Convert chat tool definitions to Anthropic API tool format */
 export function toAnthropicChatTools(

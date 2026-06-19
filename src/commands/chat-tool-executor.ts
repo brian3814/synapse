@@ -286,6 +286,42 @@ export async function executeTool(
       return { result: JSON.stringify(nodeDetails), collectedNodeIds: nodeDetails.map((n) => n.id) };
     }
 
+    case 'read_entity_file': {
+      if (!ctx.entityFiles) return { result: 'Entity files not available', collectedNodeIds: [] };
+      const efResult = await ctx.entityFiles.read(input.node_id as string);
+      if (!efResult) return { result: 'Entity file not found for this node', collectedNodeIds: [] };
+      return {
+        result: `# ${efResult.path}\n\ncontent_hash: ${efResult.contentHash}\n\n${efResult.content}`,
+        collectedNodeIds: [input.node_id as string],
+      };
+    }
+
+    case 'append_entity_file': {
+      if (!ctx.entityFiles) return { result: 'Entity files not available', collectedNodeIds: [] };
+      const appendResult = await ctx.entityFiles.append(
+        input.node_id as string,
+        input.text as string,
+        input.expected_hash as string | undefined,
+      );
+      return {
+        result: `Appended successfully. New content_hash: ${appendResult.contentHash}`,
+        collectedNodeIds: [input.node_id as string],
+      };
+    }
+
+    case 'patch_entity_file': {
+      if (!ctx.entityFiles) return { result: 'Entity files not available', collectedNodeIds: [] };
+      const patchResult = await ctx.entityFiles.patch(
+        input.node_id as string,
+        { oldText: input.old_text as string, newText: input.new_text as string },
+        input.expected_hash as string | undefined,
+      );
+      return {
+        result: `Patched successfully. New content_hash: ${patchResult.contentHash}`,
+        collectedNodeIds: [input.node_id as string],
+      };
+    }
+
     default: {
       const extended = await executeExtendedTool(ctx, name, input);
       if (extended) return extended;

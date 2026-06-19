@@ -108,6 +108,19 @@ async function getSourceExcerpts(
           }
           return null;
         }
+        // Entity file prose — return entity file content for entity nodes
+        if (node?.type === 'entity' && node?.vault_path?.startsWith('entities/') && ctx.entityFiles) {
+          const ef = await ctx.entityFiles.read(nodeId);
+          if (ef?.content) {
+            return {
+              nodeId,
+              nodeLabel: node.name,
+              url: `entity://${nodeId}`,
+              title: node.name,
+              excerpt: ef.content.slice(0, maxExcerptLength),
+            };
+          }
+        }
         const sc: DbSourceContent | null = await ctx.db.sourceContent.getByNodeId(nodeId) as any;
         if (sc?.content) {
           return {
