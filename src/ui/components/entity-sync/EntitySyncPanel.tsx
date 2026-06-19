@@ -1,19 +1,26 @@
+import { useEffect } from 'react';
 import { useEntitySyncStore } from '../../../graph/store/entity-sync-store';
 import { EntitySyncCard } from './EntitySyncCard';
+import { entityFiles } from '@platform';
 
 export function EntitySyncPanel() {
   const notifications = useEntitySyncStore((s) => s.notifications.filter((n) => !n.dismissed));
+  const setNotifications = useEntitySyncStore((s) => s.setNotifications);
   const dismissNotification = useEntitySyncStore((s) => s.dismissNotification);
   const removeNotification = useEntitySyncStore((s) => s.removeNotification);
+
+  useEffect(() => {
+    entityFiles.listSyncIssues().then(setNotifications).catch(() => {});
+  }, [setNotifications]);
 
   const handleAction = async (notificationId: string, action: string) => {
     if (action === 'dismiss') {
       dismissNotification(notificationId);
+      try { await entityFiles.dismissSyncIssue(notificationId); } catch {}
       return;
     }
-    // IPC calls will be wired in Task 12 via platform layer
     try {
-      await (window as any).electronAPI?.invoke('entity-files:resolve-notification', notificationId, action);
+      await entityFiles.resolveNotification(notificationId, action);
       removeNotification(notificationId);
     } catch (err) {
       console.error('[EntitySyncPanel] action failed:', err);
