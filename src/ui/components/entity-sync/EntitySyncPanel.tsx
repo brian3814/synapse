@@ -1,17 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useEntitySyncStore } from '../../../graph/store/entity-sync-store';
 import { EntitySyncCard } from './EntitySyncCard';
 import { entityFiles } from '@platform';
 
 export function EntitySyncPanel() {
-  const notifications = useEntitySyncStore((s) => s.notifications.filter((n) => !n.dismissed));
+  const allNotifications = useEntitySyncStore((s) => s.notifications);
   const setNotifications = useEntitySyncStore((s) => s.setNotifications);
   const dismissNotification = useEntitySyncStore((s) => s.dismissNotification);
   const removeNotification = useEntitySyncStore((s) => s.removeNotification);
 
+  const notifications = useMemo(
+    () => allNotifications.filter((n) => !n.dismissed),
+    [allNotifications]
+  );
+
   useEffect(() => {
-    entityFiles.listSyncIssues().then(setNotifications).catch(() => {});
-  }, [setNotifications]);
+    let cancelled = false;
+    entityFiles.listSyncIssues().then((issues) => {
+      if (!cancelled) setNotifications(issues);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const handleAction = async (notificationId: string, action: string) => {
     if (action === 'dismiss') {
