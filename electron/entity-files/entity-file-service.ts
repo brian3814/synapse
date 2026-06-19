@@ -8,6 +8,7 @@ import {
   statSync,
 } from 'fs';
 import { dirname } from 'path';
+import { randomUUID } from 'crypto';
 import type { VaultContext } from '../vault/vault-context';
 import type { VaultEventBus } from '../vault/event-bus';
 import type { DbNode, DbEdge } from '../../src/shared/types';
@@ -134,8 +135,270 @@ export class EntityFileService {
   }
 
   resolveNotification(notificationId: string, action: string): void {
-    // Stub — full resolution logic implemented in Task 13
-    console.log(`[EntityFileService] resolveNotification: id=${notificationId} action=${action}`);
+    const issue = this.syncIssueStore.getIssue(notificationId);
+    if (!issue) {
+      console.warn(`[EntityFileService] resolveNotification: unknown issue id=${notificationId}`);
+      return;
+    }
+
+    const { filePath, detail } = issue;
+    const absolutePath = this.ctx.resolve(filePath);
+
+    switch (action) {
+      case 'rename_entity': {
+        // title_mismatch: update nodes.name to the file's title, then rename file
+        if (detail.kind !== 'title_mismatch') break;
+        const newName = detail.fileTitle;
+
+        // Look up the node that owns this file
+        const nodeRow = this.ctx.db.prepare(
+          'SELECT id, identifier, name, type, label, summary, properties, x, y, color, size, source_url, vault_path, file_mtime, file_size, created_at, updated_at FROM nodes WHERE vault_path = ?'
+        ).get(filePath) as import('../../src/shared/types').DbNode | undefined;
+
+        if (!nodeRow) break;
+
+        // Update name in DB
+        this.ctx.db.prepare('UPDATE nodes SET name = ? WHERE id = ?').run(newName, nodeRow.id);
+
+        // Trigger rename flow (same as handleEntityRenamed, via the updated node)
+        const updatedNode = { ...nodeRow, name: newName };
+        this.handleEntityRenamed(updatedNode);
+
+        // Update content_hash for new file location
+        const updatedRow = this.ctx.db.prepare(
+          'SELECT vault_path FROM nodes WHERE id = ?'
+        ).get(nodeRow.id) as { vault_path: string | null } | undefined;
+
+        if (updatedRow?.vault_path) {
+          const newAbsolute = this.ctx.resolve(updatedRow.vault_path);
+          if (existsSync(newAbsolute)) {
+            const hash = computeFileHash(newAbsolute);
+            const stat = statSync(newAbsolute);
+            this.ctx.db.prepare(
+              'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE id = ?'
+            ).run(hash, Math.floor(stat.mtimeMs), stat.size, nodeRow.id);
+          }
+        }
+        break;
+      }
+
+      case 'revert_file_title': {
+        // title_mismatch: rewrite title: in frontmatter to match nodes.name
+        if (detail.kind !== 'title_mismatch') break;
+        const dbName = detail.dbName;
+
+        if (!existsSync(absolutePath)) break;
+
+        let content = readFileSync(absolutePath, 'utf-8');
+        content = rewriteTitle(content, dbName);
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, content, 'utf-8');
+
+        // Update content_hash
+        const hash = computeFileHash(absolutePath);
+        const stat = statSync(absolutePath);
+        this.ctx.db.prepare(
+          'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE vault_path = ?'
+        ).run(hash, Math.floor(stat.mtimeMs), stat.size, filePath);
+        break;
+      }
+
+      case 'create_entity': {
+        // new_file: create a new entity node from this file
+        if (detail.kind !== 'new_file') break;
+        if (!existsSync(absolutePath)) break;
+
+        const fileContent = readFileSync(absolutePath, 'utf-8');
+        const { title: parsedTitle } = parseEntityFrontmatter(fileContent);
+        const entityName = parsedTitle ?? issue.entityName ?? 'Untitled';
+
+        const newId = randomUUID();
+        const now = new Date().toISOString();
+
+        // Insert new node
+        this.ctx.db.prepare(`
+          INSERT INTO nodes (id, identifier, name, type, label, summary, properties, x, y, color, size, source_url, vault_path, file_mtime, file_size, content_hash, created_at, updated_at)
+          VALUES (?, NULL, ?, 'entity', NULL, NULL, '{}', NULL, NULL, NULL, 1.0, NULL, ?, NULL, NULL, NULL, ?, ?)
+        `).run(newId, entityName, filePath, now, now);
+
+        // Write id into the file's frontmatter
+        let updatedContent: string;
+        if (fileContent.startsWith('---')) {
+          // Frontmatter exists — insert id: line after opening ---
+          updatedContent = fileContent.replace(/^---\r?\n/, `---\nid: ${newId}\n`);
+        } else {
+          // No frontmatter at all — prepend a full block
+          updatedContent = `---\nid: ${newId}\ntitle: ${entityName}\n---\n\n${fileContent}`;
+        }
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, updatedContent, 'utf-8');
+
+        // Update file metadata
+        const stat = statSync(absolutePath);
+        const hash = computeFileHash(absolutePath);
+        this.ctx.db.prepare(
+          'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+        ).run(Math.floor(stat.mtimeMs), stat.size, hash, newId);
+        break;
+      }
+
+      case 'ignore_file': {
+        // Dismiss the issue without any file/DB change
+        this.syncIssueStore.dismissIssue(notificationId);
+        // dismissIssue marks it but doesn't remove; we still call removeIssue below
+        break;
+      }
+
+      case 'delete_file': {
+        // Delete file from disk and clear vault_path on any node referencing it
+        if (existsSync(absolutePath)) {
+          this.markAsAppWritten?.(filePath);
+          unlinkSync(absolutePath);
+        }
+
+        this.ctx.db.prepare(
+          'UPDATE nodes SET vault_path = NULL, file_mtime = NULL, file_size = NULL, content_hash = NULL WHERE vault_path = ?'
+        ).run(filePath);
+        break;
+      }
+
+      case 'fix_link': {
+        // link_broken: replace [[oldName]] with [[suggestedFix]] in file
+        if (detail.kind !== 'link_broken') break;
+        const { linkText, suggestedFix } = detail;
+        if (!suggestedFix) break;
+        if (!existsSync(absolutePath)) break;
+
+        let content = readFileSync(absolutePath, 'utf-8');
+        content = content.split(`[[${linkText}]]`).join(`[[${suggestedFix}]]`);
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, content, 'utf-8');
+
+        // Update content_hash
+        const nodeRow = this.ctx.db.prepare(
+          'SELECT id FROM nodes WHERE vault_path = ?'
+        ).get(filePath) as { id: string } | undefined;
+        if (nodeRow) {
+          const hash = computeFileHash(absolutePath);
+          const stat = statSync(absolutePath);
+          this.ctx.db.prepare(
+            'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE id = ?'
+          ).run(hash, Math.floor(stat.mtimeMs), stat.size, nodeRow.id);
+        }
+        break;
+      }
+
+      case 'remove_line': {
+        // link_dead: remove the line containing [[linkText]] from file
+        if (detail.kind !== 'link_dead') break;
+        const { linkText } = detail;
+        if (!existsSync(absolutePath)) break;
+
+        const lines = readFileSync(absolutePath, 'utf-8').split('\n');
+        const filtered = lines.filter((line) => !line.includes(`[[${linkText}]]`));
+        const newContent = filtered.join('\n');
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, newContent, 'utf-8');
+
+        const nodeRow = this.ctx.db.prepare(
+          'SELECT id FROM nodes WHERE vault_path = ?'
+        ).get(filePath) as { id: string } | undefined;
+        if (nodeRow) {
+          const hash = computeFileHash(absolutePath);
+          const stat = statSync(absolutePath);
+          this.ctx.db.prepare(
+            'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE id = ?'
+          ).run(hash, Math.floor(stat.mtimeMs), stat.size, nodeRow.id);
+        }
+        break;
+      }
+
+      case 'keep_as_text': {
+        // link_dead: convert [[linkText]] to plain text (remove brackets)
+        if (detail.kind !== 'link_dead') break;
+        const { linkText } = detail;
+        if (!existsSync(absolutePath)) break;
+
+        let content = readFileSync(absolutePath, 'utf-8');
+        content = content.split(`[[${linkText}]]`).join(linkText);
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, content, 'utf-8');
+
+        const nodeRow = this.ctx.db.prepare(
+          'SELECT id FROM nodes WHERE vault_path = ?'
+        ).get(filePath) as { id: string } | undefined;
+        if (nodeRow) {
+          const hash = computeFileHash(absolutePath);
+          const stat = statSync(absolutePath);
+          this.ctx.db.prepare(
+            'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE id = ?'
+          ).run(hash, Math.floor(stat.mtimeMs), stat.size, nodeRow.id);
+        }
+        break;
+      }
+
+      case 'add_to_file': {
+        // link_missing: append suggestedFix line to ## Relationships section
+        if (detail.kind !== 'link_missing') break;
+        const { suggestedFix } = detail;
+        if (!suggestedFix) break;
+        if (!existsSync(absolutePath)) break;
+
+        let content = readFileSync(absolutePath, 'utf-8');
+
+        const sectionHeader = '## Relationships';
+        const sectionIdx = content.indexOf(sectionHeader);
+
+        if (sectionIdx === -1) {
+          // No Relationships section — append one before Sources or at end
+          const sourcesIdx = content.indexOf('## Sources');
+          if (sourcesIdx !== -1) {
+            content = content.slice(0, sourcesIdx) + sectionHeader + '\n\n' + suggestedFix + '\n\n' + content.slice(sourcesIdx);
+          } else {
+            content = content.trimEnd() + '\n\n' + sectionHeader + '\n\n' + suggestedFix + '\n';
+          }
+        } else {
+          // Insert after existing relationship lines (before next ## or end)
+          const afterHeader = sectionIdx + sectionHeader.length;
+          const rest = content.slice(afterHeader);
+          const nextSectionMatch = rest.match(/\n## /);
+          const insertionPoint = nextSectionMatch
+            ? afterHeader + nextSectionMatch.index!
+            : content.length;
+
+          const before = content.slice(0, insertionPoint).trimEnd();
+          const after = content.slice(insertionPoint);
+          content = before + '\n' + suggestedFix + '\n' + after;
+        }
+
+        this.markAsAppWritten?.(filePath);
+        writeFileSync(absolutePath, content, 'utf-8');
+
+        const nodeRow = this.ctx.db.prepare(
+          'SELECT id FROM nodes WHERE vault_path = ?'
+        ).get(filePath) as { id: string } | undefined;
+        if (nodeRow) {
+          const hash = computeFileHash(absolutePath);
+          const stat = statSync(absolutePath);
+          this.ctx.db.prepare(
+            'UPDATE nodes SET content_hash = ?, file_mtime = ?, file_size = ? WHERE id = ?'
+          ).run(hash, Math.floor(stat.mtimeMs), stat.size, nodeRow.id);
+        }
+        break;
+      }
+
+      default:
+        console.warn(`[EntityFileService] resolveNotification: unknown action="${action}"`);
+        break;
+    }
+
+    // Always remove the issue after resolution (ignore_file already called dismissIssue)
+    this.syncIssueStore.removeIssue(notificationId);
   }
 
   readEntityFile(nodeId: string): { path: string; content: string; contentHash: string } | null {
