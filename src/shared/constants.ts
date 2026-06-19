@@ -25,6 +25,7 @@ export const STRUCTURAL_NODE_TYPES = ['resource', 'entity', 'note'] as const;
 export const FALLBACK_TYPE_COLOR = '#6B7280'; // gray
 
 export const DEFAULT_NODE_SIZE = 1.0;
+export const NODE_RENDER_SCALE = 2.0;
 export const DEFAULT_EDGE_WEIGHT = 1.0;
 
 export const SUBGRAPH_DEFAULT_HOPS = 2;

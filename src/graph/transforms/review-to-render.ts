@@ -1,6 +1,7 @@
 import type { ReviewNode, ReviewEdge } from '../store/extraction-review-store';
 import type { GraphNode } from '../../shared/types';
 import type { RenderNode, RenderEdge } from '../renderer/types';
+import { NODE_RENDER_SCALE } from '../../shared/constants';
 
 const REVIEW_NODE_COLOR = '#059669'; // emerald
 const MERGE_PENDING_COLOR = '#D97706'; // amber
@@ -44,7 +45,7 @@ export function reviewNodesToRender(
         y: 0,
         z: 0,
         color,
-        size: 1,
+        size: NODE_RENDER_SCALE,
         data: {
           type: node.type,
           properties: node.properties,
@@ -66,7 +67,7 @@ export function existingNodesToRender(
     y: node.y ?? 0,
     z: 0,
     color: EXISTING_NODE_COLOR,
-    size: node.size,
+    size: node.size * NODE_RENDER_SCALE,
     data: {
       type: node.type,
       isReviewNode: false,
@@ -117,7 +118,7 @@ export function reviewNodesToOverlayRender(
         y: 0,
         z: 0,
         color,
-        size: 1,
+        size: NODE_RENDER_SCALE,
         data: {
           type: node.type,
           properties: node.properties,

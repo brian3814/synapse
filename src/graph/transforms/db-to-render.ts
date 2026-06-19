@@ -1,6 +1,6 @@
 import type { GraphNode, GraphEdge } from '../../shared/types';
 import type { RenderNode, RenderEdge } from '../renderer/types';
-import { FALLBACK_TYPE_COLOR } from '../../shared/constants';
+import { FALLBACK_TYPE_COLOR, NODE_RENDER_SCALE } from '../../shared/constants';
 
 /**
  * Picks a color for a node in the three-layer model:
@@ -28,7 +28,7 @@ export function graphNodesToRender(
     y: node.y ?? 0,
     z: 0,
     color: colorForNode(node, typeColorMap),
-    size: node.size,
+    size: node.size * NODE_RENDER_SCALE,
     data: {
       type: node.type,
       label: node.label,

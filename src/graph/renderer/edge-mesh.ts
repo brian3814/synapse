@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { RenderNode, RenderEdge, RenderTheme, ZoomLevel } from './types';
 
-const ARROW_RADIUS = 0.15;
-const ARROW_HEIGHT = 0.3;
+const ARROW_RADIUS = 0.375;
+const ARROW_HEIGHT = 0.75;
 const ARROW_SEGMENTS = 4;
 
 export class EdgeMesh {
@@ -370,6 +370,39 @@ export class EdgeMesh {
       this.lineColorAttr.setXYZ(idx * 2 + 1, r, g, b);
     }
     this.lineColorAttr.needsUpdate = true;
+
+    // Apply same selection state to arrow cones
+    if (this.arrowMesh.instanceColor) {
+      for (let ai = 0; ai < this.directedCount; ai++) {
+        const edgeIdx = this.directedEdgeIndices[ai];
+        const edge = edges[edgeIdx];
+        if (!edge) continue;
+
+        const isSelectedEdge = edgeId && edge.id === edgeId;
+        const isConnectedToNode = selectedNodeIds.has(edge.sourceId) || selectedNodeIds.has(edge.targetId);
+        const isPathEdge = pathEdgeIds.has(edge.id);
+
+        let c: THREE.Color;
+        let opacity: number;
+
+        if (isSelectedEdge || isConnectedToNode) {
+          c = activeColor;
+          opacity = 1.0;
+        } else if (isPathEdge) {
+          c = pathColor;
+          opacity = 1.0;
+        } else if (hasSelection || hasPath) {
+          c = edge.color ? this._color.set(edge.color) : defaultColor;
+          opacity = theme.edgeInactiveOpacity;
+        } else {
+          c = edge.color ? this._color.set(edge.color) : defaultColor;
+          opacity = 1.0;
+        }
+
+        this.arrowMesh.instanceColor.setXYZ(ai, c.r * opacity, c.g * opacity, c.b * opacity);
+      }
+      this.arrowMesh.instanceColor.needsUpdate = true;
+    }
   }
 
   setZoomLevel(level: ZoomLevel) {

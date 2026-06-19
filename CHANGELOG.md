@@ -2,6 +2,19 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Database migrations consolidated from 14 incremental files into a single merged schema DDL, applied atomically on fresh vaults
+- Node render size increased 2x; edge arrow cones increased 2.5x for better visibility
+
+### Fixed
+- Edge selection arrow highlighting: selecting an edge now correctly dims unrelated arrow cones along with their lines, instead of leaving all cones at full brightness
+- `addAlias` silently created duplicate aliases for the same entity; now uses `ON CONFLICT DO NOTHING` backed by a unique index on `(node_id, alias_lower)`
+- Missing index on `entity_aliases.node_id` caused full table scans when loading entity details
+- Missing index on `edges.type` caused full table scans when filtering by edge type
+- `entity_sources.resource_id` and `edge_sources.resource_id` lacked foreign key constraints, allowing orphan provenance rows when resources were deleted
+
 ## [0.6.0] - 2026-06-18
 
 ### Added
