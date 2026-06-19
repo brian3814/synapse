@@ -11,6 +11,7 @@ import { dirname } from 'path';
 import type { VaultContext } from '../vault/vault-context';
 import type { VaultEventBus } from '../vault/event-bus';
 import type { DbNode, DbEdge } from '../../src/shared/types';
+import type { SyncNotification } from '../../src/shared/entity-sync-types';
 import { deriveEntityPath } from './entity-slug';
 import {
   generateEntityMarkdown,
@@ -18,6 +19,7 @@ import {
 } from './entity-markdown';
 import type { EntityEdgeInfo, EntitySourceInfo } from './entity-markdown';
 import { computeFileHash } from '../vault/content-hash';
+import { SyncIssueStore } from './sync-issue-store';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -31,9 +33,11 @@ export class EntityFileService {
   private unsubscribers: (() => void)[] = [];
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private markAsAppWritten?: (relativePath: string) => void;
+  readonly syncIssueStore: SyncIssueStore;
 
   constructor(ctx: VaultContext) {
     this.ctx = ctx;
+    this.syncIssueStore = new SyncIssueStore(ctx.synapsePath);
   }
 
   // ── Public API ─────────────────────────────────────────────────────
@@ -103,6 +107,139 @@ export class EntityFileService {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
+  }
+
+  // ── IPC-facing methods ─────────────────────────────────────────────
+
+  generateAll(): { generated: number } {
+    const rows = this.ctx.db.prepare(
+      "SELECT id, identifier, name, type, label, summary, properties, x, y, color, size, source_url, vault_path, file_mtime, file_size, created_at, updated_at FROM nodes WHERE type = 'entity' AND vault_path IS NULL"
+    ).all() as DbNode[];
+
+    let generated = 0;
+    for (const node of rows) {
+      this.generateFileForNode(node);
+      generated++;
+    }
+    return { generated };
+  }
+
+  listSyncIssues(): SyncNotification[] {
+    return this.syncIssueStore.listIssues();
+  }
+
+  dismissSyncIssue(notificationId: string): void {
+    this.syncIssueStore.dismissIssue(notificationId);
+  }
+
+  resolveNotification(notificationId: string, action: string): void {
+    // Stub — full resolution logic implemented in Task 13
+    console.log(`[EntityFileService] resolveNotification: id=${notificationId} action=${action}`);
+  }
+
+  readEntityFile(nodeId: string): { path: string; content: string; contentHash: string } | null {
+    const row = this.ctx.db.prepare(
+      'SELECT vault_path FROM nodes WHERE id = ?'
+    ).get(nodeId) as { vault_path: string | null } | undefined;
+
+    const vaultPath = row?.vault_path;
+    if (!vaultPath) return null;
+
+    const absolutePath = this.ctx.resolve(vaultPath);
+    if (!existsSync(absolutePath)) return null;
+
+    const content = readFileSync(absolutePath, 'utf-8');
+    const contentHash = computeFileHash(absolutePath) ?? '';
+    return { path: vaultPath, content, contentHash };
+  }
+
+  appendEntityFile(
+    nodeId: string,
+    text: string,
+    expectedHash?: string,
+  ): { path: string; contentHash: string } {
+    const row = this.ctx.db.prepare(
+      'SELECT vault_path FROM nodes WHERE id = ?'
+    ).get(nodeId) as { vault_path: string | null } | undefined;
+
+    const vaultPath = row?.vault_path;
+    if (!vaultPath) {
+      throw new Error(`Node ${nodeId} has no vault_path — generate the entity file first`);
+    }
+
+    const absolutePath = this.ctx.resolve(vaultPath);
+    if (!existsSync(absolutePath)) {
+      throw new Error(`Entity file not found on disk: ${vaultPath}`);
+    }
+
+    if (expectedHash !== undefined) {
+      const currentHash = computeFileHash(absolutePath);
+      if (currentHash !== expectedHash) {
+        throw new Error(`Hash mismatch for ${vaultPath}: expected ${expectedHash}, got ${currentHash}`);
+      }
+    }
+
+    const existing = readFileSync(absolutePath, 'utf-8');
+    const newContent = existing.trimEnd() + '\n\n' + text.trimStart();
+
+    this.markAsAppWritten?.(vaultPath);
+    writeFileSync(absolutePath, newContent, 'utf-8');
+
+    const stat = statSync(absolutePath);
+    const newHash = computeFileHash(absolutePath) ?? '';
+
+    this.ctx.db.prepare(
+      'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+    ).run(Math.floor(stat.mtimeMs), stat.size, newHash, nodeId);
+
+    return { path: vaultPath, contentHash: newHash };
+  }
+
+  patchEntityFile(
+    nodeId: string,
+    patch: { old_text: string; new_text: string },
+    expectedHash?: string,
+  ): { path: string; contentHash: string } {
+    const row = this.ctx.db.prepare(
+      'SELECT vault_path FROM nodes WHERE id = ?'
+    ).get(nodeId) as { vault_path: string | null } | undefined;
+
+    const vaultPath = row?.vault_path;
+    if (!vaultPath) {
+      throw new Error(`Node ${nodeId} has no vault_path — generate the entity file first`);
+    }
+
+    const absolutePath = this.ctx.resolve(vaultPath);
+    if (!existsSync(absolutePath)) {
+      throw new Error(`Entity file not found on disk: ${vaultPath}`);
+    }
+
+    if (expectedHash !== undefined) {
+      const currentHash = computeFileHash(absolutePath);
+      if (currentHash !== expectedHash) {
+        throw new Error(`Hash mismatch for ${vaultPath}: expected ${expectedHash}, got ${currentHash}`);
+      }
+    }
+
+    const content = readFileSync(absolutePath, 'utf-8');
+
+    if (!content.includes(patch.old_text)) {
+      throw new Error(`Patch old_text not found in ${vaultPath}`);
+    }
+
+    const newContent = content.replace(patch.old_text, patch.new_text);
+
+    this.markAsAppWritten?.(vaultPath);
+    writeFileSync(absolutePath, newContent, 'utf-8');
+
+    const stat = statSync(absolutePath);
+    const newHash = computeFileHash(absolutePath) ?? '';
+
+    this.ctx.db.prepare(
+      'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+    ).run(Math.floor(stat.mtimeMs), stat.size, newHash, nodeId);
+
+    return { path: vaultPath, contentHash: newHash };
   }
 
   generateFileForNode(node: DbNode): void {
