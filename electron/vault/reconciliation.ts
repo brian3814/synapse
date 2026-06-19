@@ -159,6 +159,9 @@ export function reconcileVault(ctx: VaultContext): ReconciliationResult {
     if (file.relativePath.startsWith('notes/') && file.relativePath.endsWith('.md')) {
       createNoteFromFile(ctx, file);
       result.newNotes++;
+    } else if (file.relativePath.startsWith('entities/') && file.relativePath.endsWith('.md')) {
+      handleNewEntityFile(ctx, file);
+      // Don't count as newFiles — entity handling is separate
     } else {
       ctx.eventBus.emit({ type: 'file:added', relativePath: file.relativePath });
       result.newFiles++;
@@ -263,6 +266,35 @@ function updateNoteSearchIndex(ctx: VaultContext, file: ClassifiedFile): void {
     ).run(row.id, row.name, plainText);
   } catch {
     // File read failed
+  }
+}
+
+function handleNewEntityFile(ctx: VaultContext, file: ClassifiedFile): void {
+  // Reconciliation only handles ID-based re-binding.
+  // All other entity file logic (title mismatches, unknown IDs, new files without frontmatter,
+  // link drift) is owned by EntityFileService.reconcileEntityFiles() which runs after the
+  // service is registered. Do NOT emit file:added here — handlers don't exist yet.
+  const content = readFileSync(file.absolutePath, 'utf-8');
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return; // No frontmatter — EntityFileService handles after registration
+
+  let fileId: string | null = null;
+  for (const line of match[1].split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx > 0 && line.slice(0, idx).trim() === 'id') {
+      fileId = line.slice(idx + 1).trim();
+      break;
+    }
+  }
+
+  if (fileId) {
+    const node = ctx.db.prepare('SELECT id FROM nodes WHERE id = ?').get(fileId) as { id: string } | undefined;
+    if (node) {
+      const hash = computeFileHash(file.absolutePath);
+      ctx.db.prepare(
+        'UPDATE nodes SET vault_path = ?, file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+      ).run(file.relativePath, file.mtime, file.size, hash, fileId);
+    }
   }
 }
 

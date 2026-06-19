@@ -36,6 +36,8 @@ export class ResourceDetectionHandler {
   }
 
   private handleFileAdded(relativePath: string): void {
+    if (relativePath.startsWith('entities/') && relativePath.endsWith('.md')) return;
+
     // Sandbox check
     const sandbox = this.getSandboxConfig();
     const ext = extname(relativePath).toLowerCase();
@@ -94,6 +96,8 @@ export class ResourceDetectionHandler {
   }
 
   private handleFileRemoved(relativePath: string): void {
+    if (relativePath.startsWith('entities/') && relativePath.endsWith('.md')) return;
+
     const existing = this.ctx.db.prepare(
       'SELECT id FROM nodes WHERE vault_path = ?'
     ).get(relativePath) as { id: string } | undefined;
@@ -107,6 +111,8 @@ export class ResourceDetectionHandler {
   }
 
   private handleFileChanged(relativePath: string): void {
+    if (relativePath.startsWith('entities/') && relativePath.endsWith('.md')) return;
+
     const existing = this.ctx.db.prepare(
       'SELECT * FROM nodes WHERE vault_path = ?'
     ).get(relativePath) as Record<string, unknown> | undefined;
