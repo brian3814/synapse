@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
 type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'notes' | 'intelligence' | 'readingList';
-export type LeftPanel = 'none' | 'explorer' | 'agents' | 'artifacts';
+export type LeftPanel = 'none' | 'explorer' | 'agents' | 'artifacts' | 'sync';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 

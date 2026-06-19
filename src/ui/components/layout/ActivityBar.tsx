@@ -1,4 +1,5 @@
 import { useUIStore, type LeftPanel } from '../../../graph/store/ui-store';
+import { useEntitySyncStore } from '../../../graph/store/entity-sync-store';
 
 interface ActivityBarItem {
   panel: LeftPanel;
@@ -32,10 +33,28 @@ const ArtifactsIcon = () => (
   </svg>
 );
 
+const SyncIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.5 2v6h-6M2.5 22v-6h6"/>
+    <path d="M2.5 11.5a10 10 0 0 1 18.8-4.3M21.5 12.5a10 10 0 0 1-18.8 4.2"/>
+  </svg>
+);
+
+function SyncBadge() {
+  const count = useEntitySyncStore((s) => s.notifications.filter((n) => !n.dismissed).length);
+  if (count === 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white px-0.5">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 const ITEMS: ActivityBarItem[] = [
   { panel: 'explorer', title: 'Explorer', icon: <FolderIcon /> },
   { panel: 'agents', title: 'Agents', icon: <AgentsIcon /> },
   { panel: 'artifacts' as const, title: 'Artifacts', icon: <ArtifactsIcon /> },
+  { panel: 'sync', title: 'Sync', icon: <SyncIcon /> },
 ];
 
 export function ActivityBar() {
@@ -48,7 +67,7 @@ export function ActivityBar() {
         <button
           key={item.panel}
           onClick={() => setLeftPanel(item.panel)}
-          className={`p-1.5 rounded transition-colors ${
+          className={`relative p-1.5 rounded transition-colors ${
             leftPanel === item.panel
               ? 'bg-indigo-600 text-white'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
@@ -56,6 +75,7 @@ export function ActivityBar() {
           title={leftPanel === item.panel ? `Close ${item.title}` : `Open ${item.title}`}
         >
           {item.icon}
+          {item.panel === 'sync' && <SyncBadge />}
         </button>
       ))}
     </div>

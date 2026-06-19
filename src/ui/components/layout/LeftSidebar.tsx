@@ -4,6 +4,7 @@ import { ActivityBar } from './ActivityBar';
 import { VaultDrawer } from './VaultDrawer';
 import { AgentsPanel } from '../panels/AgentsPanel';
 import { ArtifactPanel } from '../sidebar/ArtifactPanel';
+import { EntitySyncPanel } from '../entity-sync/EntitySyncPanel';
 
 interface LeftSidebarProps {
   vaultPath: string | null;
@@ -50,6 +51,7 @@ export function LeftSidebar({ vaultPath, onOpenFile }: LeftSidebarProps) {
             )}
             {leftPanel === 'agents' && <AgentsPanel />}
             {leftPanel === 'artifacts' && <ArtifactPanel />}
+            {leftPanel === 'sync' && <EntitySyncPanel />}
           </div>
           <div
             onPointerDown={onPointerDown}
