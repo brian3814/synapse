@@ -4,8 +4,20 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-23
+
+### Added
+- Entity files: graph entities automatically projected to markdown files in `entities/` directory with YAML frontmatter (id, type, aliases) and relationship/source sections
+- Bidirectional entity sync: edits to entity markdown files (title renames, new files, deletions) detected and reconciled back into the graph database
+- Wiki-link drift detection: `[[broken-link]]` references in entity files checked against graph; broken, dead, and missing links surfaced as sync notifications
+- External edit detection: title mismatches between entity file headings and DB names flagged for user resolution
+- Sync panel UI in activity bar with badge count and notification cards for each issue type (title mismatch, new file, unknown ID, broken/dead/missing links)
+- Notification action resolution: dismiss, accept rename, or reject from the sync panel
+- Entity file agent tools and RAG integration: chat agents can read entity file content for grounded responses
+
 ### Changed
 - Database migrations consolidated from 14 incremental files into a single merged schema DDL, applied atomically on fresh vaults
+- Vault reconciliation extended to handle `entities/` directory alongside existing `notes/` handling
 - Node render size increased 2x; edge arrow cones increased 2.5x for better visibility
 
 ### Fixed
