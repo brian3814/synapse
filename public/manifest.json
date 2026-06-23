@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Synapse",
+  "version": "0.1.0",
+  "description": "A knowledge graph extension with LLM-powered entity extraction",
+  "minimum_chrome_version": "124",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "offscreen",
+    "readingList",
+    "identity"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Synapse"
+  },
+  "side_panel": {
+    "default_path": "index.html?mode=sidePanel"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
