@@ -149,6 +149,7 @@ export interface PlatformEntityFiles {
   read(nodeId: string): Promise<{ path: string; content: string; contentHash: string | null } | null>;
   append(nodeId: string, text: string, expectedHash?: string): Promise<{ contentHash: string }>;
   patch(nodeId: string, patch: unknown, expectedHash?: string): Promise<{ contentHash: string }>;
+  write(nodeId: string, markdown: string, expectedHash?: string): Promise<{ contentHash: string }>;
 }
 
 export interface PlatformBrowser {

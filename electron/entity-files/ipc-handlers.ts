@@ -43,6 +43,12 @@ export function registerEntityFileIpc(getService: () => EntityFileService | null
     if (!service) throw new Error('EntityFileService not initialized');
     return service.patchEntityFile(nodeId, patch, expectedHash);
   });
+
+  ipcMain.handle('entity-files:write', async (_e, nodeId: string, markdown: string, expectedHash?: string) => {
+    const service = getService();
+    if (!service) throw new Error('EntityFileService not initialized');
+    return service.writeEntityFile(nodeId, markdown, expectedHash);
+  });
 }
 
 export function unregisterEntityFileIpc(): void {
@@ -53,4 +59,5 @@ export function unregisterEntityFileIpc(): void {
   ipcMain.removeHandler('entity-files:read');
   ipcMain.removeHandler('entity-files:append');
   ipcMain.removeHandler('entity-files:patch');
+  ipcMain.removeHandler('entity-files:write');
 }
