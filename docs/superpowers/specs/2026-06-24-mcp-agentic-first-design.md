@@ -4,12 +4,14 @@ Redesign the MCP layer so Synapse is a knowledge graph platform that any agent c
 
 ## Design Constraints
 
-1. **Shared core, two transports** — one tool/resource/prompt implementation, stdio + HTTP Streamable
-2. **Resources + Prompts** — graph entities, notes, files as browsable MCP resources; skill templates as MCP prompts
-3. **Dogfood** — built-in chat agent consumes the same MCP interface as external agents
-4. **Agent-as-MCP-client** — the built-in chat is one option, not privileged
-5. **Swappable composition** — clean layer boundaries so components can be replaced
-6. **10-tool surface** — consolidated from 30+ to stay within the 5–15 best-practice range
+1. **Single implementation, injected adapters** — one `DefaultKnowledgeService`, environment differences handled by adapter injection
+2. **Strict parity** — only expose tools that work fully in both Electron and standalone modes. No placeholders or stubs.
+3. **Domain commands, not repositories** — all mutations go through existing domain commands (`graphCommands`, `noteCommands`) to preserve side effects (FTS, file sync, provenance, cleanup)
+4. **Action-level authorization** — `{tool, action}` policy checks at both listing and execution time
+5. **Resources + Prompts** — graph entities, notes, files as browsable MCP resources; skill templates as MCP prompts (Phase 2+)
+6. **Dogfood** — built-in chat agent consumes the same MCP interface as external agents (Phase 3)
+7. **Agent-as-MCP-client** — the built-in chat is one option, not privileged
+8. **Swappable composition** — clean layer boundaries so components can be replaced
 
 ## 1. Layer Architecture
 
@@ -20,128 +22,213 @@ Redesign the MCP layer so Synapse is a knowledge graph platform that any agent c
 └──────────────┬───────────────────────────────────────┘
                │ MCP Protocol (stdio / HTTP Streamable)
 ┌──────────────┴───────────────────────────────────────┐
-│  MCP Server Layer                                     │
-│  10 Tools · Resources · Prompts · Subscriptions       │
-│  Shared implementation, two transport adapters         │
+│  MCP Server (shared — one registration)               │
+│  Validation → Authorization → Tool Handlers           │
+│  8 Tools (Phase 1) · Resources · Prompts (Phase 2+)  │
 └──────────────┬───────────────────────────────────────┘
-               │ KnowledgeService interface
+               │
 ┌──────────────┴───────────────────────────────────────┐
-│  Knowledge Core                                       │
-│  Graph DB · Notes · Files · Embeddings · Skills       │
-│  Two backends: Electron (IPC) / Standalone (SQLite)   │
+│  DefaultKnowledgeService (one implementation)         │
+│  Calls domain commands for all mutations              │
+│  Returns structured mutation effects                  │
+└──────────────┬───────────────────────────────────────┘
+               │ KnowledgeDeps (injected adapters)
+┌──────────────┴───────────────────────────────────────┐
+│  Adapters (swapped per environment)                   │
+│  ┌──────┐ ┌───────┐ ┌───────────┐ ┌──────────────┐  │
+│  │  DB  │ │ Notes │ │ Embeddings│ │   Events     │  │
+│  └──────┘ └───────┘ └───────────┘ └──────────────┘  │
+│  Electron: IPC    Electron: IPC   Electron: svc     │
+│  CLI: SQLite      CLI: fs         CLI: optional     │
 └──────────────────────────────────────────────────────┘
 ```
 
-**Three layers, clean boundaries:**
-
-1. **Knowledge Core** — data operations with no MCP awareness. Exposes a `KnowledgeService` interface. Two implementations: `ElectronKnowledgeService` (delegates to main process via IPC, has embeddings, file watcher, event bus) and `StandaloneKnowledgeService` (direct SQLite, optional embeddings).
-
-2. **MCP Server Layer** — adapts `KnowledgeService` to MCP protocol. Single server implementation shared by both transports. Registers tools, resources, prompts, and subscription handlers.
-
-3. **Agent Layer** — any MCP client. Not our code. The built-in chat agent is just another MCP client that connects in-process.
+**Key difference from prior version:** There is ONE `DefaultKnowledgeService` implementation, not two. Environment differences are handled by injecting different adapters for DB access, note I/O, embeddings, and event dispatch.
 
 **Two runtime modes:**
 
-| Mode | Transport | Backend | When |
-|------|-----------|---------|------|
-| **Desktop** | HTTP Streamable on `:19876/mcp` | `ElectronKnowledgeService` (IPC) | App running |
-| **Headless** | stdio | `StandaloneKnowledgeService` (SQLite) | CLI, no app |
+| Mode | Transport | Adapters | When |
+|------|-----------|----------|------|
+| **Desktop** | HTTP Streamable on `:19876/mcp` | IPC DataStore, PlatformNotes, embedding service, db:sync broadcast | App running |
+| **Headless** | stdio | direct-SQLite DataStore, filesystem notes, optional embeddings, HTTP notify | CLI, no app |
 
-## 2. KnowledgeService Interface
+## 2. KnowledgeDeps and KnowledgeService Interface
 
-The contract between the MCP server and the data layer. Both backends implement it identically.
+### 2.1 Dependency Injection
 
 ```typescript
-interface KnowledgeService {
-  // --- Search ---
-  search(params: { query: string; scope?: 'all' | 'entities' | 'notes' | 'semantic'; limit?: number }): Promise<SearchResult[]>;
+interface KnowledgeDeps {
+  db: DataStore;
+  notes: NoteAdapter;
+  vault: VaultAdapter;
+  embeddings?: EmbeddingAdapter;
+  events: EventAdapter;
+}
 
-  // --- Entities ---
-  getEntity(id: string): Promise<EntityDetail | null>;
-  getNeighbors(params: { entity_id: string; depth?: number; limit?: number }): Promise<NeighborResult>;
-  manageEntity(params: ManageEntityInput): Promise<EntityResult>;
-  mergeEntities(params: { primary_id: string; secondary_id: string }): Promise<MergeResult>;
+interface NoteAdapter {
+  read(nodeId: string): Promise<string | null>;
+  write(nodeId: string, content: string): Promise<void>;
+}
 
-  // --- Relationships ---
-  manageRelationship(params: ManageRelationshipInput): Promise<RelationshipResult>;
+interface VaultAdapter {
+  path: string;
+  synapsePath: string;
+  readFile(relativePath: string): Promise<string | null>;
+  listFiles(dir: string): Promise<string[]>;
+}
 
-  // --- Notes ---
-  manageNote(params: ManageNoteInput): Promise<NoteResult>;
+interface EmbeddingAdapter {
+  searchSimilar(query: string, topK?: number): Promise<SemanticSearchResult[]>;
+}
 
-  // --- Analysis ---
-  analyzeGraph(params: { analysis: AnalysisType; options?: Record<string, unknown> }): Promise<AnalysisResult>;
-
-  // --- Skills ---
-  listSkills(): Promise<SkillSummary[]>;
-  runSkill(params: { name: string; arguments?: Record<string, unknown> }): Promise<SkillResult>;
-
-  // --- Resources (data access) ---
-  listEntities(params?: { cursor?: string; limit?: number }): Promise<PaginatedList<EntitySummary>>;
-  listNotes(params?: { cursor?: string; limit?: number }): Promise<PaginatedList<NoteSummary>>;
-  listFiles(params?: { path?: string }): Promise<FileEntry[]>;
-  getGraphOverview(): Promise<GraphOverview>;
-  readNote(id: string): Promise<string>;
-
-  // --- Subscriptions ---
+interface EventAdapter {
+  emitGraphChanged(event: GraphChangeEvent): void;
   onGraphChanged(cb: (event: GraphChangeEvent) => void): () => void;
 }
 ```
 
-**Type definitions:**
+### 2.2 KnowledgeService Interface
+
+The contract between the MCP server layer and the business logic. ONE implementation (`DefaultKnowledgeService`) for both runtime modes.
 
 ```typescript
-type ManageEntityInput =
-  | { action: 'create'; name: string; type: string; label?: string; properties?: Record<string, unknown> }
-  | { action: 'update'; entity_id: string; name?: string; type?: string; label?: string; properties?: Record<string, unknown>; aliases?: string[]; tags?: string[] }
-  | { action: 'delete'; entity_ids: string[] };
+interface KnowledgeService {
+  // --- Search ---
+  search(params: {
+    query: string;
+    scope?: 'all' | 'entities' | 'notes' | 'semantic';
+    limit?: number;
+  }): Promise<SearchResult[]>;
 
-type ManageRelationshipInput =
-  | { action: 'create'; source_id: string; target_id: string; label: string; type?: string }
-  | { action: 'update'; relationship_id: string; label?: string; type?: string }
-  | { action: 'delete'; relationship_ids: string[] };
+  // --- Entities ---
+  getEntity(id: string): Promise<EntityDetail | null>;
+  createEntity(input: CreateEntityInput): Promise<MutationResult<EntityResult>>;
+  updateEntity(input: UpdateEntityInput): Promise<MutationResult<EntityResult>>;
+  deleteEntities(ids: string[]): Promise<MutationResult<{ deleted: number }>>;
+  mergeEntities(primary_id: string, secondary_id: string): Promise<MutationResult<MergeResult>>;
 
-type ManageNoteInput =
-  | { action: 'read'; note_id: string }
-  | { action: 'create'; title: string; content: string }
-  | { action: 'update'; note_id: string; title?: string; content?: string };
+  // --- Graph Traversal ---
+  getNeighbors(params: {
+    entity_id: string;
+    depth?: number;
+    limit?: number;
+  }): Promise<NeighborResult>;
 
-type AnalysisType = 'overview' | 'health' | 'clusters' | 'centrality' | 'orphans' | 'bridges' | 'paths' | 'connections' | 'gaps';
+  // --- Relationships ---
+  createRelationship(input: CreateRelationshipInput): Promise<MutationResult<RelationshipResult>>;
+  updateRelationship(input: UpdateRelationshipInput): Promise<MutationResult<RelationshipResult>>;
+  deleteRelationships(ids: string[]): Promise<MutationResult<{ deleted: number }>>;
+
+  // --- Notes ---
+  readNote(note_id: string): Promise<NoteResult>;
+  createNote(title: string, content: string): Promise<MutationResult<NoteResult>>;
+  updateNote(note_id: string, updates: { title?: string; content?: string }): Promise<MutationResult<NoteResult>>;
+
+  // --- Analysis ---
+  analyzeGraph(analysis: AnalysisType, options?: Record<string, unknown>): Promise<AnalysisResult>;
+
+  // --- Skills (Phase 2) ---
+  listSkills(): Promise<SkillSummary[]>;
+  runSkill(name: string, args?: Record<string, unknown>): Promise<SkillResult>;
+
+  // --- Events ---
+  onGraphChanged(cb: (event: GraphChangeEvent) => void): () => void;
+}
 ```
 
-**Two implementations:**
+### 2.3 Mutation Effects
 
-| | `ElectronKnowledgeService` | `StandaloneKnowledgeService` |
+All write operations return structured mutation effects so the caller (MCP server, embedding service, UI sync) knows exactly what changed:
+
+```typescript
+interface MutationResult<T> {
+  data: T;
+  effects: {
+    nodeIds: string[];
+    edgeIds: string[];
+  };
+}
+```
+
+The MCP server passes `effects.nodeIds` and `effects.edgeIds` to `onGraphMutated()` for embedding updates and renderer sync.
+
+### 2.4 Type Definitions
+
+```typescript
+// Entity "type" in the external MCP schema maps to "label" internally.
+// Synapse's structural type is always 'entity' for entities created via MCP.
+
+type CreateEntityInput = {
+  name: string;
+  label: string;          // External-facing. Maps to DbNode.label internally.
+  properties?: Record<string, unknown>;
+  aliases?: string[];
+  tags?: string[];
+};
+
+type UpdateEntityInput = {
+  entity_id: string;
+  name?: string;
+  label?: string;         // External-facing. Maps to DbNode.label internally.
+  properties?: Record<string, unknown>;
+  aliases?: string[];     // Replace semantics. Omit to leave unchanged.
+  tags?: string[];        // Replace semantics. Omit to leave unchanged.
+};
+
+type CreateRelationshipInput = {
+  source_id: string;
+  target_id: string;
+  label: string;
+  type?: string;
+};
+
+type UpdateRelationshipInput = {
+  relationship_id: string;
+  label?: string;
+  type?: string;
+};
+
+// Analyses available in Phase 1 (strict parity — fully implemented in both modes)
+type AnalysisType = 'overview' | 'health' | 'centrality' | 'orphans' | 'paths';
+// Deferred to Phase 2 (require complex algorithms or LLM): 'clusters' | 'bridges' | 'connections' | 'gaps'
+```
+
+### 2.5 Domain Command Delegation
+
+`DefaultKnowledgeService` calls existing domain commands for mutations — never repositories directly:
+
+| Service method | Delegates to | Why not direct repo |
 |---|---|---|
-| **DB access** | IPC to main process (`db:request`) | Direct `better-sqlite3` |
-| **Embeddings** | Via main process embedding service | Optional (ONNX/OpenAI if configured) |
-| **File access** | Via vault context + file watcher | Direct filesystem |
-| **Skills** | Reads `.synapse/skills/` via vault context | Reads `.synapse/skills/` directly |
-| **Subscriptions** | IPC `db:sync` events | Not supported (single-process) |
-| **Notifications** | Broadcasts to renderer windows | Calls `notifyApp()` HTTP POST |
+| `createEntity` | `graphCommands.createNode()` | Generates ID, sets defaults, emits events |
+| `deleteEntities` | `graphCommands.deleteNode()` | Cleans up edges, notes, provenance, FTS |
+| `createNote` | `noteCommands.saveNote()` | Writes .md file, updates FTS, creates wikilink edges |
+| `updateNote` | `noteCommands.saveNote()` | Same side effects |
+| `mergeEntities` | `graphCommands.mergeNodes()` (or equivalent) | Transfers edges, adds alias, cleans up |
 
-## 3. Tool Surface (10 Tools)
+For the standalone CLI, the same domain commands execute — they receive a `CommandContext` built from the standalone adapters (direct SQLite DataStore, filesystem notes).
 
-All tools use snake_case parameter naming. All return structured JSON with optional `resource_link` items for navigation.
+## 3. Tool Surface (8 Tools — Phase 1)
+
+Phase 1 exposes 8 tools with strict parity across both runtime modes. Skills (`list_skills`, `run_skill`) are deferred to Phase 2.
+
+All tools use snake_case. All write tools return structured mutation effects. Tool schemas use discriminated `oneOf` for action-based tools with per-action required fields.
 
 ### 3.1 `search`
-
-Unified entry point to the graph.
 
 ```json
 {
   "name": "search",
-  "description": "Search the knowledge graph for entities, notes, or source content. Returns matching items with relevance scores and resource links for deeper exploration.",
+  "description": "Search the knowledge graph for entities, notes, or source content. Returns matching items with relevance scores.",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "query": { "type": "string", "description": "Search query." },
+      "query": { "type": "string", "description": "Search query. Use empty string to list all items in scope." },
       "scope": {
         "type": "string",
         "enum": ["all", "entities", "notes", "semantic"],
-        "default": "all",
-        "description": "Search scope. 'all' searches entities + notes + sources. 'semantic' uses vector embeddings for conceptual similarity."
+        "description": "Search scope. 'all' searches entities + notes + sources. 'semantic' uses vector embeddings (requires embeddings enabled). Default: 'all'."
       },
-      "limit": { "type": "number", "default": 10, "description": "Max results." }
+      "limit": { "type": "number", "description": "Max results. Default: 10." }
     },
     "required": ["query"]
   },
@@ -149,16 +236,16 @@ Unified entry point to the graph.
 }
 ```
 
-Replaces: `search_knowledge`, `search_nodes`, `search_notes`, `search_sources`, `semantic_search`, `find_similar_entities`.
+**Authorization:** read capability required. No action variants.
+
+**Semantic scope:** If embeddings are not available (standalone without config), `scope: "semantic"` returns an error message — not an empty result.
 
 ### 3.2 `get_entity`
-
-Full entity detail in one call.
 
 ```json
 {
   "name": "get_entity",
-  "description": "Get complete details for an entity: properties, relationships, aliases, tags, and source references. Use the returned resource links to explore connected entities.",
+  "description": "Get complete details for an entity: properties, relationships (with neighbor names), aliases, tags, and source references.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -170,24 +257,22 @@ Full entity detail in one call.
 }
 ```
 
-Returns: name, type, label, properties, edges (with neighbor names), aliases, tags, source URLs. Includes `resource_link` items for each connected entity (`synapse://entities/{id}`).
+**Authorization:** read capability required.
 
-Replaces: `get_node_details`, `get_aliases`, `get_node_tags`, `get_edges_for_node`, `get_nodes_batch`.
+Returns full `EntityDetail` including neighbor names resolved via JOIN (not empty strings).
 
 ### 3.3 `get_neighbors`
-
-Graph traversal.
 
 ```json
 {
   "name": "get_neighbors",
-  "description": "Traverse the graph from a starting entity. Returns connected entities up to the specified depth with relationship labels.",
+  "description": "Traverse the graph from a starting entity. Returns directly connected entities with relationship labels.",
   "inputSchema": {
     "type": "object",
     "properties": {
       "entity_id": { "type": "string", "description": "Starting entity ID." },
-      "depth": { "type": "number", "default": 1, "description": "Traversal depth (max 3)." },
-      "limit": { "type": "number", "default": 50, "description": "Max nodes to return." }
+      "depth": { "type": "number", "description": "Traversal depth (1–3). Default: 1." },
+      "limit": { "type": "number", "description": "Max nodes to return. Default: 50." }
     },
     "required": ["entity_id"]
   },
@@ -195,72 +280,117 @@ Graph traversal.
 }
 ```
 
-Replaces: `get_neighbors`, `get_subgraph`, `get_edges_between`.
+**Authorization:** read capability required.
+
+**Depth:** Must be implemented correctly for depth > 1 using BFS. Each returned node includes its actual depth from root.
+
+**Validation:** depth clamped to [1, 3], limit clamped to [1, 200].
 
 ### 3.4 `manage_entity`
-
-All entity mutations.
 
 ```json
 {
   "name": "manage_entity",
-  "description": "Create, update, or delete entities in the knowledge graph. For updates, only specified fields are changed. Aliases and tags use replace semantics — send the full desired list, or omit to leave unchanged.",
+  "description": "Create, update, or delete entities. For create: label is the semantic type (person, concept, technology). For update: only specified fields change. Aliases and tags use replace semantics.",
   "inputSchema": {
-    "type": "object",
-    "properties": {
-      "action": { "type": "string", "enum": ["create", "update", "delete"] },
-      "entity_id": { "type": "string", "description": "Required for update/delete." },
-      "entity_ids": { "type": "array", "items": { "type": "string" }, "description": "For batch delete." },
-      "name": { "type": "string" },
-      "type": { "type": "string", "description": "Entity type (e.g. person, concept, technology)." },
-      "label": { "type": "string", "description": "Semantic label." },
-      "properties": { "type": "object", "description": "Key-value properties to set." },
-      "aliases": { "type": "array", "items": { "type": "string" }, "description": "Full replacement list of alternate names. Omit to leave unchanged." },
-      "tags": { "type": "array", "items": { "type": "string" }, "description": "Full replacement list of tags. Omit to leave unchanged." }
-    },
-    "required": ["action"]
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "create" },
+          "name": { "type": "string" },
+          "label": { "type": "string", "description": "Semantic type (e.g. person, concept, technology)." },
+          "properties": { "type": "object" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["action", "name", "label"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "update" },
+          "entity_id": { "type": "string" },
+          "name": { "type": "string" },
+          "label": { "type": "string" },
+          "properties": { "type": "object" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["action", "entity_id"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "delete" },
+          "entity_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        },
+        "required": ["action", "entity_ids"]
+      }
+    ]
   },
-  "annotations": { "readOnlyHint": false, "destructiveHint": true }
+  "annotations": { "destructiveHint": true }
 }
 ```
 
-Replaces: `create_node`, `update_node`, `delete_node`, `delete_nodes_batch`, `add_alias`, `tag_node`.
+**Authorization by action:**
+- `create` → write capability
+- `update` → write capability
+- `delete` → write capability + not blocked by `manage_entity:delete`
+
+**Domain model:** `label` in the external schema maps to `DbNode.label` internally. `DbNode.type` is always set to `'entity'` for MCP-created entities. The external schema does not expose `type` — agents work with entities, not structural node types.
 
 ### 3.5 `manage_relationship`
-
-All relationship mutations.
 
 ```json
 {
   "name": "manage_relationship",
   "description": "Create, update, or delete relationships between entities.",
   "inputSchema": {
-    "type": "object",
-    "properties": {
-      "action": { "type": "string", "enum": ["create", "update", "delete"] },
-      "relationship_id": { "type": "string", "description": "Required for update/delete." },
-      "relationship_ids": { "type": "array", "items": { "type": "string" }, "description": "For batch delete." },
-      "source_id": { "type": "string", "description": "Source entity ID (for create)." },
-      "target_id": { "type": "string", "description": "Target entity ID (for create)." },
-      "label": { "type": "string", "description": "Relationship label (e.g. works_at, related_to)." },
-      "type": { "type": "string", "description": "Relationship category." }
-    },
-    "required": ["action"]
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "create" },
+          "source_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "type": "string" }
+        },
+        "required": ["action", "source_id", "target_id", "label"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "update" },
+          "relationship_id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "type": "string" }
+        },
+        "required": ["action", "relationship_id"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "delete" },
+          "relationship_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        },
+        "required": ["action", "relationship_ids"]
+      }
+    ]
   },
-  "annotations": { "readOnlyHint": false, "destructiveHint": true }
+  "annotations": { "destructiveHint": true }
 }
 ```
 
-Replaces: `create_edge`, `update_edge`, `delete_edge`.
+**Authorization by action:** all actions require write capability.
 
 ### 3.6 `merge_entities`
-
-Deduplicate entities.
 
 ```json
 {
   "name": "merge_entities",
-  "description": "Merge two duplicate entities. Keeps the primary entity, transfers all relationships from the secondary, adds the secondary's name as an alias, then deletes the secondary.",
+  "description": "Merge two duplicate entities. Keeps the primary, transfers all relationships from the secondary, adds the secondary's name as an alias, then deletes the secondary. Runs in a transaction.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -269,53 +399,77 @@ Deduplicate entities.
     },
     "required": ["primary_id", "secondary_id"]
   },
-  "annotations": { "readOnlyHint": false, "destructiveHint": true }
+  "annotations": { "destructiveHint": true }
 }
 ```
 
-### 3.7 `manage_note`
+**Authorization:** write capability required.
 
-Note CRUD.
+**Atomicity:** Runs in a `BEGIN IMMEDIATE` transaction. On failure, all changes roll back.
+
+### 3.7 `manage_note`
 
 ```json
 {
   "name": "manage_note",
-  "description": "Read, create, or update markdown notes in the knowledge graph.",
+  "description": "Read, create, or update markdown notes.",
   "inputSchema": {
-    "type": "object",
-    "properties": {
-      "action": { "type": "string", "enum": ["read", "create", "update"] },
-      "note_id": { "type": "string", "description": "Required for read/update." },
-      "title": { "type": "string", "description": "Note title (for create/update)." },
-      "content": { "type": "string", "description": "Markdown content (for create/update)." }
-    },
-    "required": ["action"]
-  },
-  "annotations": { "readOnlyHint": false }
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "read" },
+          "note_id": { "type": "string" }
+        },
+        "required": ["action", "note_id"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "create" },
+          "title": { "type": "string" },
+          "content": { "type": "string" }
+        },
+        "required": ["action", "title", "content"]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": { "const": "update" },
+          "note_id": { "type": "string" },
+          "title": { "type": "string" },
+          "content": { "type": "string" }
+        },
+        "required": ["action", "note_id"]
+      }
+    ]
+  }
 }
 ```
 
-Replaces: `read_note`, `create_note`, `update_note`, `list_notes`, `search_notes`. Listing notes: use `search({ query: "", scope: "notes" })` which returns all notes when query is empty. Searching notes: use `search({ query: "...", scope: "notes" })`. Clients with resource support can also browse `synapse://notes`.
+**Authorization by action:**
+- `read` → read capability
+- `create`, `update` → write capability
+
+**Domain commands:** create/update delegate to `noteCommands.saveNote()` which handles markdown file generation, FTS indexing, and wikilink edge creation.
 
 ### 3.8 `analyze_graph`
-
-All intelligence operations behind one tool with a type parameter.
 
 ```json
 {
   "name": "analyze_graph",
-  "description": "Run graph intelligence analyses. Returns structured results based on the analysis type.",
+  "description": "Run graph intelligence analyses. Phase 1 supports: overview (counts + types), health (density, orphan rate), centrality (most-connected nodes), orphans (unconnected nodes), paths (shortest path between two entities).",
   "inputSchema": {
     "type": "object",
     "properties": {
       "analysis": {
         "type": "string",
-        "enum": ["overview", "health", "clusters", "centrality", "orphans", "bridges", "paths", "connections", "gaps"],
-        "description": "Type of analysis to run."
+        "enum": ["overview", "health", "centrality", "orphans", "paths"],
+        "description": "Type of analysis."
       },
       "options": {
         "type": "object",
-        "description": "Analysis-specific options. paths: { source_id, target_id, max_hops }. clusters: { min_size }. centrality: { limit, node_type }. connections: { limit, min_shared }."
+        "description": "Analysis-specific options. centrality: { limit, node_type }. orphans: { limit, node_type }. paths: { source_id, target_id, max_hops }."
       }
     },
     "required": ["analysis"]
@@ -324,53 +478,84 @@ All intelligence operations behind one tool with a type parameter.
 }
 ```
 
-Replaces: `get_graph_overview`, `get_graph_health`, `get_clusters`, `get_centrality_ranking`, `get_orphan_nodes`, `get_bridge_nodes`, `get_connection_suggestions`, `find_shortest_path`, `get_nodes_by_type`.
+**Authorization:** read capability required.
 
-### 3.9 `list_skills`
+**Strict parity:** Only `overview`, `health`, `centrality`, `orphans`, `paths` are exposed in Phase 1 — these are fully implementable with SQL in both modes. `clusters`, `bridges`, `connections`, `gaps` require complex algorithms or LLM access and are deferred to Phase 2.
 
-Skill discovery.
+**Validation:** `paths` requires `options.source_id` and `options.target_id`. Runtime validation returns a descriptive error if missing. All SQL uses parameterized queries (no string interpolation).
 
-```json
-{
-  "name": "list_skills",
-  "description": "List available knowledge workflow skills. Skills are reusable templates that guide multi-step graph operations.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {},
-    "required": []
-  },
-  "annotations": { "readOnlyHint": true }
-}
-```
+## 4. Authorization and Profiles
 
-Returns: `[{ name, description, type, arguments }]` for each `.synapse/skills/*.md` file.
-
-### 3.10 `run_skill`
-
-Invoke a skill — loads instructions or executes a workflow.
+### 4.1 Profile Schema
 
 ```json
 {
-  "name": "run_skill",
-  "description": "Invoke a knowledge workflow skill. For prompt-type skills, returns rendered instructions the agent should follow using available tools. For workflow-type skills, executes the steps server-side and returns the result.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "name": { "type": "string", "description": "Skill name." },
-      "arguments": { "type": "object", "description": "Skill arguments (key-value)." }
+  "profiles": {
+    "readonly": {
+      "capabilities": ["read"],
+      "blocked_tools": [],
+      "blocked_actions": []
     },
-    "required": ["name"]
+    "editor": {
+      "capabilities": ["read", "write"],
+      "blocked_tools": [],
+      "blocked_actions": ["manage_entity:delete"]
+    },
+    "full": {
+      "capabilities": ["read", "write"],
+      "blocked_tools": [],
+      "blocked_actions": []
+    }
+  },
+  "connections": {
+    "claude-code": "full",
+    "codex": "editor",
+    "default": "readonly"
   }
 }
 ```
 
-The verb `run` covers both behaviors: "run through these instructions" (prompt) and "run this workflow" (workflow).
+### 4.2 Action-Level Policy
 
-## 4. MCP Resources
+Each tool+action combination has a required capability:
+
+| Tool | Action | Required Capability |
+|------|--------|-------------------|
+| `search` | — | read |
+| `get_entity` | — | read |
+| `get_neighbors` | — | read |
+| `manage_entity` | create | write |
+| `manage_entity` | update | write |
+| `manage_entity` | delete | write |
+| `manage_relationship` | create | write |
+| `manage_relationship` | update | write |
+| `manage_relationship` | delete | write |
+| `merge_entities` | — | write |
+| `manage_note` | read | read |
+| `manage_note` | create | write |
+| `manage_note` | update | write |
+| `analyze_graph` | — | read |
+
+### 4.3 Policy Enforcement Points
+
+1. **Tool listing** (`tools/list`): Filter tool list by profile capabilities. For action-based tools, include the tool if the profile allows ANY action on it (e.g., `manage_note` is listed for readonly profiles because `read` action is allowed).
+
+2. **Tool execution** (`tools/call`): Before dispatching, check that the profile allows the specific `{tool, action}`. Also check `blocked_tools` and `blocked_actions`.
+
+3. **Dynamic reload**: Config is re-read per request (stateless server model). Profile changes take effect on the next request.
+
+### 4.4 Profile Selection
+
+| Transport | Mechanism |
+|-----------|-----------|
+| HTTP | `X-Synapse-Profile` header. Falls back to `connections[client-name]` or `connections.default`. |
+| stdio (CLI) | `--profile <name>` flag. `--allow-write` maps to `full`. Default: `readonly`. |
+
+## 5. MCP Resources (Phase 2)
 
 Resources provide browsable, navigable access to graph data. Clients that support resources (Claude Desktop, Claude.ai) get a richer experience. Clients that don't (Claude Code, Codex) use tools instead — no capability gap.
 
-### 4.1 Resource URIs
+### 5.1 Resource URIs
 
 | URI Pattern | Content | Type |
 |---|---|---|
@@ -384,50 +569,19 @@ Resources provide browsable, navigable access to graph data. Clients that suppor
 | `synapse://files` | Vault file tree | Directory listing |
 | `synapse://files/{path}` | File content | Depends on file type |
 
-### 4.2 Resource Templates
+### 5.2 Resource Subscriptions
 
-URI templates enable agents to construct URIs for specific resources:
+Clients can subscribe to resources and receive notifications when they change. Backed by `MutationResult.effects` from tool execution.
 
-```json
-[
-  { "uriTemplate": "synapse://entities/{id}", "name": "Entity by ID", "description": "Full entity details" },
-  { "uriTemplate": "synapse://notes/{id}", "name": "Note by ID", "description": "Note markdown content" },
-  { "uriTemplate": "synapse://skills/{name}", "name": "Skill by name", "description": "Skill definition" },
-  { "uriTemplate": "synapse://files/{path}", "name": "File by path", "description": "Vault file content" }
-]
-```
+### 5.3 Resource Links in Tool Responses
 
-### 4.3 Resource Subscriptions
+Tool results include `resource_link` items so agents can navigate from search results to full entity details.
 
-Clients can subscribe to resources and receive notifications when they change:
+## 6. MCP Prompts / Skills (Phase 2)
 
-- `synapse://entities/{id}` — notifies when entity is updated, merged, or deleted
-- `synapse://graph/overview` — notifies when graph stats change (node/edge count)
+Skills stored in `.synapse/skills/*.md` are exposed through all three MCP channels for maximum client compatibility: MCP Prompts, MCP Resources, and MCP Tools (`list_skills`, `run_skill`).
 
-Backed by the existing `onGraphChanged` event system in `KnowledgeService`.
-
-### 4.4 Resource Links in Tool Responses
-
-Tool results include `resource_link` items so agents can navigate from search results to full entity details:
-
-```json
-{
-  "content": [
-    { "type": "text", "text": "{\"results\": [{\"id\": \"abc\", \"name\": \"Quantum Computing\", \"type\": \"concept\"}]}" }
-  ],
-  "_meta": {
-    "resource_links": [
-      { "uri": "synapse://entities/abc", "name": "Quantum Computing" }
-    ]
-  }
-}
-```
-
-## 5. MCP Prompts (Skills)
-
-Skills stored in `.synapse/skills/*.md` are exposed through all three MCP channels for maximum client compatibility.
-
-### 5.1 Skill File Format
+### 6.1 Skill File Format
 
 ```yaml
 # .synapse/skills/research-analyst.md
@@ -439,268 +593,108 @@ arguments:
   - name: topic
     description: What to research
     required: true
-  - name: depth
-    description: How many hops to explore from initial matches
-    default: 2
 ---
 
 You are researching {{topic}} in a personal knowledge graph.
-
 1. Search for entities related to {{topic}} using the search tool
-2. For the top 5 results, explore neighbors up to {{depth}} hops deep
-3. Look for patterns: what clusters together? what's isolated?
-4. Identify gaps — what related concepts are missing from the graph?
-5. Synthesize a report with entity citations
+2. For the top 5 results, explore neighbors
+3. Identify gaps — what related concepts are missing?
+4. Synthesize a report with entity citations
 ```
 
-```yaml
-# .synapse/skills/weekly-digest.md
----
-name: weekly-digest
-description: Generate a weekly knowledge graph activity digest
-type: workflow
-arguments:
-  - name: period_days
-    description: How many days to look back
-    default: 7
-steps:
-  - analyze_graph: { analysis: "overview" }
-  - search: { query: "", scope: "entities", sort: "recent", limit: 20 }
-  - analyze_graph: { analysis: "clusters", options: { min_size: 3 } }
----
-
-Summarize recent graph activity: new entities, new connections,
-emerging clusters. Format as a concise digest.
-```
-
-### 5.2 Skill Storage Locations
+### 6.2 Skill Storage
 
 | Location | Scope | Priority |
 |---|---|---|
-| `.synapse/skills/*.md` | Vault-scoped | Highest (overrides global) |
+| `.synapse/skills/*.md` | Vault-scoped | Highest |
 | `~/Library/Application Support/kg-extension/skills/*.md` | Global | Lower |
-| Built-in defaults (bundled with app) | System | Lowest |
+| Built-in defaults | System | Lowest |
 
-### 5.3 Multi-Channel Exposure
+## 7. Built-In Chat Agent Dogfooding (Phase 3)
 
-Each skill is exposed through all three MCP primitives simultaneously:
+The built-in chat agent is refactored to consume the same MCP interface as external agents via an in-process MCP client adapter.
 
-| Channel | Who sees it | How it works |
-|---|---|---|
-| **MCP Prompt** | Claude Desktop, Claude.ai, Goose | Appears as slash command (e.g. `/research-analyst`). `prompts/get` returns rendered instructions as `PromptMessage` array. |
-| **MCP Resource** | Clients with resource support | Browsable at `synapse://skills/{name}`. Agent reads the definition. |
-| **MCP Tool** | Every client (universal) | `list_skills()` discovers available skills. `run_skill({ name, arguments })` returns rendered instructions or executes workflow. |
+## 8. Shared Implementation Structure
 
-### 5.4 Prompt-Type vs Workflow-Type
-
-| | Prompt | Workflow |
-|---|---|---|
-| **Execution** | Agent-side. Instructions returned; agent follows them using available tools. | Server-side. Synapse runs the defined steps, returns the result. |
-| **MCP Prompt** | Returns instructions as messages | Returns description + triggers via `run_skill` tool |
-| **MCP Tool** | `run_skill` returns instructions | `run_skill` executes and returns result |
-| **Best for** | Flexible exploration where agent judgment matters | Deterministic multi-step operations, works with any agent |
-
-## 6. Built-In Chat Agent (Dogfooding)
-
-The built-in chat agent is refactored to be an MCP client of Synapse's own server. It uses the same tools, resources, and prompts as any external agent.
-
-### 6.1 In-Process MCP Client
-
-The built-in chat agent connects to `KnowledgeService` through an in-process MCP client adapter — not over the network. This gives identical semantics to external MCP clients without serialization/transport overhead.
-
-```
-Built-in Chat Agent
-  └─ InProcessMcpClient
-       └─ calls KnowledgeService methods directly
-            (same methods the MCP server adapter calls)
-```
-
-The `InProcessMcpClient` implements the same `tools/call`, `resources/read`, `prompts/get` interface that external clients see, but resolves them by calling `KnowledgeService` directly instead of going through JSON-RPC.
-
-### 6.2 What Changes for the Chat Agent
-
-| Before | After |
-|---|---|
-| Imports `CommandContext` directly | Uses `InProcessMcpClient` |
-| 30+ tool definitions in `chat-agent-tools.ts` | Discovers tools via `tools/list` from MCP server |
-| Direct DB queries for context | Reads resources (`synapse://entities/{id}`) |
-| Agent definitions are chat-only | Skills are MCP prompts, accessible by all agents |
-| Tool execution via `executeTool()` | Tool execution via `tools/call` |
-
-### 6.3 System Prompt Assembly
-
-The chat agent's system prompt is assembled from:
-
-1. Base instructions (how to use tools, citation rules) — shipped with the app
-2. Active skill/prompt instructions — loaded via `prompts/get` if a skill is active
-3. Memory context — loaded via resources (`synapse://memory/`) or a dedicated retrieval path
-4. Global user instructions — from app settings
-
-The agent's personality, tool strategy, and behavior are all configurable through skills — the same skills external agents can access.
-
-## 7. Shared Tool Definitions
-
-Single source of truth for all tool schemas, used by both the MCP server and the standalone CLI.
-
-### 7.1 File Structure
+### 8.1 File Structure
 
 ```
 src/
   mcp/
-    knowledge-service.ts       # KnowledgeService interface
+    types.ts                       # Shared types (SearchResult, EntityDetail, etc.)
+    knowledge-service.ts           # KnowledgeService interface + KnowledgeDeps
+    knowledge-service-impl.ts      # DefaultKnowledgeService (ONE implementation)
     tools/
-      definitions.ts           # All 10 tool schemas (single source of truth)
-      search.ts                # search tool implementation
-      entity.ts                # get_entity, manage_entity, merge_entities
-      relationship.ts          # manage_relationship
-      note.ts                  # manage_note
-      analysis.ts              # analyze_graph
-      skills.ts                # list_skills, run_skill
-    resources/
-      definitions.ts           # Resource URI schemas and templates
-      entities.ts              # Entity resource handlers
-      notes.ts                 # Note resource handlers
-      graph.ts                 # Graph overview resource
-      skills.ts                # Skill resource handlers
-      files.ts                 # File resource handlers
-    prompts/
-      loader.ts                # Reads .synapse/skills/*.md, parses frontmatter
-      handler.ts               # MCP prompts/list and prompts/get handlers
-    server.ts                  # MCP server setup (registers tools, resources, prompts)
-    transports/
-      http.ts                  # HTTP Streamable transport adapter
-      stdio.ts                 # stdio transport adapter
-    backends/
-      electron-backend.ts      # ElectronKnowledgeService (IPC)
-      standalone-backend.ts    # StandaloneKnowledgeService (SQLite)
-    client/
-      in-process-client.ts     # InProcessMcpClient for built-in chat
+      types.ts                     # McpToolDefinition, McpToolName, WRITE_TOOLS
+      definitions.ts               # 8 tool schemas (single source of truth)
+      handlers.ts                  # Tool dispatch: validate → authorize → service call
+      validation.ts                # Runtime input validation per tool+action
+    authorization.ts               # Profile loading, {tool,action} policy checks
+    server.ts                      # Shared MCP server factory (registers tools)
+    adapters/
+      electron.ts                  # Electron-specific adapters (IPC DataStore, etc.)
+      standalone.ts                # Standalone-specific adapters (SQLite, filesystem)
 ```
 
-### 7.2 Parameter Naming Convention
+### 8.2 Parameter Naming Convention
 
-All parameters use **snake_case** consistently across all tools, resources, and both transports. No more camelCase/snake_case split.
+All parameters use **snake_case** consistently. External `label` maps to internal `DbNode.label`. `DbNode.type` is always `'entity'` for MCP-created entities.
 
-### 7.3 Migration from Current Tools
+### 8.3 Standalone Multi-Vault
 
-The existing `chat-agent-tools.ts` and `chat-tool-executor.ts` are replaced by the new tool definitions and `KnowledgeService` implementations. The standalone CLI (`packages/synapse-mcp/`) is replaced by a thin wrapper that instantiates `StandaloneKnowledgeService` and starts a stdio MCP server using the shared server implementation.
+The standalone CLI supports multiple vaults. Vault management tools (`list_vaults`, `open_vault`, `close_vault`) remain CLI-specific, implemented as a thin layer that creates a per-vault `DefaultKnowledgeService`. Each vault's service receives its own adapters (its own SQLite connection, its own filesystem note adapter).
 
-## 8. Configuration
+## 9. Migration Path
 
-### 8.1 MCP Server Config
+Each phase is a self-contained implementation cycle. Phase 1 is the foundation.
 
-Location: `.synapse/mcp-server.json`
+### Phase 1: Shared Core (8 tools, strict parity)
 
-```json
-{
-  "enabled": true,
-  "profiles": {
-    "default": {
-      "capabilities": ["read"],
-      "blocked_tools": []
-    },
-    "editor": {
-      "capabilities": ["read", "write"],
-      "blocked_tools": ["manage_entity:delete"]
-    },
-    "full": {
-      "capabilities": ["read", "write"],
-      "blocked_tools": []
-    }
-  },
-  "http": {
-    "port": 19876,
-    "path": "/mcp"
-  }
-}
-```
+1. Define `KnowledgeDeps`, `KnowledgeService` interface, shared types
+2. Implement `DefaultKnowledgeService` using domain commands
+3. Create Electron adapters and standalone adapters
+4. Create shared tool definitions (8 tools, snake_case, discriminated `oneOf` schemas)
+5. Implement validation + authorization + tool handler dispatch
+6. Create shared MCP server factory
+7. Wire into Electron main process (replace `BuiltinToolProvider`)
+8. Wire into standalone CLI (replace inline tool definitions)
+9. Integration tests: full CRUD cycle, authorization, both adapter sets
 
-**Changes from current:**
-- Port and path are now respected (no longer hardcoded)
-- Profile selection via `X-Synapse-Profile` request header (HTTP transport only). Default profile used when header is absent. Stdio transport always uses the profile mapped from `--allow-write` flag (`full` if set, `default` otherwise).
-- Profiles can block specific tool actions (e.g. `manage_entity:delete`)
-
-### 8.2 MCP Client Config (Unchanged)
-
-The existing MCP client config for connecting to external servers remains the same. Global + vault-scoped config with secrets resolution.
-
-### 8.3 Standalone CLI Config
-
-```bash
-synapse-mcp [--vault <path>]... [--allow-write] [--init]
-```
-
-No changes to CLI flags. The `--allow-write` flag maps to the `full` profile internally.
-
-## 9. Subscriptions and Notifications
-
-### 9.1 Resource Change Notifications
-
-When the graph changes (via any tool call or external mutation), the MCP server sends `notifications/resources/updated` for affected resources:
-
-- Entity created/updated/deleted → `synapse://entities/{id}` updated
-- Edge created/deleted → affected entity resources updated
-- Note created/updated → `synapse://notes/{id}` updated
-- Any graph mutation → `synapse://graph/overview` updated
-
-### 9.2 Tool List Change Notifications
-
-When skills are added/removed/modified in `.synapse/skills/`, the server sends `notifications/tools/list_changed` and `notifications/prompts/list_changed` so connected agents re-discover the available surface.
-
-### 9.3 Desktop App UI Sync
-
-The existing `db:sync` mechanism continues to work for updating the renderer. The `onGraphChanged` callback in `KnowledgeService` fires for all mutations regardless of source (MCP tool, built-in chat, file watcher).
-
-## 10. Migration Path
-
-Each phase is a self-contained implementation cycle (plan → implement → ship). Do not start the next phase until the current one is complete and verified. Phase 1 is the foundation; phases 2–4 can be reordered based on priority.
-
-### Phase 1: Shared Core
-
-1. Define `KnowledgeService` interface
-2. Implement `ElectronKnowledgeService` wrapping existing `CommandContext` + `DataStore`
-3. Implement `StandaloneKnowledgeService` wrapping existing `StandaloneGraphProvider`
-4. Create shared tool definitions (10 tools, snake_case)
-5. Wire MCP server to use `KnowledgeService` instead of `BuiltinToolProvider`
-6. Wire standalone CLI to use shared server implementation
-7. Verify both transports work with same tool surface
-
-### Phase 2: Resources + Prompts
+### Phase 2: Resources + Prompts + Skills
 
 1. Implement resource handlers (entities, notes, graph overview, files)
 2. Implement resource templates and subscriptions
 3. Implement skill loader (`.synapse/skills/*.md` parser)
 4. Implement MCP prompts handler
-5. Add resource links to tool responses
-6. Ship default skills (research-analyst, weekly-digest, find-gaps)
+5. Add `list_skills` + `run_skill` tools (now 10 tools)
+6. Add resource links to tool responses
+7. Add remaining analyses (clusters, bridges, connections, gaps)
+8. Ship default skills
 
 ### Phase 3: Dogfood Chat Agent
 
 1. Implement `InProcessMcpClient`
-2. Refactor chat agent to use `InProcessMcpClient` instead of `CommandContext`
-3. Migrate agent definitions to skills format
-4. Update system prompt assembly to use MCP prompts
-5. Remove legacy `chat-agent-tools.ts` and `chat-tool-executor.ts`
+2. Refactor chat agent to use MCP interface
+3. Migrate agent definitions to skills
+4. Remove legacy tool executor
 
 ### Phase 4: Polish
 
-1. Config hot-reload (watch `.synapse/mcp-server.json` and skills directory)
-2. Profile selection mechanism for HTTP transport
-3. MCPB bundle for standalone CLI distribution
-4. MCP Apps exploration (graph visualization widgets)
+1. Config hot-reload (file watch on `.synapse/mcp-server.json` and skills)
+2. MCPB bundle for standalone CLI distribution
+3. MCP Apps exploration (graph visualization widgets)
+4. Settings UI for profile management
 
-## 11. Client Compatibility Matrix
-
-What each client experiences with the redesigned MCP server:
+## 10. Client Compatibility Matrix
 
 | Feature | Claude Desktop | Claude Code | Codex | Cursor |
 |---|---|---|---|---|
-| 10 tools | Yes | Yes | Yes | Yes |
-| Resources (browse graph) | Yes | No | No | No |
-| Prompts (skills as slash commands) | Yes | No | No | No |
-| Skills via tools (`list_skills`/`run_skill`) | Yes | Yes | Yes | Yes |
-| Resource links in tool results | Yes (navigable) | Ignored | Ignored | Ignored |
-| Subscriptions | Yes | No | No | No |
+| 8 tools (Phase 1) | Yes | Yes | Yes | Yes |
+| Resources (Phase 2) | Yes | No | No | No |
+| Prompts (Phase 2) | Yes | No | No | No |
+| Skills via tools (Phase 2) | Yes | Yes | Yes | Yes |
+| Resource links | Yes (navigable) | Ignored | Ignored | Ignored |
+| Subscriptions (Phase 2) | Yes | No | No | No |
 | Full capability | Yes | Yes (via tools) | Yes (via tools) | Yes (via tools) |
 
-No client loses functionality. Claude Desktop gets the richest experience. All clients can discover and use skills through tools.
+No client loses functionality. Claude Desktop gets the richest experience. All clients can discover and use skills through tools (Phase 2).
