@@ -124,7 +124,7 @@ export function NodeDetailPanel() {
     setFileExpanded(false);
 
     const loadContent = node.type === 'entity'
-      ? entityFiles.read(node.id).then((result) => {
+      ? entityFiles.read(node.id).then((result: { path: string; content: string; contentHash: string | null } | null) => {
           if (cancelled) return;
           if (result) {
             const parsed = parseMarkdown(result.content);
