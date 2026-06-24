@@ -20,13 +20,6 @@ function formatValue(value: unknown, type: PropType): string {
   return String(value);
 }
 
-function parseValue(raw: string, type: PropType): unknown {
-  if (type === 'string') return raw;
-  if (type === 'number') return Number(raw);
-  if (type === 'boolean') return raw === 'true';
-  return JSON.parse(raw);
-}
-
 function deepEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -245,6 +238,7 @@ function PropertyRow({
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const keyInputRef = useRef<HTMLInputElement>(null);
   const [keyDraft, setKeyDraft] = useState(propKey);
+  const [localJsonText, setLocalJsonText] = useState(() => formatValue(value, type));
 
   useEffect(() => {
     if (isEditing && inputRef.current) inputRef.current.focus();
@@ -257,6 +251,10 @@ function PropertyRow({
   useEffect(() => {
     setKeyDraft(propKey);
   }, [propKey]);
+
+  useEffect(() => {
+    setLocalJsonText(formatValue(value, type));
+  }, [value, propKey]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && type !== 'json') {
@@ -308,8 +306,9 @@ function PropertyRow({
             <div>
               <textarea
                 ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-                defaultValue={formatValue(value, type)}
+                value={localJsonText}
                 onChange={(e) => {
+                  setLocalJsonText(e.target.value);
                   try {
                     const parsed = JSON.parse(e.target.value);
                     onChange(parsed);
