@@ -49,7 +49,7 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
     }
 
     if (isEntity) {
-      entityFiles.read(nodeId).then((result) => {
+      entityFiles.read(nodeId).then((result: { path: string; content: string; contentHash: string | null } | null) => {
         if (result) {
           const parsed = parseMarkdown(result.content);
           if (parsed.title) {
