@@ -1,4 +1,3 @@
-import React from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 import { useLLMExtraction } from '../../hooks/useLLMExtraction';
@@ -20,20 +19,11 @@ export function LLMPanel({ onClose }: { onClose?: () => void }) {
   const error = useLLMStore((s) => s.error);
   const showPrivacyModal = useLLMStore((s) => s.showPrivacyModal);
   const pendingAction = useLLMStore((s) => s.pendingAction);
-  const pendingCapture = useLLMStore((s) => s.pendingCapture);
   const resetLLM = useLLMStore((s) => s.reset);
   const resetReview = useExtractionReviewStore((s) => s.reset);
   const extractionMode = useLLMStore((s) => s.extractionMode);
   const reset = () => { resetLLM(); resetReview(); };
   const { startExtraction, startQuickExtraction, startAgentExtraction } = useLLMExtraction();
-
-  React.useEffect(() => {
-    if (pendingCapture && status === 'idle') {
-      const { url, content } = pendingCapture;
-      useLLMStore.getState().setPendingCapture(null);
-      startExtraction(content, url);
-    }
-  }, [pendingCapture, status, startExtraction]);
 
   const isIdle = status === 'idle' || status === 'error';
 
