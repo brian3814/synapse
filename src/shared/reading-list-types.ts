@@ -146,6 +146,7 @@ export interface ReadingListResource {
   similarityMatches?: SimilarityMatch[];
   targetVaultPath?: string;
   targetVaultName?: string;
+  prefetchedContent?: string;
 }
 
 // ---------------------------------------------------------------------------

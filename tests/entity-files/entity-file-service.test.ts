@@ -524,4 +524,57 @@ describe('EntityFileService', () => {
       expect(existsSync(env.ctx.resolve(row.vault_path))).toBe(true);
     });
   });
+
+  describe('writeEntityFile', () => {
+    it('overwrites entity file content and updates DB metadata', async () => {
+      const node = makeNode({ name: 'Test Entity' });
+      insertNode(env.db, node);
+      env.eventBus.emit({ type: 'node:created', node });
+
+      // Verify file was generated
+      const row = env.db.prepare('SELECT vault_path FROM nodes WHERE id = ?').get(node.id) as any;
+
+      await vi.waitFor(() => {
+        const r = env.db.prepare('SELECT vault_path FROM nodes WHERE id = ?').get(node.id) as any;
+        expect(r.vault_path).toBeTruthy();
+      }, { timeout: 2000 });
+
+      const updatedRow = env.db.prepare('SELECT vault_path FROM nodes WHERE id = ?').get(node.id) as any;
+      expect(updatedRow.vault_path).toBeTruthy();
+
+      const newContent = '---\nid: ' + node.id + '\ntitle: Test Entity\n---\n\n# Test Entity\n\nRewritten content.\n';
+      const result = service.writeEntityFile(node.id, newContent);
+
+      expect(result.contentHash).toBeTruthy();
+      const onDisk = readFileSync(join(env.vaultPath, updatedRow.vault_path), 'utf-8');
+      expect(onDisk).toBe(newContent);
+
+      // DB metadata updated
+      const dbRow = env.db.prepare('SELECT file_mtime, file_size, content_hash FROM nodes WHERE id = ?').get(node.id) as any;
+      expect(dbRow.file_mtime).toBeGreaterThan(0);
+      expect(dbRow.file_size).toBe(Buffer.byteLength(newContent));
+      expect(dbRow.content_hash).toBe(result.contentHash);
+    });
+
+    it('throws when node has no vault_path', () => {
+      const node = makeNode({ name: 'No File' });
+      insertNode(env.db, node);
+      // Don't emit node:created — no file generated, vault_path is null
+
+      expect(() => service.writeEntityFile(node.id, 'content')).toThrow('no vault_path');
+    });
+
+    it('rejects on hash mismatch when expectedHash provided', async () => {
+      const node = makeNode({ name: 'Hash Check' });
+      insertNode(env.db, node);
+      env.eventBus.emit({ type: 'node:created', node });
+
+      await vi.waitFor(() => {
+        const r = env.db.prepare('SELECT vault_path FROM nodes WHERE id = ?').get(node.id) as any;
+        expect(r.vault_path).toBeTruthy();
+      }, { timeout: 2000 });
+
+      expect(() => service.writeEntityFile(node.id, 'new content', 'wrong-hash')).toThrow('Hash mismatch');
+    });
+  });
 });

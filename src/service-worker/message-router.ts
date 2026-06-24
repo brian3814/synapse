@@ -90,10 +90,19 @@ async function handleMessageAsync(
   sender: chrome.runtime.MessageSender
 ): Promise<unknown> {
   switch (message.type) {
-    case 'PAGE_CONTENT':
+    case 'PAGE_CONTENT': {
+      const pc = message.payload as { title: string; text: string; url: string };
+      await chrome.storage.session.set({
+        pendingExtraction: { ...pc, timestamp: Date.now() },
+      });
+      chrome.runtime.sendMessage({
+        type: 'COMPANION_PAGE_CAPTURED',
+        payload: { title: pc.title, url: pc.url, content: pc.text },
+      }).catch(() => {});
+      return { success: true };
+    }
+
     case 'SELECTION': {
-      // Forward content from content script to the side panel/tab
-      // Store in session storage for pickup
       await chrome.storage.session.set({
         pendingExtraction: {
           ...message.payload,

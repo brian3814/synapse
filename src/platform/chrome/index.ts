@@ -36,6 +36,7 @@ export const entityFiles = {
   async read() { return null; },
   async append() { throw new Error('Entity files are only available in Electron'); },
   async patch() { throw new Error('Entity files are only available in Electron'); },
+  async write() { return { contentHash: '' }; },
 } as any;
 
 export async function initPlatform(): Promise<void> {

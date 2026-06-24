@@ -35,6 +35,7 @@ export const entityFiles: import('../types').PlatformEntityFiles = {
   async read(nodeId) { return window.electronIPC.invoke('entity-files:read', nodeId) as Promise<any>; },
   async append(nodeId, text, expectedHash?) { return window.electronIPC.invoke('entity-files:append', nodeId, text, expectedHash) as Promise<{ contentHash: string }>; },
   async patch(nodeId, patch, expectedHash?) { return window.electronIPC.invoke('entity-files:patch', nodeId, patch, expectedHash) as Promise<{ contentHash: string }>; },
+  async write(nodeId: string, markdown: string, expectedHash?: string) { return window.electronIPC.invoke('entity-files:write', nodeId, markdown, expectedHash) as Promise<{ contentHash: string }>; },
 };
 
 export async function initPlatform(): Promise<void> {

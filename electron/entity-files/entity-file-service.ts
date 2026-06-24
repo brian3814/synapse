@@ -506,6 +506,42 @@ export class EntityFileService {
     return { path: vaultPath, contentHash: newHash };
   }
 
+  writeEntityFile(
+    nodeId: string,
+    markdown: string,
+    expectedHash?: string,
+  ): { contentHash: string } {
+    const row = this.ctx.db.prepare(
+      'SELECT vault_path FROM nodes WHERE id = ?'
+    ).get(nodeId) as { vault_path: string | null } | undefined;
+
+    const vaultPath = row?.vault_path;
+    if (!vaultPath) {
+      throw new Error(`Node ${nodeId} has no vault_path — generate the entity file first`);
+    }
+
+    const absolutePath = this.ctx.resolve(vaultPath);
+
+    if (expectedHash !== undefined) {
+      const currentHash = computeFileHash(absolutePath);
+      if (currentHash !== expectedHash) {
+        throw new Error(`Hash mismatch for ${vaultPath}: expected ${expectedHash}, got ${currentHash}`);
+      }
+    }
+
+    this.markAsAppWritten?.(vaultPath);
+    writeFileSync(absolutePath, markdown, 'utf-8');
+
+    const stat = statSync(absolutePath);
+    const newHash = computeFileHash(absolutePath) ?? '';
+
+    this.ctx.db.prepare(
+      'UPDATE nodes SET file_mtime = ?, file_size = ?, content_hash = ? WHERE id = ?'
+    ).run(Math.floor(stat.mtimeMs), stat.size, newHash, nodeId);
+
+    return { contentHash: newHash };
+  }
+
   generateFileForNode(node: DbNode): void {
     // Check if vault_path is already set and file exists -- skip generation
     const row = this.ctx.db.prepare(
