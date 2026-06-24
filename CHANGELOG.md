@@ -4,6 +4,24 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-24
+
+### Added
+- Inline property editor: node properties displayed as editable key-value fields instead of raw JSON — click any value to edit in place (string, number, boolean, JSON), with key renaming, add/remove, and save/revert controls
+- Markdown content preview in node detail panel: entity files and note content rendered inline with collapsible preview, "Show more/less" toggle, and clickable wiki-links
+- "Open in Editor" button on entity and note previews opens the markdown content in a full editor tab
+- Entity file generation button: entities without a file show a "Generate" action in the detail panel
+- `entityFiles.write()` API: full-content overwrite endpoint for entity markdown files across the platform layer (service, IPC, Electron, Chrome stub)
+- NoteEditor entity file support: opening an entity node in the editor reads/writes via the entity files API with correct frontmatter format (`id` + `title`), skipping note-specific side effects
+
+### Changed
+- Property editing decoupled from the panel-level edit mode — properties have independent dirty tracking and save/revert
+- Companion page captures now route through the reading list with prefetched content instead of directly to the LLM extraction panel
+- Viewport re-queries on external DB mutations (MCP, companion CLI) via `db.onSync`
+
+### Removed
+- `pendingCapture` state from LLM store (replaced by reading list flow with prefetched content)
+
 ## [0.7.0] - 2026-06-23
 
 ### Added
