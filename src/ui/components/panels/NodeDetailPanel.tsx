@@ -5,6 +5,9 @@ import { PropertyEditor } from './PropertyEditor';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { tags } from '../../../db/client/db-client';
 import { MultiSelectPanel } from './MultiSelectPanel';
+import { entityFiles, notes } from '@platform';
+import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
+import { parseMarkdown } from '../../../filesystem/markdown-parser';
 
 export function NodeDetailPanel() {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
@@ -29,7 +32,6 @@ export function NodeDetailPanel() {
   const [name, setName] = useState('');
   const [type, setType] = useState('');
   const [label, setLabel] = useState<string | null>(null);
-  const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [nodeTags, setNodeTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const allTypes = useNodeTypeStore((s) => s.types);
@@ -99,7 +101,6 @@ export function NodeDetailPanel() {
       setName(node.name);
       setType(node.type);
       setLabel(node.label ?? null);
-      setProperties(node.properties);
       setEditing(false);
       setTagInput('');
 
@@ -107,6 +108,46 @@ export function NodeDetailPanel() {
       tags.getForNode(node.id).then(setNodeTags).catch(() => setNodeTags([]));
     }
   }, [node]);
+
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileExpanded, setFileExpanded] = useState(false);
+  const [entityFileGenerating, setEntityFileGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!node || (node.type !== 'entity' && node.type !== 'note')) {
+      setFileContent(null);
+      return;
+    }
+    let cancelled = false;
+    setFileLoading(true);
+    setFileExpanded(false);
+
+    const loadContent = node.type === 'entity'
+      ? entityFiles.read(node.id).then((result) => {
+          if (cancelled) return;
+          if (result) {
+            const parsed = parseMarkdown(result.content);
+            setFileContent(parsed.content);
+          } else {
+            setFileContent(null);
+          }
+        })
+      : notes.read(node.id).then((md) => {
+          if (cancelled) return;
+          if (md) {
+            const parsed = parseMarkdown(md);
+            setFileContent(parsed.content);
+          } else {
+            setFileContent(null);
+          }
+        });
+
+    loadContent
+      .catch(() => { if (!cancelled) setFileContent(null); })
+      .finally(() => { if (!cancelled) setFileLoading(false); });
+    return () => { cancelled = true; };
+  }, [node?.id, node?.type]);
 
   // For resource nodes: find linked notes to display in the panel
   // MUST be before early returns to satisfy React's rules of hooks.
@@ -175,7 +216,6 @@ export function NodeDetailPanel() {
       name,
       type,
       label: type === 'entity' ? (label ?? undefined) : undefined,
-      properties,
     });
     await tags.setForNode(node.id, nodeTags);
     setEditing(false);
@@ -186,6 +226,31 @@ export function NodeDetailPanel() {
       await deleteNode(node.id);
       setActivePanel('none');
     }
+  };
+
+  const handleSaveProperties = async (newProps: Record<string, unknown>) => {
+    await updateNode({ id: node.id, properties: newProps });
+  };
+
+  const handleGenerateEntityFile = async () => {
+    setEntityFileGenerating(true);
+    try {
+      await entityFiles.generateAll();
+      const result = await entityFiles.read(node.id);
+      if (result) {
+        const parsed = parseMarkdown(result.content);
+        setFileContent(parsed.content);
+      }
+    } finally {
+      setEntityFileGenerating(false);
+    }
+  };
+
+  const handleOpenInEditor = () => {
+    useUIStore.getState().openContentTab(
+      { kind: 'noteEditor', noteId: node.id },
+      node.name
+    );
   };
 
   // For resource nodes: find associated notes (via extracted_from edges or resourceId property)
@@ -292,23 +357,6 @@ export function NodeDetailPanel() {
         </div>
       </div>
 
-      {/* Quick action: open this note in the Notes panel editor */}
-      {node.type === 'note' && (
-        <button
-          onClick={() => handleOpenNote(node.id)}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-700/40 rounded text-xs font-medium text-sky-300"
-          title="Open this note in the Notes panel editor"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-          Open in Note Editor
-        </button>
-      )}
-
       {/* Metadata section */}
       <div className="space-y-3" style={{ paddingTop: 4 }}>
         {/* Type (structural layer) */}
@@ -405,14 +453,77 @@ export function NodeDetailPanel() {
       {/* Properties */}
       <div>
         <label className="text-xs font-medium text-zinc-400 block mb-1">Properties</label>
-        {editing ? (
-          <PropertyEditor value={properties} onChange={setProperties} />
-        ) : (
-          <pre className="text-xs text-zinc-400 bg-zinc-800 rounded p-2 overflow-x-auto">
-            {JSON.stringify(node.properties, null, 2)}
-          </pre>
-        )}
+        <PropertyEditor value={node.properties} onSave={handleSaveProperties} nodeId={node.id} />
       </div>
+
+      {/* Markdown Content Preview — entity files and notes */}
+      {(node.type === 'entity' || node.type === 'note') && (
+        <div>
+          <label className="text-xs font-medium text-zinc-400 flex items-center gap-1.5 mb-2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            {node.type === 'entity' ? 'Entity File' : 'Note Content'}
+          </label>
+
+          {fileLoading ? (
+            <div className="flex items-center gap-2 py-2">
+              <span className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-zinc-500">Loading...</span>
+            </div>
+          ) : fileContent === null ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-600 italic">
+                {node.type === 'entity' ? 'No entity file' : 'No content'}
+              </span>
+              {node.type === 'entity' && (
+                <button
+                  onClick={handleGenerateEntityFile}
+                  disabled={entityFileGenerating}
+                  className="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 disabled:opacity-50"
+                >
+                  {entityFileGenerating ? 'Generating...' : 'Generate'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className={`relative ${fileExpanded ? '' : 'max-h-[200px] overflow-hidden'}`}>
+                <div className="bg-zinc-800 rounded p-2">
+                  <NoteMarkdownPreview
+                    content={fileContent}
+                    onNodeClick={(nodeId) => handleNavigateToNode(nodeId)}
+                  />
+                </div>
+                {!fileExpanded && (
+                  <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-zinc-900 to-transparent rounded-b pointer-events-none" />
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  onClick={() => setFileExpanded(!fileExpanded)}
+                  className="text-xs text-zinc-500 hover:text-zinc-300"
+                >
+                  {fileExpanded ? 'Show less' : 'Show more'}
+                </button>
+                <button
+                  onClick={handleOpenInEditor}
+                  className="flex items-center gap-1.5 text-xs px-2 py-1 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-700/40 rounded text-sky-300 font-medium"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Open in Editor
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sources — derived via notes: entity → note → resource */}
       {(connectedResources.length > 0 || node.sourceUrl) && (
