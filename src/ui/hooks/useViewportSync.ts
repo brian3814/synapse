@@ -1,10 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useViewportStore } from '../../graph/store/viewport-store';
 import { spatial } from '../../db/client/db-client';
+import { db } from '@platform';
 import { clusterSummaryToRenderNodes, interClusterEdgesToRenderEdges } from '../../graph/transforms/cluster-to-render';
 import type { FrustumBounds, ZoomLevel, RenderNode, RenderEdge } from '../../graph/renderer/types';
 import type { GraphRenderer } from '../../graph/renderer/graph-renderer';
 import type { DbNodeSlim, DbEdgeSlim } from '../../shared/types';
+import type { SyncEvent } from '../../shared/sync-events';
 import { useTierStore } from '../../graph/store/tier-store';
 import {
   VIEWPORT_QUERY_DEBOUNCE_MS,
@@ -200,6 +202,23 @@ export function useViewportSync(
     if (!renderer) return;
     return useTierStore.subscribe((state, prev) => {
       if (state.tierIndex !== prev.tierIndex) {
+        const cc = renderer.getCameraController();
+        if (cc) {
+          const bounds = cc.getFrustumBounds();
+          const zoom = cc.getZoom();
+          queryViewport(bounds, zoom, store.getState().zoomLevel);
+        }
+      }
+    });
+  }, [renderer, queryViewport]);
+
+  // Re-query viewport on external DB mutations (MCP, companion CLI)
+  useEffect(() => {
+    if (!renderer) return;
+    return db.onSync((event: unknown) => {
+      const sync = event as SyncEvent;
+      if (sync.type === 'reset') {
+        clusterCacheRef.current = null;
         const cc = renderer.getCameraController();
         if (cc) {
           const bounds = cc.getFrustumBounds();
