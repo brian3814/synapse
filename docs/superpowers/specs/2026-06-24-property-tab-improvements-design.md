@@ -70,53 +70,57 @@ When adding a new property, the type selector determines the initial input type.
 
 ---
 
-## 2. Entity File Preview
+## 2. Markdown Content Preview
 
 **File:** `src/ui/components/panels/NodeDetailPanel.tsx`
 
+Both entity and note nodes have associated markdown content. The detail panel shows an inline rendered preview for both, with an "Open in Editor" button.
+
 ### Placement
 
-New section rendered below Properties and above Sources. Only shown when `node.type === 'entity'`.
+New section rendered below Properties and above Sources. Shown when `node.type === 'entity'` or `node.type === 'note'`.
 
 ### State
 
 ```ts
-const [entityFileContent, setEntityFileContent] = useState<string | null>(null);
-const [entityFileLoading, setEntityFileLoading] = useState(false);
-const [entityFileExpanded, setEntityFileExpanded] = useState(false);
+const [fileContent, setFileContent] = useState<string | null>(null);
+const [fileLoading, setFileLoading] = useState(false);
+const [fileExpanded, setFileExpanded] = useState(false);
 ```
 
 ### Loading
 
-On `selectedNodeId` change, if `node.type === 'entity'`:
-1. Set `entityFileLoading = true`
-2. Call `entityFiles.read(node.id)` (imported from `@platform`)
-3. On success: parse `result.content` through `parseMarkdown()` to strip frontmatter, store body in `entityFileContent`
-4. On null return (no file): set `entityFileContent = null`
-5. Set `entityFileLoading = false`
+On `selectedNodeId` change:
+- If `node.type === 'entity'`: call `entityFiles.read(node.id)`, parse `result.content` through `parseMarkdown()` to strip frontmatter
+- If `node.type === 'note'`: call `notes.read(node.id)` (from `@platform`), parse through `parseMarkdown()`
+- Otherwise: set `fileContent = null`, skip loading
 
 ### Rendering
 
 **Loading state:** Small inline spinner (consistent with existing app patterns).
 
-**No file exists (`entityFileContent === null`):**
+**Entity — no file exists (`fileContent === null` and `node.type === 'entity'`):**
 ```
 No entity file
 [Generate] button
 ```
-The Generate button calls `entityFiles.generateAll()` and shows a brief loading spinner. This regenerates files for all entities that don't have one yet — acceptable since generation is idempotent and skips existing files. A single-node generate endpoint is out of scope but could optimize this later.
+The Generate button calls `entityFiles.generateAll()` and shows a brief loading spinner. This regenerates files for all entities that don't have one yet — acceptable since generation is idempotent and skips existing files.
 
-**File exists:**
-- Section header: "Entity File" with document icon, styled as `text-xs font-medium text-zinc-400`
+**Note — no content (`fileContent === null` and `node.type === 'note'`):**
+Show "No content" in muted text. No generate button — notes are user-created.
+
+**Content exists:**
+- Section header: "Entity File" or "Note Content" depending on type, with document icon, styled as `text-xs font-medium text-zinc-400`
 - Rendered markdown preview using `NoteMarkdownPreview` component
 - Constrained to `max-height: 200px` with `overflow: hidden` and a bottom gradient fade (`bg-gradient-to-t from-zinc-900 to-transparent`)
-- "Show more" / "Show less" toggle button below the preview, controls `entityFileExpanded` state
+- "Show more" / "Show less" toggle button below the preview, controls `fileExpanded` state
 - When expanded, `max-height` constraint is removed
 - Wiki-links (`[[Entity Name]]`) are clickable via `onNodeClick` handler (navigates to entity in graph)
 
 **"Open in Editor" button:**
 - Styled consistently with the existing "Open in Note Editor" button (sky-600 theme)
 - Calls `openContentTab({ kind: 'noteEditor', noteId: node.id }, node.name)`
+- Replaces the existing standalone "Open in Note Editor" button for note nodes (lines 296-310), which is now redundant since the preview section includes the same button
 
 ---
 

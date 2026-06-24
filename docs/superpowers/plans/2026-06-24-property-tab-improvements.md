@@ -596,54 +596,66 @@ git commit -m "feat(entity-files): add write endpoint for full-content overwrite
 - Modify: `src/ui/components/panels/NodeDetailPanel.tsx`
 
 **Interfaces:**
-- Consumes: `PropertyEditor` from Task 1 (`{ value, onSave, nodeId }`), `entityFiles.read()` and `entityFiles.generateAll()` from `@platform`, `NoteMarkdownPreview` from `../shared/MarkdownRenderer`, `parseMarkdown` from `../../../filesystem/markdown-parser`
-- Produces: Updated panel with inline property editing and entity file preview section
+- Consumes: `PropertyEditor` from Task 1 (`{ value, onSave, nodeId }`), `entityFiles.read()` and `entityFiles.generateAll()` from `@platform`, `notes` from `@platform`, `NoteMarkdownPreview` from `../shared/MarkdownRenderer`, `parseMarkdown` from `../../../filesystem/markdown-parser`
+- Produces: Updated panel with inline property editing and markdown content preview for entity + note nodes
 
 - [ ] **Step 1: Update imports**
 
 At the top of `src/ui/components/panels/NodeDetailPanel.tsx`, add these imports:
 
 ```ts
-import { entityFiles } from '@platform';
+import { entityFiles, notes } from '@platform';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
 import { parseMarkdown } from '../../../filesystem/markdown-parser';
 ```
 
-- [ ] **Step 2: Add entity file state and loading effect**
+- [ ] **Step 2: Add content preview state and loading effect**
 
 After the existing `useEffect` that loads tags (around line 97-109), add:
 
 ```ts
-  const [entityFileContent, setEntityFileContent] = useState<string | null>(null);
-  const [entityFileLoading, setEntityFileLoading] = useState(false);
-  const [entityFileExpanded, setEntityFileExpanded] = useState(false);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileExpanded, setFileExpanded] = useState(false);
   const [entityFileGenerating, setEntityFileGenerating] = useState(false);
 
   useEffect(() => {
-    if (!node || node.type !== 'entity') {
-      setEntityFileContent(null);
+    if (!node || (node.type !== 'entity' && node.type !== 'note')) {
+      setFileContent(null);
       return;
     }
     let cancelled = false;
-    setEntityFileLoading(true);
-    entityFiles.read(node.id).then((result) => {
-      if (cancelled) return;
-      if (result) {
-        const parsed = parseMarkdown(result.content);
-        setEntityFileContent(parsed.content);
-      } else {
-        setEntityFileContent(null);
-      }
-    }).catch(() => {
-      if (!cancelled) setEntityFileContent(null);
-    }).finally(() => {
-      if (!cancelled) setEntityFileLoading(false);
-    });
+    setFileLoading(true);
+    setFileExpanded(false);
+
+    const loadContent = node.type === 'entity'
+      ? entityFiles.read(node.id).then((result) => {
+          if (cancelled) return;
+          if (result) {
+            const parsed = parseMarkdown(result.content);
+            setFileContent(parsed.content);
+          } else {
+            setFileContent(null);
+          }
+        })
+      : notes.read(node.id).then((md) => {
+          if (cancelled) return;
+          if (md) {
+            const parsed = parseMarkdown(md);
+            setFileContent(parsed.content);
+          } else {
+            setFileContent(null);
+          }
+        });
+
+    loadContent
+      .catch(() => { if (!cancelled) setFileContent(null); })
+      .finally(() => { if (!cancelled) setFileLoading(false); });
     return () => { cancelled = true; };
   }, [node?.id, node?.type]);
 ```
 
-- [ ] **Step 3: Add handleSaveProperties and handleGenerateEntityFile**
+- [ ] **Step 3: Add handler functions**
 
 After the existing `handleDelete` function, add:
 
@@ -656,18 +668,17 @@ After the existing `handleDelete` function, add:
     setEntityFileGenerating(true);
     try {
       await entityFiles.generateAll();
-      // Reload the entity file
       const result = await entityFiles.read(node.id);
       if (result) {
         const parsed = parseMarkdown(result.content);
-        setEntityFileContent(parsed.content);
+        setFileContent(parsed.content);
       }
     } finally {
       setEntityFileGenerating(false);
     }
   };
 
-  const handleOpenEntityFile = () => {
+  const handleOpenInEditor = () => {
     useUIStore.getState().openContentTab(
       { kind: 'noteEditor', noteId: node.id },
       node.name
@@ -704,60 +715,77 @@ Update `handleSave` to not include `properties`:
   };
 ```
 
-- [ ] **Step 5: Add Entity File Preview section**
+- [ ] **Step 5: Remove the standalone "Open in Note Editor" button**
+
+Remove the existing note-only button block (lines 295-310):
+
+```tsx
+      {/* Quick action: open this note in the Notes panel editor */}
+      {node.type === 'note' && (
+        <button ...>Open in Note Editor</button>
+      )}
+```
+
+This is replaced by the "Open in Editor" button inside the new content preview section.
+
+- [ ] **Step 6: Add Markdown Content Preview section**
 
 After the Properties `<div>` and before the Sources section, add:
 
 ```tsx
-      {/* Entity File Preview */}
-      {node.type === 'entity' && (
+      {/* Markdown Content Preview — entity files and notes */}
+      {(node.type === 'entity' || node.type === 'note') && (
         <div>
           <label className="text-xs font-medium text-zinc-400 flex items-center gap-1.5 mb-2">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            Entity File
+            {node.type === 'entity' ? 'Entity File' : 'Note Content'}
           </label>
 
-          {entityFileLoading ? (
+          {fileLoading ? (
             <div className="flex items-center gap-2 py-2">
               <span className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs text-zinc-500">Loading...</span>
             </div>
-          ) : entityFileContent === null ? (
+          ) : fileContent === null ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-600 italic">No entity file</span>
-              <button
-                onClick={handleGenerateEntityFile}
-                disabled={entityFileGenerating}
-                className="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 disabled:opacity-50"
-              >
-                {entityFileGenerating ? 'Generating...' : 'Generate'}
-              </button>
+              <span className="text-xs text-zinc-600 italic">
+                {node.type === 'entity' ? 'No entity file' : 'No content'}
+              </span>
+              {node.type === 'entity' && (
+                <button
+                  onClick={handleGenerateEntityFile}
+                  disabled={entityFileGenerating}
+                  className="text-xs px-2 py-0.5 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 disabled:opacity-50"
+                >
+                  {entityFileGenerating ? 'Generating...' : 'Generate'}
+                </button>
+              )}
             </div>
           ) : (
             <div>
-              <div className={`relative ${entityFileExpanded ? '' : 'max-h-[200px] overflow-hidden'}`}>
+              <div className={`relative ${fileExpanded ? '' : 'max-h-[200px] overflow-hidden'}`}>
                 <div className="bg-zinc-800 rounded p-2">
                   <NoteMarkdownPreview
-                    content={entityFileContent}
+                    content={fileContent}
                     onNodeClick={(nodeId) => handleNavigateToNode(nodeId)}
                   />
                 </div>
-                {!entityFileExpanded && (
+                {!fileExpanded && (
                   <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-zinc-900 to-transparent rounded-b pointer-events-none" />
                 )}
               </div>
               <div className="flex items-center gap-2 mt-1.5">
                 <button
-                  onClick={() => setEntityFileExpanded(!entityFileExpanded)}
+                  onClick={() => setFileExpanded(!fileExpanded)}
                   className="text-xs text-zinc-500 hover:text-zinc-300"
                 >
-                  {entityFileExpanded ? 'Show less' : 'Show more'}
+                  {fileExpanded ? 'Show less' : 'Show more'}
                 </button>
                 <button
-                  onClick={handleOpenEntityFile}
+                  onClick={handleOpenInEditor}
                   className="flex items-center gap-1.5 text-xs px-2 py-1 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-700/40 rounded text-sky-300 font-medium"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -775,17 +803,17 @@ After the Properties `<div>` and before the Sources section, add:
       )}
 ```
 
-- [ ] **Step 6: Build and verify**
+- [ ] **Step 7: Build and verify**
 
 Run: `npm run build:electron-renderer 2>&1 | tail -10`
 
 Expected: Build succeeds with no errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/ui/components/panels/NodeDetailPanel.tsx
-git commit -m "feat(properties): integrate PropertyEditor + entity file preview in NodeDetailPanel"
+git commit -m "feat(panel): integrate PropertyEditor + markdown content preview for entity and note nodes"
 ```
 
 ---
@@ -955,11 +983,14 @@ Test the following:
 8. Add a new property → verify it appears in the list
 9. Remove a property → verify it disappears
 10. Rename a property key → verify key changes, value preserved
-11. Select an entity with an entity file → verify markdown preview appears
+11. Select an entity with an entity file → verify markdown preview appears with "Entity File" header
 12. Click "Show more" / "Show less" → verify expansion works
 13. Click "Open in Editor" → verify entity file opens in a content tab
-14. Edit and save in the editor → verify changes persist
-15. Select a note node → verify properties still work, no entity file section
+14. Edit and save in the entity editor → verify changes persist
+15. Select a note node → verify markdown preview appears with "Note Content" header
+16. Click "Open in Editor" on a note → verify note opens in editor tab
+17. Select a note with no content → verify "No content" message (no Generate button)
+18. Select a resource node → verify no markdown preview section appears, properties still work
 
 - [ ] **Step 8: Commit**
 
