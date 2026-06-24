@@ -20,7 +20,7 @@ interface ReadingListStore {
   toggleSelectId: (id: string) => void;
   selectAllPending: () => void;
   clearSelection: () => void;
-  addResource: (source: ResourceSource, title: string) => Promise<void>;
+  addResource: (source: ResourceSource, title: string, opts?: { prefetchedContent?: string }) => Promise<void>;
   fetchTitles: (ids: string[]) => Promise<void>;
   startBatchExtraction: () => void;
   retryResource: (id: string) => Promise<void>;
@@ -145,7 +145,7 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
   clearSelection: () => set({ selectedIds: [] }),
 
-  addResource: async (source, title) => {
+  addResource: async (source, title, opts) => {
     const id = source.kind === 'url' ? source.url.trim() : generateFileId();
     if (!id) return;
     if (get().items[id]) return;
@@ -170,6 +170,7 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
       status: 'pending',
       targetVaultPath,
       targetVaultName,
+      prefetchedContent: opts?.prefetchedContent,
     };
     set((state) => ({ items: { ...state.items, [id]: resource } }));
     await storage.set({ readingListItems: get().items });
@@ -279,6 +280,17 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
         items: { ...state.items, [id]: { ...state.items[id], status: 'processing', error: undefined } },
       }));
 
+      // Clear prefetchedContent from persisted state now that extraction is starting
+      const prefetched = item.prefetchedContent;
+      if (prefetched) {
+        set((state) => ({
+          items: { ...state.items, [id]: { ...state.items[id], prefetchedContent: undefined } },
+        }));
+        const updated = { ...get().items };
+        delete updated[id]?.prefetchedContent;
+        await storage.set({ readingListItems: updated });
+      }
+
       try {
         if (item.source.kind !== 'url') {
           throw new Error('File-based extraction not yet supported in retryResource');
@@ -288,29 +300,48 @@ export const useReadingListStore = create<ReadingListStore>((set, get) => ({
 
         const domain = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url; } })();
 
-        // Stage: fetch
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch', statusText: `Fetching ${domain}...` });
-        const fetchStart = Date.now();
-        const { html, error: fetchError } = await ipc.invoke('fetch-url-content', url);
-        if (fetchError || !html) throw new Error(fetchError ?? 'Empty response');
-        const fetchKB = (html.length / 1024).toFixed(1);
-        extractionProgress.emit({
-          type: 'stage-complete', resourceId: id, stage: 'fetch',
-          meta: { bytes: html.length, ms: Date.now() - fetchStart },
-          statusText: `Retrieved ${fetchKB}KB from ${domain}`,
-        });
+        let textContent: string;
 
-        // Stage: parse
-        extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse', statusText: 'Parsing HTML content...' });
-        const parseStart = Date.now();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const textContent = doc.body?.textContent?.slice(0, 100_000) ?? '';
-        if (!textContent.trim()) throw new Error('Page content is empty');
-        extractionProgress.emit({
-          type: 'stage-complete', resourceId: id, stage: 'parse',
-          meta: { chars: textContent.length, ms: Date.now() - parseStart },
-          statusText: `Extracted ${textContent.length.toLocaleString()} characters`,
-        });
+        if (prefetched) {
+          // Companion already captured and parsed the page content
+          extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch', statusText: `Using captured content from ${domain}` });
+          extractionProgress.emit({
+            type: 'stage-complete', resourceId: id, stage: 'fetch',
+            meta: { bytes: prefetched.length, ms: 0 },
+            statusText: `Captured ${(prefetched.length / 1024).toFixed(1)}KB from ${domain}`,
+          });
+          extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse', statusText: 'Content pre-parsed by companion' });
+          extractionProgress.emit({
+            type: 'stage-complete', resourceId: id, stage: 'parse',
+            meta: { chars: prefetched.length, ms: 0 },
+            statusText: `${prefetched.length.toLocaleString()} characters (pre-captured)`,
+          });
+          textContent = prefetched.slice(0, 100_000);
+        } else {
+          // Stage: fetch
+          extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'fetch', statusText: `Fetching ${domain}...` });
+          const fetchStart = Date.now();
+          const { html, error: fetchError } = await ipc.invoke('fetch-url-content', url);
+          if (fetchError || !html) throw new Error(fetchError ?? 'Empty response');
+          const fetchKB = (html.length / 1024).toFixed(1);
+          extractionProgress.emit({
+            type: 'stage-complete', resourceId: id, stage: 'fetch',
+            meta: { bytes: html.length, ms: Date.now() - fetchStart },
+            statusText: `Retrieved ${fetchKB}KB from ${domain}`,
+          });
+
+          // Stage: parse
+          extractionProgress.emit({ type: 'stage-start', resourceId: id, stage: 'parse', statusText: 'Parsing HTML content...' });
+          const parseStart = Date.now();
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          textContent = doc.body?.textContent?.slice(0, 100_000) ?? '';
+          if (!textContent.trim()) throw new Error('Page content is empty');
+          extractionProgress.emit({
+            type: 'stage-complete', resourceId: id, stage: 'parse',
+            meta: { chars: textContent.length, ms: Date.now() - parseStart },
+            statusText: `Extracted ${textContent.length.toLocaleString()} characters`,
+          });
+        }
 
         const configResult = await storage.get('llmConfig') as Record<string, any>;
         const config = configResult.llmConfig;
