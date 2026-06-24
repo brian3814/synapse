@@ -5,7 +5,7 @@ import { noteSearch, noteAttachments } from '../../../db/client/db-client';
 import { parseMarkdown, generateNoteMarkdown } from '../../../filesystem/markdown-parser';
 import { getStoredFolder, writeMarkdownFile } from '../../../filesystem/folder-access';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
-import { notes } from '@platform';
+import { notes, entityFiles } from '@platform';
 import { stripMarkdownToPlainText } from '../../../notes/markdown-utils';
 import { SYNC_CHANNEL, type SyncEvent } from '../../../shared/sync-events';
 
@@ -35,7 +35,10 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
   const lastSavedTitleRef = useRef('');
   const lastSavedContentRef = useRef('');
 
-  // Load existing note
+  const nodeType = graphStore.nodes.find((n) => n.id === nodeId)?.type;
+  const isEntity = nodeType === 'entity';
+
+  // Load existing note or entity file
   useEffect(() => {
     if (!nodeId) return;
 
@@ -44,18 +47,33 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
       setTitle(node.name);
       lastSavedTitleRef.current = node.name;
     }
-    notes.read(nodeId).then((md) => {
-      if (md) {
-        const parsed = parseMarkdown(md);
-        setContent(parsed.content);
-        lastSavedContentRef.current = parsed.content;
-      }
-    }).catch(() => {});
-  }, [nodeId]);
+
+    if (isEntity) {
+      entityFiles.read(nodeId).then((result) => {
+        if (result) {
+          const parsed = parseMarkdown(result.content);
+          if (parsed.title) {
+            setTitle(parsed.title);
+            lastSavedTitleRef.current = parsed.title;
+          }
+          setContent(parsed.content);
+          lastSavedContentRef.current = parsed.content;
+        }
+      }).catch(() => {});
+    } else {
+      notes.read(nodeId).then((md) => {
+        if (md) {
+          const parsed = parseMarkdown(md);
+          setContent(parsed.content);
+          lastSavedContentRef.current = parsed.content;
+        }
+      }).catch(() => {});
+    }
+  }, [nodeId, isEntity]);
 
   // Cross-tab: reload content when another tab saves this note
   useEffect(() => {
-    if (!nodeId) return;
+    if (!nodeId || isEntity) return;
     const channel = new BroadcastChannel(SYNC_CHANNEL);
     channel.onmessage = (e: MessageEvent<SyncEvent>) => {
       if (e.data.type === 'note_content_updated' && e.data.nodeId === nodeId) {
@@ -68,11 +86,11 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
       }
     };
     return () => channel.close();
-  }, [nodeId]);
+  }, [nodeId, isEntity]);
 
   // External file change detection (e.g. edited in another app while Synapse is running)
   useEffect(() => {
-    if (!nodeId || !notes.onExternalChange) return;
+    if (!nodeId || !notes.onExternalChange || isEntity) return;
     return notes.onExternalChange((changedNodeId) => {
       if (changedNodeId !== nodeId) return;
       const isDirty = title !== lastSavedTitleRef.current || content !== lastSavedContentRef.current;
@@ -82,7 +100,7 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
         reloadFromDisk(nodeId);
       }
     });
-  }, [nodeId, title, content]);
+  }, [nodeId, title, content, isEntity]);
 
   const reloadFromDisk = useCallback((nid: string) => {
     notes.read(nid).then((md) => {
@@ -111,16 +129,23 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
       const markdown = generateNoteMarkdown(title, content, wikiLinks);
 
       if (nodeId) {
-        // 1. Write OPFS first (orphaned files are harmless)
-        await notes.write(nodeId, markdown);
-        // 2. Update search index
-        await noteSearch.upsert(nodeId, title, stripMarkdownToPlainText(content));
-        // 3. Update node metadata (no content in properties)
-        await graphStore.updateNode({
-          id: nodeId,
-          name: title,
-          properties: { wikiLinks },
-        });
+        if (isEntity) {
+          // Entity file: write via entityFiles API, skip note-specific side effects
+          await entityFiles.write(nodeId, markdown);
+          await graphStore.updateNode({ id: nodeId, name: title });
+        } else {
+          // Note: existing path
+          // 1. Write OPFS first (orphaned files are harmless)
+          await notes.write(nodeId, markdown);
+          // 2. Update search index
+          await noteSearch.upsert(nodeId, title, stripMarkdownToPlainText(content));
+          // 3. Update node metadata (no content in properties)
+          await graphStore.updateNode({
+            id: nodeId,
+            name: title,
+            properties: { wikiLinks },
+          });
+        }
       } else {
         // Create new note node (no content in properties)
         const node = await graphStore.createNode({
@@ -136,23 +161,25 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
         }
       }
 
-      // Broadcast content update to other tabs
-      const savedId = nodeId ?? graphStore.nodes.find((n) => n.name === title && n.type === 'note')?.id;
-      if (savedId) {
-        const channel = new BroadcastChannel(SYNC_CHANNEL);
-        channel.postMessage({ type: 'note_content_updated', nodeId: savedId } satisfies SyncEvent);
-        channel.close();
-      }
-
-      // Optionally sync to filesystem
-      try {
-        const folderHandle = await getStoredFolder();
-        if (folderHandle) {
-          const fileName = sanitizeFileName(title) + '.md';
-          await writeMarkdownFile(folderHandle, `notes/${fileName}`, markdown);
+      if (!isEntity) {
+        // Broadcast content update to other tabs
+        const savedId = nodeId ?? graphStore.nodes.find((n) => n.name === title && n.type === 'note')?.id;
+        if (savedId) {
+          const channel = new BroadcastChannel(SYNC_CHANNEL);
+          channel.postMessage({ type: 'note_content_updated', nodeId: savedId } satisfies SyncEvent);
+          channel.close();
         }
-      } catch {
-        // Folder not connected or permission denied — that's fine
+
+        // Optionally sync to filesystem
+        try {
+          const folderHandle = await getStoredFolder();
+          if (folderHandle) {
+            const fileName = sanitizeFileName(title) + '.md';
+            await writeMarkdownFile(folderHandle, `notes/${fileName}`, markdown);
+          }
+        } catch {
+          // Folder not connected or permission denied — that's fine
+        }
       }
 
       lastSavedTitleRef.current = title;
@@ -180,7 +207,7 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
       if (isTab && nodeId) {
         useUIStore.getState().setContentTabTitle(`note-${nodeId}`, title);
       }
-  }, [title, content, nodeId, graphStore, onBack, isTab]);
+  }, [title, content, nodeId, isEntity, graphStore, onBack, isTab]);
 
   // Keep effectiveNodeIdRef in sync
   useEffect(() => { effectiveNodeIdRef.current = nodeId; }, [nodeId]);
