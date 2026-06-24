@@ -17,35 +17,46 @@
 ```ts
 interface PropertyEditorProps {
   value: Record<string, unknown>;
-  onChange: (value: Record<string, unknown>) => void;
-  editing: boolean; // NEW — controls read-only vs editable rendering
+  onSave: (value: Record<string, unknown>) => void;
+  nodeId: string; // for tracking dirty state per node
 }
 ```
 
-### View Mode (`editing: false`)
+The `editing` prop is removed — PropertyEditor manages its own per-field inline editing. The `onChange` prop is renamed to `onSave` since changes are now batched (not live-propagated on every keystroke).
 
-Render properties as a static key-value list:
-- Each property is a row: key label (left, `text-zinc-400`), value (right, `text-zinc-200`)
-- String/number/boolean values render as plain text
-- Boolean values display as "true" / "false"
-- Complex values (arrays, nested objects) render as compact inline JSON in monospace
-- Empty state: "No properties" in muted italic text
+### Display
 
-### Edit Mode (`editing: true`)
+Properties always render as a key-value list. Each row: key label (left, `text-zinc-400`), value display (right, `text-zinc-200`).
 
-Each row becomes interactive with type-appropriate inputs:
+**Value display by type:**
 
-| Value type | Input control |
-|---|---|
-| `string` | Text input |
-| `number` | Number input |
-| `boolean` | Checkbox toggle |
-| `object` / `array` | Inline JSON textarea (scoped to that single value, with parse validation) |
+| Value type | Default display | On click / always |
+|---|---|---|
+| `string` | Plain text | Click → text input |
+| `number` | Plain text | Click → number input with stepper (up/down) |
+| `boolean` | Checkbox (always interactive) | Always a checkbox — no click-to-edit needed |
+| `object` / `array` | Compact inline JSON (monospace) | Click → inline JSON textarea for that value |
 
-Additional edit controls:
+- Empty state: "No properties" in muted italic text, plus an "Add property" button.
+- Clicking a value activates that field's edit state. Clicking away (blur) or pressing Enter confirms the edit. Pressing Escape reverts to the previous value.
+- Only one field is in edit mode at a time (clicking a second field confirms the first).
+
+### Structural Controls
+
+Key mutation controls are always available (no global edit mode gate):
 - **Key renaming:** Clicking the key label converts it to a text input. On blur/enter, the key is renamed in the properties object (preserving the value).
-- **Remove:** Small `x` button per row, removes the key-value pair.
+- **Remove:** Small `x` button per row (visible on hover), removes the key-value pair.
 - **Add:** An "Add property" row at the bottom with: key text input, value text input, type selector dropdown (`string` | `number` | `boolean` | `JSON`). Clicking `+` or pressing Enter adds the pair.
+
+### Dirty State & Save/Revert
+
+PropertyEditor tracks its own internal draft state:
+- On mount (or when `nodeId` changes), snapshot `value` as the baseline
+- Any field edit, key rename, add, or remove updates the draft
+- When draft differs from baseline, show a **Save / Revert** button bar at the bottom of the properties section:
+  - **Save** — calls `onSave(draft)` and updates the baseline to match
+  - **Revert** — resets draft to baseline, discarding all pending changes
+- The button bar is compact: small text, inline with the section, using existing button styles (`bg-indigo-600` for Save, `bg-zinc-700` for Revert)
 
 ### Value Type Detection
 
@@ -175,10 +186,12 @@ Replace the current conditional rendering (lines 406-415):
 
 **After:**
 ```tsx
-<PropertyEditor value={properties} onChange={setProperties} editing={editing} />
+<PropertyEditor value={node.properties} onSave={handleSaveProperties} nodeId={node.id} />
 ```
 
-PropertyEditor now handles both display modes internally.
+PropertyEditor is now self-contained — it manages its own inline editing, dirty tracking, and save/revert. The `properties` local state and the `editing`-gated conditional are removed from the properties section.
+
+`handleSaveProperties` calls `updateNode({ id: node.id, properties: newProps })` to persist. The existing panel-level `editing` state and Save button continue to control name/type/label/tags — properties are now independent.
 
 ### Entity File Section
 
