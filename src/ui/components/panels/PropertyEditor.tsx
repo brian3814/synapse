@@ -76,15 +76,17 @@ export function PropertyEditor({ value, onSave, nodeId }: PropertyEditorProps) {
   }, []);
 
   const renameKey = useCallback((oldKey: string, newKeyName: string) => {
-    if (!newKeyName.trim() || newKeyName === oldKey) {
+    const trimmed = newKeyName.trim();
+    if (!trimmed || trimmed === oldKey) {
       setEditingKey(null);
       return;
     }
     setDraft(prev => {
+      if (trimmed in prev && trimmed !== oldKey) return prev;
       const entries = Object.entries(prev);
       const next: Record<string, unknown> = {};
       for (const [k, v] of entries) {
-        next[k === oldKey ? newKeyName.trim() : k] = v;
+        next[k === oldKey ? trimmed : k] = v;
       }
       return next;
     });

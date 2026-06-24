@@ -126,12 +126,12 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
 
     try {
       const wikiLinks = extractWikiLinks(content);
-      const markdown = generateNoteMarkdown(title, content, wikiLinks);
+      const markdown = isEntity ? '' : generateNoteMarkdown(title, content, wikiLinks);
 
       if (nodeId) {
         if (isEntity) {
-          // Entity file: write via entityFiles API, skip note-specific side effects
-          await entityFiles.write(nodeId, markdown);
+          const entityMarkdown = `---\nid: ${nodeId}\ntitle: ${title}\n---\n\n# ${title}\n\n${content}\n`;
+          await entityFiles.write(nodeId, entityMarkdown);
           await graphStore.updateNode({ id: nodeId, name: title });
         } else {
           // Note: existing path
