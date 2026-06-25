@@ -43,19 +43,23 @@ export function MCPTab() {
   }, []);
 
   const httpConfig = JSON.stringify({
-    synapse: {
-      url: 'http://127.0.0.1:19876/mcp',
+    mcpServers: {
+      synapse: {
+        url: 'http://127.0.0.1:19876/mcp',
+      },
     },
   }, null, 2);
 
   const stdioConfig = JSON.stringify({
-    synapse: {
-      command: 'npx',
-      args: [
-        'synapse-kg',
-        '--vault', vaultPath ?? '/path/to/vault',
-        '--allow-write',
-      ],
+    mcpServers: {
+      synapse: {
+        command: 'npx',
+        args: [
+          'synapse-kg',
+          '--vault', vaultPath ?? '/path/to/vault',
+          '--allow-write',
+        ],
+      },
     },
   }, null, 2);
 
@@ -65,7 +69,7 @@ export function MCPTab() {
         <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">MCP Connection</h3>
         <p className="text-xs text-zinc-500 mt-1">
           Connect Claude Desktop, Claude Code, Codex, or any MCP client to this vault.
-          Copy a config block below and paste it into your client's MCP settings.
+          Copy a config block below and merge it into your client's MCP config file.
         </p>
       </div>
 
@@ -86,7 +90,7 @@ export function MCPTab() {
           <p className="text-xs text-zinc-500 mb-3">
             Connects directly to the running Synapse app. Zero setup — tools are available as long as the app is open with a vault.
           </p>
-          <CopyBlock label="Claude Desktop / Claude Code config" config={httpConfig} />
+          <CopyBlock label="Add to claude_desktop_config.json or .claude.json" config={httpConfig} />
         </div>
 
         <div className="border-t border-zinc-800 pt-5">
@@ -98,7 +102,7 @@ export function MCPTab() {
             Runs independently — no app needed. Connects directly to the vault's SQLite database.
             Works with Claude Code, Codex, Cursor, and any stdio MCP client.
           </p>
-          <CopyBlock label="Claude Code / Codex / Cursor config" config={stdioConfig} />
+          <CopyBlock label="Add to claude_desktop_config.json, .claude.json, or .cursor/mcp.json" config={stdioConfig} />
         </div>
       </div>
 
