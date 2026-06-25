@@ -90,7 +90,7 @@ export class DefaultKnowledgeService implements KnowledgeService {
 
   private async searchSemantic(query: string, limit: number): Promise<SearchResult[]> {
     if (!this.ctx.embedding) {
-      return [{ error: 'Semantic search requires embeddings to be enabled' } as any];
+      throw new Error('Semantic search requires embeddings to be enabled');
     }
 
     const semanticResults = await this.ctx.embedding.searchSimilar(query, limit);
@@ -277,57 +277,65 @@ export class DefaultKnowledgeService implements KnowledgeService {
     primary_id: string,
     secondary_id: string,
   ): Promise<MutationResult<MergeResult>> {
+    // Validate both entities exist before starting the transaction
     const primary = await this.ctx.db.nodes.getById(primary_id);
-    const secondary = await this.ctx.db.nodes.getById(secondary_id);
-
     if (!primary) throw new Error(`Primary entity ${primary_id} not found`);
+    const secondary = await this.ctx.db.nodes.getById(secondary_id);
     if (!secondary) throw new Error(`Secondary entity ${secondary_id} not found`);
 
     const allEffects: { nodeIds: string[]; edgeIds: string[] } = { nodeIds: [], edgeIds: [] };
-
-    // 1. Transfer edges from secondary to primary
-    const secondaryEdges = await this.ctx.db.edges.getForNode(secondary_id);
     let edgesTransferred = 0;
 
-    for (const edge of secondaryEdges) {
-      const isSource = edge.source_id === secondary_id;
-      const newSourceId = isSource ? primary_id : edge.source_id;
-      const newTargetId = isSource ? edge.target_id : primary_id;
+    await this.ctx.db.rawExec('BEGIN IMMEDIATE');
+    try {
+      // 1. Transfer edges from secondary to primary
+      const secondaryEdges = await this.ctx.db.edges.getForNode(secondary_id);
 
-      // Skip self-loops (edge between primary and secondary)
-      if (newSourceId === newTargetId) continue;
+      for (const edge of secondaryEdges) {
+        const isSource = edge.source_id === secondary_id;
+        const newSourceId = isSource ? primary_id : edge.source_id;
+        const newTargetId = isSource ? edge.target_id : primary_id;
 
-      // Create new edge pointing to/from primary
-      const createResult = await graphCommands.createEdge(this.ctx, {
-        sourceId: newSourceId,
-        targetId: newTargetId,
-        label: edge.label,
-        type: edge.type,
-        properties: JSON.parse(edge.properties || '{}'),
-        weight: edge.weight,
-        directed: edge.directed === 1,
-        skipProvenance: true,
-      });
+        // Skip self-loops (edge between primary and secondary)
+        if (newSourceId === newTargetId) continue;
 
-      if (createResult.data) {
-        edgesTransferred++;
-        const effects = eventsToEffects(createResult.events);
-        allEffects.edgeIds.push(...effects.edgeIds);
+        // Create new edge pointing to/from primary
+        const createResult = await graphCommands.createEdge(this.ctx, {
+          sourceId: newSourceId,
+          targetId: newTargetId,
+          label: edge.label,
+          type: edge.type,
+          properties: JSON.parse(edge.properties || '{}'),
+          weight: edge.weight,
+          directed: edge.directed === 1,
+          skipProvenance: true,
+        });
+
+        if (createResult.data) {
+          edgesTransferred++;
+          const effects = eventsToEffects(createResult.events);
+          allEffects.edgeIds.push(...effects.edgeIds);
+        }
+
+        // Delete old edge
+        const deleteResult = await graphCommands.deleteEdge(this.ctx, edge.id);
+        const delEffects = eventsToEffects(deleteResult.events);
+        allEffects.edgeIds.push(...delEffects.edgeIds);
       }
 
-      // Delete old edge
-      const deleteResult = await graphCommands.deleteEdge(this.ctx, edge.id);
-      const delEffects = eventsToEffects(deleteResult.events);
-      allEffects.edgeIds.push(...delEffects.edgeIds);
+      // 2. Add secondary's name as alias on primary
+      await this.ctx.db.entityResolution.addAlias(primary_id, secondary.name);
+
+      // 3. Delete secondary node
+      const deleteResult = await graphCommands.deleteNode(this.ctx, secondary_id);
+      const deleteEffects = eventsToEffects(deleteResult.events);
+      allEffects.nodeIds.push(...deleteEffects.nodeIds);
+
+      await this.ctx.db.rawExec('COMMIT');
+    } catch (e) {
+      await this.ctx.db.rawExec('ROLLBACK').catch(() => {});
+      throw e;
     }
-
-    // 2. Add secondary's name as alias on primary
-    await this.ctx.db.entityResolution.addAlias(primary_id, secondary.name);
-
-    // 3. Delete secondary node
-    const deleteResult = await graphCommands.deleteNode(this.ctx, secondary_id);
-    const deleteEffects = eventsToEffects(deleteResult.events);
-    allEffects.nodeIds.push(...deleteEffects.nodeIds);
 
     return {
       data: {
@@ -545,7 +553,7 @@ export class DefaultKnowledgeService implements KnowledgeService {
       case 'centrality':
         return this.analyzeCentrality(options);
       case 'orphans':
-        return this.analyzeOrphans();
+        return this.analyzeOrphans(options);
       case 'paths':
         return this.analyzePaths(options);
       default:
@@ -614,6 +622,15 @@ export class DefaultKnowledgeService implements KnowledgeService {
     options?: Record<string, unknown>,
   ): Promise<AnalysisResult> {
     const limit = (options?.limit as number) ?? 20;
+    const nodeType = options?.node_type as string | undefined;
+
+    const params: unknown[] = [];
+    let whereClause = '';
+    if (nodeType !== undefined) {
+      whereClause = 'WHERE n.type = ?';
+      params.push(nodeType);
+    }
+    params.push(limit);
 
     const rankings = await this.ctx.db.rawQuery<{
       id: string;
@@ -625,9 +642,10 @@ export class DefaultKnowledgeService implements KnowledgeService {
       `SELECT n.id, n.name, n.type, n.label,
               (SELECT COUNT(*) FROM edges e WHERE e.source_id = n.id OR e.target_id = n.id) as degree
        FROM nodes n
+       ${whereClause}
        ORDER BY degree DESC
        LIMIT ?`,
-      [limit],
+      params,
     );
 
     return {
@@ -636,7 +654,18 @@ export class DefaultKnowledgeService implements KnowledgeService {
     };
   }
 
-  private async analyzeOrphans(): Promise<AnalysisResult> {
+  private async analyzeOrphans(options?: Record<string, unknown>): Promise<AnalysisResult> {
+    const limit = (options?.limit as number) ?? 50;
+    const nodeType = options?.node_type as string | undefined;
+
+    const params: unknown[] = [];
+    let whereClause = 'WHERE NOT EXISTS (SELECT 1 FROM edges e WHERE e.source_id = n.id OR e.target_id = n.id)';
+    if (nodeType !== undefined) {
+      whereClause += ' AND n.type = ?';
+      params.push(nodeType);
+    }
+    params.push(limit);
+
     const orphans = await this.ctx.db.rawQuery<{
       id: string;
       name: string;
@@ -644,7 +673,9 @@ export class DefaultKnowledgeService implements KnowledgeService {
       label: string | null;
     }>(
       `SELECT n.id, n.name, n.type, n.label FROM nodes n
-       WHERE NOT EXISTS (SELECT 1 FROM edges e WHERE e.source_id = n.id OR e.target_id = n.id)`,
+       ${whereClause}
+       LIMIT ?`,
+      params,
     );
 
     return {
@@ -658,6 +689,7 @@ export class DefaultKnowledgeService implements KnowledgeService {
   ): Promise<AnalysisResult> {
     const sourceId = options?.source_id as string;
     const targetId = options?.target_id as string;
+    const maxHops = (options?.max_hops as number) ?? 6;
 
     if (!sourceId || !targetId) {
       throw new Error('paths analysis requires source_id and target_id options');
@@ -675,14 +707,17 @@ export class DefaultKnowledgeService implements KnowledgeService {
       adjacency.get(edge.target_id)!.push({ neighborId: edge.source_id, edgeId: edge.id });
     }
 
-    // BFS
+    // BFS with max_hops depth limit
     const visited = new Set<string>([sourceId]);
     const parent = new Map<string, { from: string; edgeId: string }>();
-    const queue = [sourceId];
+    // Queue entries track [nodeId, currentDepth]
+    const queue: Array<[string, number]> = [[sourceId, 0]];
     let found = false;
 
     while (queue.length > 0 && !found) {
-      const current = queue.shift()!;
+      const [current, depth] = queue.shift()!;
+      if (depth >= maxHops) continue;
+
       const neighbors = adjacency.get(current) ?? [];
 
       for (const { neighborId, edgeId } of neighbors) {
@@ -695,7 +730,7 @@ export class DefaultKnowledgeService implements KnowledgeService {
           break;
         }
 
-        queue.push(neighborId);
+        queue.push([neighborId, depth + 1]);
       }
     }
 

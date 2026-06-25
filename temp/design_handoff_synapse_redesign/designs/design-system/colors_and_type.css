@@ -1,0 +1,273 @@
+/* ============================================================
+   shadcn/ui — colors_and_type.css
+   Default style, zinc base, light + dark themes.
+   Tokens mirror the real shadcn/ui CSS variables (oklch, no #hex).
+   ============================================================ */
+
+/* ---------- Fonts ---------- */
+/* Geist Sans + Geist Mono via Vercel's CDN, matching ui.shadcn.com */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap");
+
+:root {
+  /* ---------- Type ---------- */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Type scale — Tailwind-ish */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px — body default in shadcn */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.875rem;   /* 30px */
+  --text-4xl: 2.25rem;    /* 36px */
+  --text-5xl: 3rem;       /* 48px */
+  --text-6xl: 3.75rem;    /* 60px */
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-tighter: -0.04em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---------- Color (light, zinc) ---------- */
+  --background:               oklch(1 0 0);
+  --foreground:               oklch(0.141 0.005 285.823);
+  --card:                     oklch(1 0 0);
+  --card-foreground:          oklch(0.141 0.005 285.823);
+  --popover:                  oklch(1 0 0);
+  --popover-foreground:       oklch(0.141 0.005 285.823);
+  --primary:                  oklch(0.21 0.006 285.885);
+  --primary-foreground:       oklch(0.985 0 0);
+  --secondary:                oklch(0.967 0.001 286.375);
+  --secondary-foreground:     oklch(0.21 0.006 285.885);
+  --muted:                    oklch(0.967 0.001 286.375);
+  --muted-foreground:         oklch(0.552 0.016 285.938);
+  --accent:                   oklch(0.967 0.001 286.375);
+  --accent-foreground:        oklch(0.21 0.006 285.885);
+  --destructive:              oklch(0.577 0.245 27.325);
+  --destructive-foreground:   oklch(0.985 0 0);
+  --border:                   oklch(0.92 0.004 286.32);
+  --input:                    oklch(0.92 0.004 286.32);
+  --ring:                     oklch(0.705 0.015 286.067);
+
+  /* Chart palette (light) */
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6   0.118 184.704);
+  --chart-3: oklch(0.398 0.07  227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Sidebar tokens (light) */
+  --sidebar:                       oklch(0.985 0 0);
+  --sidebar-foreground:            oklch(0.141 0.005 285.823);
+  --sidebar-primary:               oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground:    oklch(0.985 0 0);
+  --sidebar-accent:                oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground:     oklch(0.21 0.006 285.885);
+  --sidebar-border:                oklch(0.92 0.004 286.32);
+  --sidebar-ring:                  oklch(0.705 0.015 286.067);
+
+  /* ---------- Radii ---------- */
+  --radius: 0.625rem;        /* 10px — shadcn default */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* ---------- Spacing scale (Tailwind 4-pt base) ---------- */
+  --space-0: 0;
+  --space-1: 0.25rem;  /* 4 */
+  --space-2: 0.5rem;   /* 8 */
+  --space-3: 0.75rem;  /* 12 */
+  --space-4: 1rem;     /* 16 */
+  --space-5: 1.25rem;  /* 20 */
+  --space-6: 1.5rem;   /* 24 */
+  --space-8: 2rem;     /* 32 */
+  --space-10: 2.5rem;  /* 40 */
+  --space-12: 3rem;    /* 48 */
+  --space-16: 4rem;    /* 64 */
+  --space-24: 6rem;    /* 96 */
+
+  /* ---------- Shadow system (Tailwind defaults — what shadcn uses) ---------- */
+  --shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
+  --shadow-xs:  0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm:  0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl:  0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
+  /* ---------- Container widths ---------- */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+  --container-2xl: 1400px;
+}
+
+/* ---------- Color (dark, zinc) ---------- */
+.dark, [data-theme="dark"] {
+  --background:               oklch(0.141 0.005 285.823);
+  --foreground:               oklch(0.985 0 0);
+  --card:                     oklch(0.21 0.006 285.885);
+  --card-foreground:          oklch(0.985 0 0);
+  --popover:                  oklch(0.21 0.006 285.885);
+  --popover-foreground:       oklch(0.985 0 0);
+  --primary:                  oklch(0.92 0.004 286.32);
+  --primary-foreground:       oklch(0.21 0.006 285.885);
+  --secondary:                oklch(0.274 0.006 286.033);
+  --secondary-foreground:     oklch(0.985 0 0);
+  --muted:                    oklch(0.274 0.006 286.033);
+  --muted-foreground:         oklch(0.705 0.015 286.067);
+  --accent:                   oklch(0.274 0.006 286.033);
+  --accent-foreground:        oklch(0.985 0 0);
+  --destructive:              oklch(0.704 0.191 22.216);
+  --destructive-foreground:   oklch(0.985 0 0);
+  --border:                   oklch(1 0 0 / 10%);
+  --input:                    oklch(1 0 0 / 15%);
+  --ring:                     oklch(0.552 0.016 285.938);
+
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17  162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+
+  --sidebar:                       oklch(0.21 0.006 285.885);
+  --sidebar-foreground:            oklch(0.985 0 0);
+  --sidebar-primary:               oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground:    oklch(0.985 0 0);
+  --sidebar-accent:                oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground:     oklch(0.985 0 0);
+  --sidebar-border:                oklch(1 0 0 / 10%);
+  --sidebar-ring:                  oklch(0.552 0.016 285.938);
+}
+
+/* ============================================================
+   Semantic element styles
+   These match Tailwind/shadcn typography prose defaults so plain
+   <h1>/<p>/<code> already look right when you import this file.
+   ============================================================ */
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--foreground);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--text-4xl); font-weight: var(--weight-bold); letter-spacing: var(--tracking-tighter); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+h5 { font-size: var(--text-lg); }
+h6 { font-size: var(--text-base); }
+
+p {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--foreground);
+  text-wrap: pretty;
+}
+
+small { font-size: var(--text-xs); color: var(--muted-foreground); }
+
+a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--border);
+  transition: text-decoration-color 120ms ease;
+}
+a:hover { text-decoration-color: var(--foreground); }
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+code {
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-sm);
+  font-size: 0.85em;
+}
+
+pre {
+  background: var(--muted);
+  color: var(--foreground);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+pre code { background: transparent; padding: 0; }
+
+kbd {
+  display: inline-block;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.4em;
+  font-size: 0.75em;
+  color: var(--muted-foreground);
+}
+
+hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-6) 0; }
+
+::selection { background: var(--foreground); color: var(--background); }
+
+/* ============================================================
+   Utility classes (for direct use in mocks)
+   ============================================================ */
+.fg        { color: var(--foreground); }
+.fg-muted  { color: var(--muted-foreground); }
+.bg        { background: var(--background); }
+.bg-muted  { background: var(--muted); }
+.bg-card   { background: var(--card); }
+.border    { border: 1px solid var(--border); }
+.rounded   { border-radius: var(--radius); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+.font-mono { font-family: var(--font-mono); }
+.font-sans { font-family: var(--font-sans); }
+
+/* Focus ring matching shadcn */
+.focus-ring:focus-visible,
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}

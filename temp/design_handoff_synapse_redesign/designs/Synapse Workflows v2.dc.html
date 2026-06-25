@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="design-system/colors_and_type.css">
+</helmet>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<div style="position:absolute;left:80px;top:30px;width:700px">
+  <div style="font:700 22px/1.2 Geist,system-ui;color:rgba(240,238,235,0.92);letter-spacing:-0.03em">Synapse — Additional Workflows</div>
+  <div style="font:400 13px/1.5 Geist,system-ui;color:rgba(240,238,235,0.4);margin-top:4px">Extraction review, vault setup, command palette, and entity sync — all using B sidebar + C immersive treatment.</div>
+</div>
+
+<!-- ═══════════════════ 5. EXTRACTION REVIEW ═══════════════════ -->
+<div style="position:absolute;left:80px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">5 — Extraction Review</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex">
+
+    {{ sidebarGraph }}
+
+    <!-- Split: Review list left, Graph preview right -->
+    <div style="flex:1;display:flex;min-width:0">
+      <!-- Review panel (fixed layout, left) -->
+      <div style="width:420px;flex-shrink:0;display:flex;flex-direction:column;background:#0c0c0f;border-right:1px solid rgba(255,255,255,0.03)">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <span style="font:600 14px Geist,system-ui;color:#e4e4e7">Review Extraction</span>
+          <span style="margin-left:auto;font:400 10px Geist,system-ui;color:#52525b">openai.com/index/harness-engineering</span>
+        </div>
+        <!-- Toolbar -->
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <div style="display:flex;background:rgba(255,255,255,0.03);border-radius:7px;padding:2px">
+            <div style="padding:4px 10px;border-radius:5px;background:rgba(129,140,248,0.1);font:500 10px Geist,system-ui;color:#818cf8">All</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Entities</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Relationships</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Notes</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:2px">
+            <div style="padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:5px;font:400 10px Geist,system-ui;color:#71717a">Undo</div>
+            <div style="padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:5px;font:400 10px Geist,system-ui;color:#71717a">Redo</div>
+          </div>
+        </div>
+        <!-- Entity list -->
+        <div style="flex:1;overflow:hidden;padding:8px 12px;display:flex;flex-direction:column;gap:3px">
+          <!-- Section: Entities -->
+          <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em;padding:6px 4px 3px">Entities (10)</div>
+          <!-- Entity items -->
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.1);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#e4e4e7;flex:1">Codex</span>
+            <span style="padding:2px 6px;background:rgba(167,139,250,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#a78bfa">ai_agent</span>
+            <span style="padding:2px 6px;background:rgba(34,197,94,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#22c55e">new</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">OpenAI</span>
+            <span style="padding:2px 6px;background:rgba(251,191,36,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#fbbf24">organization</span>
+            <span style="padding:2px 6px;background:rgba(129,140,248,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#818cf8">merge</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#f472b6;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">Ryan Lopopolo</span>
+            <span style="padding:2px 6px;background:rgba(244,114,182,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#f472b6">person</span>
+            <span style="padding:2px 6px;background:rgba(34,197,94,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#22c55e">new</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">GPT-5</span>
+            <span style="padding:2px 6px;background:rgba(52,211,153,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#34d399">technology</span>
+            <span style="padding:2px 6px;background:rgba(34,197,94,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#22c55e">new</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02);border-radius:8px;opacity:0.5;text-decoration:line-through">
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#71717a;flex:1">agent-based coding</span>
+            <span style="padding:2px 6px;background:rgba(239,68,68,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#ef4444">removed</span>
+          </div>
+          <!-- Section: Relationships -->
+          <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em;padding:8px 4px 3px">Relationships (9)</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 11px Geist,system-ui;color:#818cf8">created_by</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">OpenAI</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 11px Geist,system-ui;color:#818cf8">builds_on</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">GPT-5</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">Ryan Lopopolo</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 11px Geist,system-ui;color:#818cf8">affiliated_with</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">OpenAI</span>
+          </div>
+          <!-- Section: Notes -->
+          <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em;padding:8px 4px 3px">Notes (1)</div>
+          <div style="padding:8px 10px;background:rgba(56,189,248,0.04);border:1px solid rgba(56,189,248,0.08);border-radius:8px">
+            <div style="font:500 12px Geist,system-ui;color:#d4d4d8;margin-bottom:3px">Summary: Harness engineering</div>
+            <div style="font:400 10px/1.4 Geist,system-ui;color:#71717a">OpenAI's engineering team built a complete software product with zero manually-written code using [[Codex]]...</div>
+          </div>
+        </div>
+        <!-- Bottom action bar -->
+        <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.04);display:flex;gap:8px;flex-shrink:0">
+          <div style="padding:6px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:8px;font:500 11px Geist,system-ui;color:#71717a">Discard</div>
+          <div style="padding:6px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:8px;font:500 11px Geist,system-ui;color:#71717a">Save to Reading List</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px;background:#6366f1;border-radius:8px;font:600 12px Geist,system-ui;color:white">Add to Graph (19 items)</div>
+        </div>
+      </div>
+
+      <!-- Right: Graph preview with overlay nodes -->
+      <div style="flex:1;position:relative;background:#07070a;min-width:0">
+        {{ graphPreview }}
+        <!-- Preview badge -->
+        <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:5px 10px;z-index:2;backdrop-filter:blur(12px)">
+          <div style="width:6px;height:6px;border-radius:50%;background:#818cf8;animation:pulse 2s ease infinite"></div>
+          <span style="font:500 10px Geist,system-ui;color:#c4b5fd">Preview Merge</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5 — Annotation -->
+<div style="position:absolute;left:80px;top:910px;width:380px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(-0.5deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Extraction review</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Split view: review list left, graph preview right. Entities show type badges + status (new/merge/removed). Removed items are struck through. Relationships show source → label → target. "Preview Merge" highlights incoming nodes on the graph. Filter tabs (All/Entities/Relationships/Notes) + undo/redo.</div>
+</div>
+
+<!-- ═══════════════════ 6. VAULT SETUP ═══════════════════ -->
+<div style="position:absolute;left:1400px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">6 — Vault Setup / Onboarding</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex;align-items:center;justify-content:center;position:relative">
+    <!-- Subtle background pattern -->
+    {{ bgDots }}
+
+    <!-- Centered setup card -->
+    <div style="position:relative;z-index:2;width:440px">
+      <!-- Logo -->
+      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,#a78bfa,#818cf8,#6366f1);border-radius:14px;box-shadow:0 8px 32px rgba(99,102,241,0.25);margin-bottom:16px"></div>
+        <div style="font:700 24px Geist,system-ui;color:#e4e4e7;letter-spacing:-0.03em">Synapse</div>
+        <div style="font:400 14px/1.5 Geist,system-ui;color:#71717a;margin-top:6px;text-align:center">Your local knowledge graph. Choose a vault to get started — a folder for your notes, files, and graph data.</div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:28px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,0.9),rgba(129,140,248,0.9));border-radius:10px;font:600 14px Geist,system-ui;color:white;cursor:pointer;box-shadow:0 4px 16px rgba(99,102,241,0.2)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+          Create New Vault
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;font:500 14px Geist,system-ui;color:#d4d4d8;cursor:pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Open Existing Vault
+        </div>
+      </div>
+
+      <!-- Recent vaults -->
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <div style="font:500 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.06em;padding:0 4px 8px">Recent Vaults</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px;cursor:pointer">
+            <div style="width:32px;height:32px;background:rgba(167,139,250,0.08);border-radius:8px;display:flex;align-items:center;justify-content:center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div>
+              <div style="font:500 13px Geist,system-ui;color:#e4e4e7">notes</div>
+              <div style="font:400 10px Geist,system-ui;color:#52525b">/Users/you/Documents/notes</div>
+            </div>
+            <span style="margin-left:auto;font:400 10px Geist,system-ui;color:#3f3f46">12 entities</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px;cursor:pointer">
+            <div style="width:32px;height:32px;background:rgba(52,211,153,0.08);border-radius:8px;display:flex;align-items:center;justify-content:center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div>
+              <div style="font:500 13px Geist,system-ui;color:#e4e4e7">research</div>
+              <div style="font:400 10px Geist,system-ui;color:#52525b">/Users/you/research-vault</div>
+            </div>
+            <span style="margin-left:auto;font:400 10px Geist,system-ui;color:#3f3f46">47 entities</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 6 — Annotation -->
+<div style="position:absolute;left:1400px;top:910px;width:380px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.3deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Vault setup / onboarding</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Full-screen, no sidebar. Centered card with gradient logo, two primary actions, recent vaults with entity counts. Clean and confident — no instructions overload. Dot-grid background adds subtle depth. Recent vaults show at-a-glance stats.</div>
+</div>
+
+<!-- ═══════════════════ 7. COMMAND PALETTE ═══════════════════ -->
+<div style="position:absolute;left:2720px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">7 — Command Palette (⌘K)</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex;position:relative">
+
+    {{ sidebarGraph }}
+
+    <!-- Graph (dimmed underneath) -->
+    <div style="flex:1;position:relative;background:#07070a;min-width:0">
+      {{ graphDimmed }}
+    </div>
+
+    <!-- Overlay scrim -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);z-index:10;backdrop-filter:blur(3px)"></div>
+
+    <!-- Command palette modal -->
+    <div style="position:absolute;top:160px;left:50%;transform:translateX(-50%);width:520px;z-index:11;background:rgba(14,14,17,0.96);border:1px solid rgba(255,255,255,0.06);border-radius:14px;box-shadow:0 16px 64px rgba(0,0,0,0.6);backdrop-filter:blur(20px);overflow:hidden">
+      <!-- Search input -->
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span style="font:400 15px Geist,system-ui;color:#e4e4e7;flex:1">code gen</span>
+        <span style="font:400 10px Geist,system-ui;color:#3f3f46;border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:2px 6px">ESC</span>
+      </div>
+      <!-- Results -->
+      <div style="max-height:380px;overflow:hidden">
+        <!-- Section: Entities -->
+        <div style="padding:6px 16px 3px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em">Entities</span>
+          <span style="font:400 10px Geist,system-ui;color:#3f3f46">3</span>
+        </div>
+        <div style="padding:2px 8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(129,140,248,0.08);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa"></div>
+            <span style="font:400 13px Geist,system-ui;color:#e4e4e7;flex:1">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">ai_agent</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46;border:1px solid rgba(255,255,255,0.05);border-radius:3px;padding:1px 5px">↵</span>
+          </div>
+        </div>
+        <div style="padding:2px 8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa"></div>
+            <span style="font:400 13px Geist,system-ui;color:#a1a1aa;flex:1">agent-first development</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46">concept</span>
+          </div>
+        </div>
+        <div style="padding:2px 8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#60a5fa"></div>
+            <span style="font:400 13px Geist,system-ui;color:#a1a1aa;flex:1">agent legibility</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46">concept</span>
+          </div>
+        </div>
+        <!-- Section: Notes -->
+        <div style="padding:8px 16px 3px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em">Notes</span>
+          <span style="font:400 10px Geist,system-ui;color:#3f3f46">1</span>
+        </div>
+        <div style="padding:2px 8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path></svg>
+            <span style="font:400 13px Geist,system-ui;color:#a1a1aa;flex:1">Agent-first development.md</span>
+          </div>
+        </div>
+        <!-- Section: Relationships -->
+        <div style="padding:8px 16px 3px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em">Relationships</span>
+          <span style="font:400 10px Geist,system-ui;color:#3f3f46">1</span>
+        </div>
+        <div style="padding:2px 8px 6px">
+          <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px">
+            <span style="font:400 12px Geist,system-ui;color:#a1a1aa">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 12px Geist,system-ui;color:#818cf8">created_by</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 12px Geist,system-ui;color:#a1a1aa">OpenAI</span>
+          </div>
+        </div>
+        <!-- Section: Semantic -->
+        <div style="padding:4px 16px 3px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.03)">
+          <span style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em">Semantic matches</span>
+          <span style="font:400 10px Geist,system-ui;color:#3f3f46">1</span>
+        </div>
+        <div style="padding:2px 8px 8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#34d399"></div>
+            <span style="font:400 13px Geist,system-ui;color:#a1a1aa;flex:1">Chrome DevTools Protocol</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46">technology</span>
+            <span style="padding:2px 5px;background:rgba(167,139,250,0.08);border-radius:4px;font:400 9px Geist,system-ui;color:#a78bfa">semantic</span>
+          </div>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-top:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.01)">
+        <span style="font:400 10px Geist,system-ui;color:#3f3f46">↑↓ navigate</span>
+        <span style="font:400 10px Geist,system-ui;color:#3f3f46">↵ open</span>
+        <span style="font:400 10px Geist,system-ui;color:#3f3f46">⇧↵ open in split</span>
+        <span style="font:400 10px Geist,system-ui;color:#3f3f46">esc close</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 7 — Annotation -->
+<div style="position:absolute;left:2720px;top:910px;width:380px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(-0.3deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Command palette (⌘K)</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Glassmorphic overlay centered on screen. Searches entities, notes, relationships, artifacts, and semantic matches simultaneously. Sections grouped with counts. First result pre-selected. Keyboard hints in footer. ⇧↵ opens in split view. Semantic matches appear when FTS results are sparse.</div>
+</div>
+
+<!-- ═══════════════════ 8. ENTITY SYNC ═══════════════════ -->
+<div style="position:absolute;left:4040px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">8 — Entity Sync (MCP Changes)</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex">
+
+    {{ sidebarSync }}
+
+    <!-- Main: Graph with sync notification panel -->
+    <div style="flex:1;display:flex;min-width:0">
+      <!-- Sync panel (fixed left) -->
+      <div style="width:380px;flex-shrink:0;display:flex;flex-direction:column;background:#0c0c0f;border-right:1px solid rgba(255,255,255,0.03)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font:600 14px Geist,system-ui;color:#e4e4e7">Entity Sync</span>
+            <div style="padding:1px 6px;background:rgba(245,158,11,0.15);border-radius:8px;font:600 10px Geist,system-ui;color:#f59e0b">3 pending</div>
+          </div>
+          <div style="padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Refresh</div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+          <!-- Sync card 1: Title mismatch -->
+          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(245,158,11,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#f59e0b;text-transform:uppercase;letter-spacing:0.03em">Title mismatch</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Codex.md</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px">
+              <div style="display:flex;align-items:center;gap:6px"><span style="font:400 11px Geist,system-ui;color:#71717a;width:28px">DB:</span><span style="font:500 11px Geist,system-ui;color:#e4e4e7">"Codex"</span></div>
+              <div style="display:flex;align-items:center;gap:6px"><span style="font:400 11px Geist,system-ui;color:#71717a;width:28px">File:</span><span style="font:500 11px Geist,system-ui;color:#f59e0b">"Codex (AI Agent)"</span></div>
+            </div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Rename entity</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Revert file</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#52525b">Dismiss</div>
+            </div>
+          </div>
+          <!-- Sync card 2: New file -->
+          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(34,197,94,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#22c55e;text-transform:uppercase;letter-spacing:0.03em">New file</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Transformer Architecture.md</span>
+            </div>
+            <div style="font:400 11px Geist,system-ui;color:#a1a1aa;margin-bottom:10px">Title: "Transformer Architecture"</div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Create entity</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Ignore</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Delete</div>
+            </div>
+          </div>
+          <!-- Sync card 3: Broken link -->
+          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(245,158,11,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#f59e0b;text-transform:uppercase;letter-spacing:0.03em">Broken link</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Machine Learning.md</span>
+            </div>
+            <div style="font:400 11px Geist,system-ui;color:#a1a1aa;margin-bottom:10px">[[ML Ops]] → suggested: [[MLOps]]</div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Fix link</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#52525b">Dismiss</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Graph -->
+      <div style="flex:1;position:relative;background:#07070a;min-width:0">
+        {{ graphMain }}
+        <!-- Controls -->
+        <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;background:rgba(9,9,11,0.75);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:4px 6px;z-index:2;backdrop-filter:blur(16px)">
+          <div style="display:flex;align-items:center;gap:3px;padding:3px 10px;border-radius:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.15)"><div style="width:6px;height:6px;border-radius:50%;background:#a78bfa;box-shadow:0 0 6px rgba(167,139,250,0.5)"></div><span style="font:500 10px Geist,system-ui;color:#c4b5fd">Entities</span></div>
+          <span style="font:400 10px Geist Mono,monospace;color:#3f3f46">12n · 23e</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 8 — Annotation -->
+<div style="position:absolute;left:4040px;top:910px;width:380px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.5deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Entity sync</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Split: sync notifications left, graph right. Cards show issue type (title mismatch, new file, broken link) with color-coded badges. Each card has contextual actions — primary action is always indigo. Sidebar "Sync" nav item shows badge count. Works for both local file changes and external MCP mutations.</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+class Component extends DCLogic {
+  renderVals() {
+    var nodes = [
+      { name: 'Codex', color: '#a78bfa', x: 48, y: 42 },
+      { name: 'OpenAI', color: '#fbbf24', x: 60, y: 72 },
+      { name: 'Ryan Lopopolo', color: '#f472b6', x: 78, y: 76 },
+      { name: 'GPT-5', color: '#34d399', x: 78, y: 48 },
+      { name: 'agent-first dev', color: '#60a5fa', x: 64, y: 32 },
+      { name: 'Chrome DevTools', color: '#34d399', x: 18, y: 52 },
+      { name: 'arch. layering', color: '#60a5fa', x: 72, y: 22 },
+      { name: 'observability', color: '#34d399', x: 50, y: 16 },
+      { name: 'repo knowledge', color: '#60a5fa', x: 22, y: 72 },
+      { name: 'agent legibility', color: '#60a5fa', x: 38, y: 64 },
+    ];
+    var edges = [[0,1],[0,3],[4,0],[5,0],[7,4],[6,4],[8,9],[9,4],[2,1]];
+
+    var makeGraph = function(w, h, opts) {
+      var glow = (opts && opts.glow) || 0.15, nodeR = (opts && opts.nodeR) || 5;
+      var ea = (opts && opts.edgeAlpha) || 0.08, la = (opts && opts.labelAlpha) || 0.6;
+      var ls = (opts && opts.labelSize) || 10, gr = (opts && opts.glowR) || 28;
+      var dim = (opts && opts.dim) || 1;
+      var sx = w / 100, sy = h / 100, ch = [];
+      var grads = nodes.map(function(n, i) {
+        return React.createElement('radialGradient', { key: 'rg' + i, id: 'g' + i + '-' + w + (dim < 1 ? 'd' : ''), cx: '50%', cy: '50%', r: '50%' }, [
+          React.createElement('stop', { key: 'a', offset: '0%', stopColor: n.color, stopOpacity: glow * dim }),
+          React.createElement('stop', { key: 'b', offset: '100%', stopColor: n.color, stopOpacity: 0 })
+        ]);
+      });
+      ch.push(React.createElement('defs', { key: 'd' }, grads));
+      ch.push(React.createElement('defs', { key: 'd2' }, [
+        React.createElement('pattern', { key: 'p', id: 'dt' + w + (dim < 1 ? 'd' : ''), x: 0, y: 0, width: 20, height: 20, patternUnits: 'userSpaceOnUse' }, [
+          React.createElement('circle', { key: 'c', cx: 10, cy: 10, r: 0.5, fill: 'rgba(255,255,255,' + (0.04 * dim) + ')' })
+        ])
+      ]));
+      ch.push(React.createElement('rect', { key: 'bg', width: w, height: h, fill: 'url(#dt' + w + (dim < 1 ? 'd' : '') + ')' }));
+      edges.forEach(function(e, i) { var f = nodes[e[0]], t = nodes[e[1]]; ch.push(React.createElement('line', { key: 'e' + i, x1: f.x*sx, y1: f.y*sy, x2: t.x*sx, y2: t.y*sy, stroke: 'rgba(255,255,255,' + (ea * dim) + ')', strokeWidth: 1 })); });
+      // Glow circles removed per feedback
+      nodes.forEach(function(n, i) { ch.push(React.createElement('circle', { key: 'n' + i, cx: n.x*sx, cy: n.y*sy, r: nodeR, fill: n.color, opacity: dim, style: { filter: 'drop-shadow(0 0 3px ' + n.color + '40)' } })); });
+      nodes.forEach(function(n, i) { ch.push(React.createElement('text', { key: 'l' + i, x: n.x*sx+nodeR+5, y: n.y*sy+4, fill: 'rgba(255,255,255,' + (la * dim) + ')', fontSize: ls, fontFamily: 'Geist,system-ui,sans-serif', fontWeight: 400 }, n.name)); });
+      return React.createElement('svg', { width: '100%', height: '100%', viewBox: '0 0 ' + w + ' ' + h, style: { position: 'absolute', inset: 0 }, preserveAspectRatio: 'xMidYMid slice' }, ch);
+    };
+
+    // Sidebar builder
+    var makeSidebar = function(activeItem) {
+      var navItems = [
+        { id: 'graph', label: 'Graph', count: '12', icon: 'M6 6a3 3 0 1 0 0 0M18 18a3 3 0 1 0 0 0M18 6a3 3 0 1 0 0 0M8.5 7.5L15.5 16.5M15.5 6L8.5 6' },
+        { id: 'notes', label: 'Notes', count: '3', icon: 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2zM14 2v6h6' },
+        { id: 'reading', label: 'Reading List', badge: '2', icon: 'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' },
+        { id: 'chat', label: 'Chat', icon: 'M3 21l1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z' },
+        { id: 'intelligence', label: 'Intelligence', icon: 'M12 3l-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z' },
+        { id: 'sync', label: 'Sync', badge: activeItem === 'sync' ? null : '3', icon: 'M21.5 2v6h-6M2.5 22v-6h6' }
+      ];
+      var els = [];
+      els.push(React.createElement('div', { key: 'logo', style: { padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 8 } }, [
+        React.createElement('div', { key: 'mark', style: { width: 22, height: 22, background: 'linear-gradient(135deg,#a78bfa,#c084fc)', borderRadius: 6 } }),
+        React.createElement('div', { key: 'txt' }, [
+          React.createElement('div', { key: 'n', style: { font: '600 14px Geist,system-ui', color: '#e8e5e0', letterSpacing: '-0.01em' } }, 'Synapse'),
+          React.createElement('div', { key: 'v', style: { font: '400 10px Geist,system-ui', color: '#71717a', marginTop: 1 } }, 'notes vault')
+        ])
+      ]));
+      els.push(React.createElement('div', { key: 'search', style: { padding: '0 12px 12px' } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', height: 32, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 } }, [
+          React.createElement('svg', { key: 'i', width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: '#52525b', strokeWidth: 2 }, [React.createElement('circle', { key: 'c', cx: 11, cy: 11, r: 8 }), React.createElement('line', { key: 'l', x1: 21, y1: 21, x2: 16.65, y2: 16.65 })]),
+          React.createElement('span', { key: 'p', style: { font: '400 12px Geist,system-ui', color: '#3f3f46' } }, 'Search...'),
+          React.createElement('span', { key: 'k', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, '\u2318K')
+        ])
+      ));
+      var navEls = navItems.map(function(item) {
+        var isActive = item.id === activeItem;
+        var s = { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, background: isActive ? 'rgba(167,139,250,0.08)' : 'transparent', border: isActive ? '1px solid rgba(167,139,250,0.1)' : '1px solid transparent' };
+        var ch = [
+          React.createElement('svg', { key: 'i', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: isActive ? '#a78bfa' : '#71717a', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('path', { d: item.icon })),
+          React.createElement('span', { key: 't', style: { font: (isActive ? '500' : '400') + ' 13px Geist,system-ui', color: isActive ? '#c4b5fd' : '#a1a1aa' } }, item.label)
+        ];
+        if (item.count) ch.push(React.createElement('span', { key: 'c', style: { marginLeft: 'auto', font: '400 10px Geist Mono,monospace', color: isActive ? '#52525b' : '#3f3f46' } }, item.count));
+        if (item.badge) ch.push(React.createElement('div', { key: 'b', style: { marginLeft: 'auto', padding: '1px 6px', background: item.id === 'sync' ? '#f59e0b' : '#22c55e', borderRadius: 8, font: '600 9px Geist,system-ui', color: 'white' } }, item.badge));
+        return React.createElement('div', { key: item.id, style: s }, ch);
+      });
+      els.push(React.createElement('div', { key: 'nav', style: { padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 1 } }, [
+        React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Navigate'),
+        ...navEls
+      ]));
+      var pinned = [{ name: 'Codex', color: '#a78bfa', label: 'ai_agent' }, { name: 'OpenAI', color: '#fbbf24', label: 'org' }, { name: 'GPT-5', color: '#34d399', label: 'tech' }];
+      els.push(React.createElement('div', { key: 'pin', style: { padding: '0 8px', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 1 } }, [
+        React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Pinned Entities'),
+        ...pinned.map(function(p) { return React.createElement('div', { key: p.name, style: { display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6 } }, [React.createElement('div', { key: 'd', style: { width: 6, height: 6, borderRadius: '50%', background: p.color } }), React.createElement('span', { key: 'n', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa' } }, p.name), React.createElement('span', { key: 'l', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, p.label)]); })
+      ]));
+      els.push(React.createElement('div', { key: 'set', style: { marginTop: 'auto', padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: 8 } }, [
+        React.createElement('div', { key: 'a', style: { width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 10px Geist,system-ui', color: 'white' } }, 'S'),
+        React.createElement('span', { key: 't', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa', flex: 1 } }, 'Settings')
+      ]));
+      return React.createElement('div', { style: { width: 260, flexShrink: 0, background: '#0c0c0f', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column' } }, els);
+    };
+
+    // Background dots for vault setup
+    var bgDots = React.createElement('svg', { width: '100%', height: '100%', style: { position: 'absolute', inset: 0, zIndex: 1 } }, [
+      React.createElement('defs', { key: 'd' }, [React.createElement('pattern', { key: 'p', id: 'setupDots', x: 0, y: 0, width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, [React.createElement('circle', { key: 'c', cx: 12, cy: 12, r: 0.7, fill: 'rgba(255,255,255,0.03)' })])]),
+      React.createElement('rect', { key: 'r', width: '100%', height: '100%', fill: 'url(#setupDots)' })
+    ]);
+
+    return {
+      sidebarGraph: makeSidebar('graph'),
+      sidebarSync: makeSidebar('sync'),
+      graphMain: makeGraph(820, 780, { glow: 0.22, nodeR: 6, edgeAlpha: 0.05, labelAlpha: 0.5, labelSize: 10, glowR: 32 }),
+      graphPreview: makeGraph(780, 780, { glow: 0.18, nodeR: 6, edgeAlpha: 0.06, labelAlpha: 0.45, labelSize: 10, glowR: 28 }),
+      graphDimmed: makeGraph(940, 780, { glow: 0.08, nodeR: 5, edgeAlpha: 0.03, labelAlpha: 0.2, labelSize: 10, glowR: 20, dim: 0.4 }),
+      bgDots: bgDots,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

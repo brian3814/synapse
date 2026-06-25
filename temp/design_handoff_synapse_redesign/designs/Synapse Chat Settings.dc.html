@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="design-system/colors_and_type.css">
+</helmet>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<div style="position:absolute;left:80px;top:30px;width:700px">
+  <div style="font:700 22px/1.2 Geist,system-ui;color:rgba(240,238,235,0.92);letter-spacing:-0.03em">Synapse — Chat & Settings</div>
+  <div style="font:400 13px/1.5 Geist,system-ui;color:rgba(240,238,235,0.4);margin-top:4px">Chat as docked sidebar with agent tooling, and redesigned settings modal.</div>
+</div>
+
+<!-- ═══════════════════ 9. CHAT SIDEBAR (DOCKED) ═══════════════════ -->
+<div style="position:absolute;left:80px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">9 — Chat Sidebar (Docked)</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex">
+
+    {{ sidebarChat }}
+
+    <!-- Graph area -->
+    <div style="flex:1;position:relative;background:#07070a;min-width:0">
+      {{ graphMain }}
+      <!-- Controls -->
+      <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;background:rgba(9,9,11,0.75);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:4px 6px;z-index:2;backdrop-filter:blur(16px)">
+        <div style="display:flex;align-items:center;gap:3px;padding:3px 10px;border-radius:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.15)"><div style="width:6px;height:6px;border-radius:50%;background:#a78bfa;box-shadow:0 0 6px rgba(167,139,250,0.5)"></div><span style="font:500 10px Geist,system-ui;color:#c4b5fd">Entities</span></div>
+        <div style="display:flex;align-items:center;gap:3px;padding:3px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.04)"><div style="width:6px;height:6px;border-radius:50%;background:#38bdf8"></div><span style="font:500 10px Geist,system-ui;color:#71717a">Notes</span></div>
+        <div style="width:1px;height:14px;background:rgba(255,255,255,0.05)"></div>
+        <span style="font:400 10px Geist Mono,monospace;color:#3f3f46">12n · 23e</span>
+      </div>
+    </div>
+
+    <!-- Chat Sidebar (docked right) -->
+    <div style="width:360px;flex-shrink:0;border-left:1px solid rgba(255,255,255,0.04);display:flex;flex-direction:column;background:#0c0c0f">
+      <!-- Chat header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font:500 13px Geist,system-ui;color:#e4e4e7">What is Codex?</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <!-- Agent picker -->
+          <div style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:6px">
+            <div style="width:6px;height:6px;border-radius:50%;background:#22c55e"></div>
+            <span style="font:500 10px Geist,system-ui;color:#a1a1aa">Default</span>
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2.5"><path d="m6 9 6 6 6-6"></path></svg>
+          </div>
+          <!-- New chat -->
+          <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#52525b;cursor:pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg>
+          </div>
+          <!-- Undock -->
+          <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#52525b;cursor:pointer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="14" height="14" rx="2"></rect><path d="M6 18 4 20"></path><path d="M4 14v6h6"></path></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div style="flex:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:16px">
+        <!-- User message -->
+        <div style="display:flex;justify-content:flex-end">
+          <div style="max-width:85%;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:14px 14px 2px 14px;padding:10px 14px">
+            <span style="font:400 13px/1.5 Geist,system-ui;color:#c4b5fd">What is Codex and how does it relate to other technologies?</span>
+          </div>
+        </div>
+
+        <!-- Assistant response with tool calls -->
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <!-- Tool calls (collapsed) -->
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="m9 18 6-6-6-6"></path></svg>
+            <div style="display:flex;align-items:center;gap:4px">
+              <span style="padding:2px 6px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.12);border-radius:4px;font:500 9px Geist Mono,monospace;color:#f59e0b">search_knowledge</span>
+              <span style="padding:2px 6px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.12);border-radius:4px;font:500 9px Geist Mono,monospace;color:#f59e0b">get_neighbors</span>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:3px">
+              <span style="padding:2px 6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.12);border-radius:4px;font:500 9px Geist Mono,monospace;color:#22c55e">result</span>
+              <span style="padding:2px 6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.12);border-radius:4px;font:500 9px Geist Mono,monospace;color:#22c55e">result</span>
+            </div>
+          </div>
+
+          <!-- Response content -->
+          <div style="background:rgba(255,255,255,0.015);border-radius:14px 14px 14px 2px;padding:14px 16px">
+            <div style="font:400 13px/1.7 Geist,system-ui;color:#d4d4d8">
+              <span style="font-weight:600;color:#e4e4e7">Codex</span> is a code generation agent developed by
+              <span style="color:#e4e4e7;font-weight:500;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,0.35);text-underline-offset:3px">OpenAI</span>. It builds on
+              <span style="color:#e4e4e7;font-weight:500;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,0.35);text-underline-offset:3px">GPT-5</span> and enables
+              <span style="color:#e4e4e7;font-weight:500;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,0.35);text-underline-offset:3px">agent-first development</span> — a paradigm where AI agents write all code.
+            </div>
+
+            <div style="font:600 13px/1.4 Geist,system-ui;color:#e4e4e7;margin-top:14px">Key relationships</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:6px;font:400 12px/1.5 Geist,system-ui;color:#a1a1aa">
+                <div style="width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0"></div>
+                Uses <span style="color:#d4d4d8;font-weight:500">Chrome DevTools Protocol</span> for UI testing
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;font:400 12px/1.5 Geist,system-ui;color:#a1a1aa">
+                <div style="width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0"></div>
+                Monitors via <span style="color:#d4d4d8;font-weight:500">observability stack</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;font:400 12px/1.5 Geist,system-ui;color:#a1a1aa">
+                <div style="width:5px;height:5px;border-radius:50%;background:#60a5fa;flex-shrink:0"></div>
+                Follows <span style="color:#d4d4d8;font-weight:500">architectural layering</span>
+              </div>
+            </div>
+
+            <!-- Referenced entities -->
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.03)">
+              <span style="font:500 9px Geist,system-ui;color:#3f3f46;margin-right:4px;line-height:22px">Referenced:</span>
+              <div style="display:flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;cursor:pointer"><div style="width:4px;height:4px;border-radius:50%;background:#a78bfa"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">Codex</span></div>
+              <div style="display:flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;cursor:pointer"><div style="width:4px;height:4px;border-radius:50%;background:#fbbf24"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">OpenAI</span></div>
+              <div style="display:flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;cursor:pointer"><div style="width:4px;height:4px;border-radius:50%;background:#34d399"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">GPT-5</span></div>
+            </div>
+
+            <!-- Pin action -->
+            <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;cursor:pointer">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg>
+                <span style="font:400 10px Geist,system-ui;color:#71717a">Pin to graph</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;cursor:pointer">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <span style="font:400 10px Geist,system-ui;color:#71717a">Copy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Context chips + Input -->
+      <div style="border-top:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+        <!-- Attached context chips -->
+        <div style="display:flex;align-items:center;gap:4px;padding:6px 16px;border-bottom:1px solid rgba(255,255,255,0.03)">
+          <span style="font:500 9px Geist,system-ui;color:#3f3f46">Context:</span>
+          <div style="display:flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px">
+            <div style="width:4px;height:4px;border-radius:50%;background:#a78bfa"></div>
+            <span style="font:400 10px Geist,system-ui;color:#a1a1aa">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b;cursor:pointer">×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px">
+            <div style="width:4px;height:4px;border-radius:50%;background:#fbbf24"></div>
+            <span style="font:400 10px Geist,system-ui;color:#a1a1aa">OpenAI</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b;cursor:pointer">×</span>
+          </div>
+        </div>
+        <!-- Input -->
+        <div style="padding:10px 16px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="flex:1;height:36px;display:flex;align-items:center;padding:0 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px">
+              <span style="font:400 12px Geist,system-ui;color:#3f3f46">Ask about your graph... @ to mention</span>
+            </div>
+            <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#6366f1,#818cf8);border-radius:10px;color:white;flex-shrink:0;cursor:pointer">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </div>
+          </div>
+          <!-- Quick actions (empty state suggestion row) -->
+          <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
+            <div style="padding:4px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:14px;font:400 10px Geist,system-ui;color:#52525b;cursor:pointer">Find connections</div>
+            <div style="padding:4px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:14px;font:400 10px Geist,system-ui;color:#52525b;cursor:pointer">Summarize recent</div>
+            <div style="padding:4px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:14px;font:400 10px Geist,system-ui;color:#52525b;cursor:pointer">Find duplicates</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 9 — Annotation -->
+<div style="position:absolute;left:80px;top:910px;width:400px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(-0.5deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Chat sidebar (docked)</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Click "Chat" in sidebar or dock from FAB. Agent picker (Default/Custom), session name with dropdown. Tool calls collapsed with color-coded badges (amber = tool call, green = result). Entity links are underlined with type color. Referenced entities as clickable chips below response. "Pin to graph" saves answer as note. Context chips show attached entities above input. Quick action pills for common queries.</div>
+</div>
+
+<!-- ═══════════════════ 10. SETTINGS MODAL ═══════════════════ -->
+<div style="position:absolute;left:1400px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">10 — Settings Modal</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex;position:relative">
+
+    {{ sidebarGraph }}
+
+    <!-- Graph dimmed underneath -->
+    <div style="flex:1;position:relative;background:#07070a;min-width:0">
+      {{ graphDimmed }}
+    </div>
+
+    <!-- Overlay scrim (covers everything including sidebar) -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);z-index:10;backdrop-filter:blur(4px)"></div>
+
+    <!-- Settings modal (full-window centered) -->
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:760px;height:620px;z-index:11;background:rgba(14,14,17,0.97);border:1px solid rgba(255,255,255,0.06);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,0.6);backdrop-filter:blur(20px);display:flex;overflow:hidden">
+      <!-- Settings nav -->
+      <div style="width:170px;flex-shrink:0;border-right:1px solid rgba(255,255,255,0.04);padding:16px 8px;display:flex;flex-direction:column;gap:1px">
+        <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.06em;padding:4px 10px 8px">Settings</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;background:rgba(129,140,248,0.08);border:1px solid rgba(129,140,248,0.1)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path></svg>
+          <span style="font:500 12px Geist,system-ui;color:#c4b5fd">General</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21"></path></svg>
+          <span style="font:400 12px Geist,system-ui;color:#a1a1aa">Model</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect></svg>
+          <span style="font:400 12px Geist,system-ui;color:#a1a1aa">Agents</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+          <span style="font:400 12px Geist,system-ui;color:#a1a1aa">Billing</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span style="font:400 12px Geist,system-ui;color:#a1a1aa">About</span>
+        </div>
+      </div>
+
+      <!-- Settings content (General tab) -->
+      <div style="flex:1;overflow:hidden;padding:20px 24px;display:flex;flex-direction:column;gap:20px">
+        <!-- Close button -->
+        <div style="position:absolute;top:14px;right:14px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#52525b;cursor:pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </div>
+
+        <!-- Vault section -->
+        <div>
+          <div style="font:600 11px Geist,system-ui;color:#52525b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Vault</div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="width:36px;height:36px;background:rgba(167,139,250,0.08);border-radius:8px;display:flex;align-items:center;justify-content:center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div style="flex:1">
+              <div style="font:500 13px Geist,system-ui;color:#e4e4e7">notes</div>
+              <div style="font:400 10px Geist Mono,monospace;color:#52525b;margin-top:2px">/Users/you/Documents/notes</div>
+            </div>
+            <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:7px;font:500 10px Geist,system-ui;color:#a1a1aa;cursor:pointer">Switch vault</div>
+          </div>
+        </div>
+
+        <!-- Contextual relevance -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div>
+              <div style="font:500 13px Geist,system-ui;color:#e4e4e7">Contextual relevance</div>
+              <div style="font:400 11px Geist,system-ui;color:#52525b;margin-top:2px">Show related graph nodes while browsing</div>
+            </div>
+            <div style="width:36px;height:20px;background:#6366f1;border-radius:10px;position:relative">
+              <div style="position:absolute;top:2px;right:2px;width:16px;height:16px;background:white;border-radius:50%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Embeddings -->
+        <div>
+          <div style="font:600 11px Geist,system-ui;color:#52525b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Embeddings</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div>
+              <div style="font:500 13px Geist,system-ui;color:#e4e4e7">Semantic search</div>
+              <div style="font:400 11px Geist,system-ui;color:#52525b;margin-top:2px">ONNX local embeddings for vector similarity</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="padding:3px 8px;background:rgba(34,197,94,0.08);border-radius:5px;font:500 10px Geist,system-ui;color:#22c55e">Active</span>
+              <div style="width:36px;height:20px;background:#6366f1;border-radius:10px;position:relative">
+                <div style="position:absolute;top:2px;right:2px;width:16px;height:16px;background:white;border-radius:50%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reading list config -->
+        <div>
+          <div style="font:600 11px Geist,system-ui;color:#52525b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Reading List</div>
+          <div style="padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font:500 13px Geist,system-ui;color:#e4e4e7">Max parallel extractions</div>
+                <div style="font:400 11px Geist,system-ui;color:#52525b;margin-top:2px">Concurrent items during batch extraction</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <div style="width:48px;height:30px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:7px;font:500 13px Geist Mono,monospace;color:#e4e4e7">4</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- File import -->
+        <div>
+          <div style="font:600 11px Geist,system-ui;color:#52525b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">File Import</div>
+          <div style="padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font:500 13px Geist,system-ui;color:#e4e4e7">After importing files</div>
+              </div>
+              <div style="padding:5px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:7px;font:400 12px Geist,system-ui;color:#a1a1aa;display:flex;align-items:center;gap:6px">
+                Ask on import
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger zone -->
+        <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(239,68,68,0.1)">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font:500 13px Geist,system-ui;color:#ef4444">Clear all data</div>
+              <div style="font:400 11px Geist,system-ui;color:#52525b;margin-top:2px">Delete all nodes, edges, and notes. Cannot be undone.</div>
+            </div>
+            <div style="padding:6px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15);border-radius:7px;font:500 11px Geist,system-ui;color:#ef4444;cursor:pointer">Clear all</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 10 — Annotation -->
+<div style="position:absolute;left:1400px;top:910px;width:400px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.3deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Settings modal</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Glassmorphic modal over dimmed graph (sidebar stays visible). Left nav with icons matches the sidebar visual language. Card-based setting groups instead of raw form fields. Toggle switches for boolean settings. Vault info with icon + path. Danger zone separated at bottom with red border. Same tabs as current: General, Model, Agents, Billing, About.</div>
+</div>
+
+<!-- ═══════════════════ PATTERN POST-IT ═══════════════════ -->
+<div style="position:absolute;left:560px;top:910px;width:340px;background:#dbeafe;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.8deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#1e3a5f;margin-bottom:6px">Chat UX improvements</div>
+  <div style="font:400 11px/1.5 system-ui;color:#1e40af">
+    <b>Tool calls:</b> collapsed by default with badges, expandable<br>
+    <b>Entity refs:</b> color-coded chips below responses (clickable → graph)<br>
+    <b>Pin to graph:</b> saves answer as note node, auto-linked<br>
+    <b>Context chips:</b> show attached entities above input<br>
+    <b>Quick actions:</b> pill buttons for common queries<br>
+    <b>Agent picker:</b> switch between custom agent configs
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+class Component extends DCLogic {
+  renderVals() {
+    var nodes = [
+      { name: 'Codex', color: '#a78bfa', x: 48, y: 42 },
+      { name: 'OpenAI', color: '#fbbf24', x: 60, y: 72 },
+      { name: 'Ryan Lopopolo', color: '#f472b6', x: 78, y: 76 },
+      { name: 'GPT-5', color: '#34d399', x: 78, y: 48 },
+      { name: 'agent-first dev', color: '#60a5fa', x: 64, y: 32 },
+      { name: 'Chrome DevTools', color: '#34d399', x: 18, y: 52 },
+      { name: 'arch. layering', color: '#60a5fa', x: 72, y: 22 },
+      { name: 'observability', color: '#34d399', x: 50, y: 16 },
+      { name: 'repo knowledge', color: '#60a5fa', x: 22, y: 72 },
+      { name: 'agent legibility', color: '#60a5fa', x: 38, y: 64 },
+    ];
+    var edges = [[0,1],[0,3],[4,0],[5,0],[7,4],[6,4],[8,9],[9,4],[2,1]];
+
+    var makeGraph = function(w, h, opts) {
+      var glow = (opts && opts.glow) || 0.15, nodeR = (opts && opts.nodeR) || 5;
+      var ea = (opts && opts.edgeAlpha) || 0.08, la = (opts && opts.labelAlpha) || 0.6;
+      var ls = (opts && opts.labelSize) || 10, gr = (opts && opts.glowR) || 28;
+      var dim = (opts && opts.dim) || 1;
+      var sx = w / 100, sy = h / 100, ch = [];
+      var grads = nodes.map(function(n, i) { return React.createElement('radialGradient', { key: 'rg' + i, id: 'g' + i + '-' + w + (dim < 1 ? 'd' : ''), cx: '50%', cy: '50%', r: '50%' }, [React.createElement('stop', { key: 'a', offset: '0%', stopColor: n.color, stopOpacity: glow * dim }), React.createElement('stop', { key: 'b', offset: '100%', stopColor: n.color, stopOpacity: 0 })]); });
+      ch.push(React.createElement('defs', { key: 'd' }, grads));
+      ch.push(React.createElement('defs', { key: 'd2' }, [React.createElement('pattern', { key: 'p', id: 'dt' + w + (dim < 1 ? 'd' : ''), x: 0, y: 0, width: 20, height: 20, patternUnits: 'userSpaceOnUse' }, [React.createElement('circle', { key: 'c', cx: 10, cy: 10, r: 0.5, fill: 'rgba(255,255,255,' + (0.04 * dim) + ')' })])]));
+      ch.push(React.createElement('rect', { key: 'bg', width: w, height: h, fill: 'url(#dt' + w + (dim < 1 ? 'd' : '') + ')' }));
+      edges.forEach(function(e, i) { var f = nodes[e[0]], t = nodes[e[1]]; ch.push(React.createElement('line', { key: 'e' + i, x1: f.x*sx, y1: f.y*sy, x2: t.x*sx, y2: t.y*sy, stroke: 'rgba(255,255,255,' + (ea * dim) + ')', strokeWidth: 1 })); });
+      // Glow circles removed per feedback
+      nodes.forEach(function(n, i) { ch.push(React.createElement('circle', { key: 'n' + i, cx: n.x*sx, cy: n.y*sy, r: nodeR, fill: n.color, opacity: dim, style: { filter: 'drop-shadow(0 0 3px ' + n.color + '40)' } })); });
+      nodes.forEach(function(n, i) { ch.push(React.createElement('text', { key: 'l' + i, x: n.x*sx+nodeR+5, y: n.y*sy+4, fill: 'rgba(255,255,255,' + (la * dim) + ')', fontSize: ls, fontFamily: 'Geist,system-ui,sans-serif', fontWeight: 400 }, n.name)); });
+      return React.createElement('svg', { width: '100%', height: '100%', viewBox: '0 0 ' + w + ' ' + h, style: { position: 'absolute', inset: 0 }, preserveAspectRatio: 'xMidYMid slice' }, ch);
+    };
+
+    var navItems = [
+      { id: 'graph', label: 'Graph', count: '12', icon: 'M6 6a3 3 0 1 0 0 0M18 18a3 3 0 1 0 0 0M18 6a3 3 0 1 0 0 0M8.5 7.5L15.5 16.5M15.5 6L8.5 6' },
+      { id: 'notes', label: 'Notes', count: '3', icon: 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2zM14 2v6h6' },
+      { id: 'reading', label: 'Reading List', badge: '2', bc: '#22c55e', icon: 'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' },
+      { id: 'chat', label: 'Chat', icon: 'M3 21l1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z' },
+      { id: 'intelligence', label: 'Intelligence', icon: 'M12 3l-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z' },
+      { id: 'sync', label: 'Sync', badge: '3', bc: '#f59e0b', icon: 'M21.5 2v6h-6M2.5 22v-6h6' }
+    ];
+    var pinned = [{ name: 'Codex', color: '#a78bfa', l: 'ai_agent' }, { name: 'OpenAI', color: '#fbbf24', l: 'org' }, { name: 'GPT-5', color: '#34d399', l: 'tech' }];
+
+    var makeSidebar = function(activeItem) {
+      var els = [];
+      els.push(React.createElement('div', { key: 'logo', style: { padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 8 } }, [React.createElement('div', { key: 'm', style: { width: 22, height: 22, background: 'linear-gradient(135deg,#a78bfa,#c084fc)', borderRadius: 6 } }), React.createElement('div', { key: 't' }, [React.createElement('div', { key: 'n', style: { font: '600 14px Geist,system-ui', color: '#e8e5e0', letterSpacing: '-0.01em' } }, 'Synapse'), React.createElement('div', { key: 'v', style: { font: '400 10px Geist,system-ui', color: '#71717a', marginTop: 1 } }, 'notes vault')])]));
+      els.push(React.createElement('div', { key: 'srch', style: { padding: '0 12px 12px' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', height: 32, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 } }, [React.createElement('svg', { key: 'i', width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: '#52525b', strokeWidth: 2 }, [React.createElement('circle', { key: 'c', cx: 11, cy: 11, r: 8 }), React.createElement('line', { key: 'l', x1: 21, y1: 21, x2: 16.65, y2: 16.65 })]), React.createElement('span', { key: 'p', style: { font: '400 12px Geist,system-ui', color: '#3f3f46' } }, 'Search...'), React.createElement('span', { key: 'k', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, '\u2318K')])));
+      var ne = navItems.map(function(item) { var a = item.id === activeItem; var s = { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, background: a ? 'rgba(167,139,250,0.08)' : 'transparent', border: a ? '1px solid rgba(167,139,250,0.1)' : '1px solid transparent' }; var ch = [React.createElement('svg', { key: 'i', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: a ? '#a78bfa' : '#71717a', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('path', { d: item.icon })), React.createElement('span', { key: 't', style: { font: (a ? '500' : '400') + ' 13px Geist,system-ui', color: a ? '#c4b5fd' : '#a1a1aa' } }, item.label)]; if (item.count) ch.push(React.createElement('span', { key: 'c', style: { marginLeft: 'auto', font: '400 10px Geist Mono,monospace', color: a ? '#52525b' : '#3f3f46' } }, item.count)); if (item.badge) ch.push(React.createElement('div', { key: 'b', style: { marginLeft: 'auto', padding: '1px 6px', background: item.bc, borderRadius: 8, font: '600 9px Geist,system-ui', color: 'white' } }, item.badge)); return React.createElement('div', { key: item.id, style: s }, ch); });
+      els.push(React.createElement('div', { key: 'nav', style: { padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 1 } }, [React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Navigate'), ...ne]));
+      els.push(React.createElement('div', { key: 'pin', style: { padding: '0 8px', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 1 } }, [React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Pinned'), ...pinned.map(function(p) { return React.createElement('div', { key: p.name, style: { display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6 } }, [React.createElement('div', { key: 'd', style: { width: 6, height: 6, borderRadius: '50%', background: p.color } }), React.createElement('span', { key: 'n', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa' } }, p.name), React.createElement('span', { key: 'l', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, p.l)]); })]));
+      els.push(React.createElement('div', { key: 'set', style: { marginTop: 'auto', padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: 8 } }, [React.createElement('div', { key: 'a', style: { width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 10px Geist,system-ui', color: 'white' } }, 'S'), React.createElement('span', { key: 't', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa', flex: 1 } }, 'Settings')]));
+      return React.createElement('div', { style: { width: 260, flexShrink: 0, background: '#0c0c0f', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column' } }, els);
+    };
+
+    return {
+      sidebarChat: makeSidebar('chat'),
+      sidebarGraph: makeSidebar('graph'),
+      graphMain: makeGraph(680, 780, { glow: 0.22, nodeR: 6, edgeAlpha: 0.05, labelAlpha: 0.5, labelSize: 10, glowR: 32 }),
+      graphDimmed: makeGraph(940, 780, { glow: 0.08, nodeR: 5, edgeAlpha: 0.03, labelAlpha: 0.2, labelSize: 10, glowR: 20, dim: 0.4 }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

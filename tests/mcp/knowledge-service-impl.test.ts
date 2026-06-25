@@ -236,11 +236,10 @@ describe('DefaultKnowledgeService', () => {
       });
     });
 
-    it('returns error result when scope is "semantic" but embedding is unavailable', async () => {
-      const results = await service.search({ query: 'test', scope: 'semantic' });
-
-      expect(results).toHaveLength(1);
-      expect((results[0] as any).error).toBe('Semantic search requires embeddings to be enabled');
+    it('throws when scope is "semantic" but embedding is unavailable', async () => {
+      await expect(service.search({ query: 'test', scope: 'semantic' })).rejects.toThrow(
+        'Semantic search requires embeddings to be enabled',
+      );
     });
 
     it('resolves semantic search results to names/types', async () => {
