@@ -54,43 +54,20 @@ export const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   // 3.4 manage_entity
   {
     name: 'manage_entity',
-    description: 'Create, update, or delete entities. For create: label is the semantic type (person, concept, technology). For update: only specified fields change. Aliases and tags use replace semantics.',
+    description: 'Create, update, or delete entities. For create: requires name + label (semantic type like person, concept, technology). For update: requires entity_id, only specified fields change. For delete: requires entity_ids array. Aliases and tags use replace semantics.',
     inputSchema: {
-      oneOf: [
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'create' },
-            name: { type: 'string' },
-            label: { type: 'string', description: 'Semantic type (e.g. person, concept, technology).' },
-            properties: { type: 'object' },
-            aliases: { type: 'array', items: { type: 'string' } },
-            tags: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['action', 'name', 'label'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'update' },
-            entity_id: { type: 'string' },
-            name: { type: 'string' },
-            label: { type: 'string' },
-            properties: { type: 'object' },
-            aliases: { type: 'array', items: { type: 'string' } },
-            tags: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['action', 'entity_id'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'delete' },
-            entity_ids: { type: 'array', items: { type: 'string' }, minItems: 1 },
-          },
-          required: ['action', 'entity_ids'],
-        },
-      ],
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['create', 'update', 'delete'], description: 'Operation to perform.' },
+        entity_id: { type: 'string', description: 'Required for update.' },
+        entity_ids: { type: 'array', items: { type: 'string' }, description: 'Required for delete.' },
+        name: { type: 'string', description: 'Entity name (required for create).' },
+        label: { type: 'string', description: 'Semantic type e.g. person, concept, technology (required for create).' },
+        properties: { type: 'object', description: 'Key-value properties.' },
+        aliases: { type: 'array', items: { type: 'string' }, description: 'Full replacement list of alternate names. Omit to leave unchanged.' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Full replacement list of tags. Omit to leave unchanged.' },
+      },
+      required: ['action'],
     },
     annotations: { destructiveHint: true },
   },
@@ -98,39 +75,19 @@ export const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   // 3.5 manage_relationship
   {
     name: 'manage_relationship',
-    description: 'Create, update, or delete relationships between entities.',
+    description: 'Create, update, or delete relationships between entities. For create: requires source_id, target_id, label. For update: requires relationship_id. For delete: requires relationship_ids array.',
     inputSchema: {
-      oneOf: [
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'create' },
-            source_id: { type: 'string' },
-            target_id: { type: 'string' },
-            label: { type: 'string' },
-            type: { type: 'string' },
-          },
-          required: ['action', 'source_id', 'target_id', 'label'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'update' },
-            relationship_id: { type: 'string' },
-            label: { type: 'string' },
-            type: { type: 'string' },
-          },
-          required: ['action', 'relationship_id'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'delete' },
-            relationship_ids: { type: 'array', items: { type: 'string' }, minItems: 1 },
-          },
-          required: ['action', 'relationship_ids'],
-        },
-      ],
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['create', 'update', 'delete'], description: 'Operation to perform.' },
+        relationship_id: { type: 'string', description: 'Required for update/delete single.' },
+        relationship_ids: { type: 'array', items: { type: 'string' }, description: 'Required for delete.' },
+        source_id: { type: 'string', description: 'Source entity ID (required for create).' },
+        target_id: { type: 'string', description: 'Target entity ID (required for create).' },
+        label: { type: 'string', description: 'Relationship label e.g. works_at, related_to (required for create).' },
+        type: { type: 'string', description: 'Relationship category.' },
+      },
+      required: ['action'],
     },
     annotations: { destructiveHint: true },
   },
@@ -153,37 +110,16 @@ export const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   // 3.7 manage_note
   {
     name: 'manage_note',
-    description: 'Read, create, or update markdown notes.',
+    description: 'Read, create, or update markdown notes. For read: requires note_id. For create: requires title + content. For update: requires note_id, plus title and/or content to change.',
     inputSchema: {
-      oneOf: [
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'read' },
-            note_id: { type: 'string' },
-          },
-          required: ['action', 'note_id'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'create' },
-            title: { type: 'string' },
-            content: { type: 'string' },
-          },
-          required: ['action', 'title', 'content'],
-        },
-        {
-          type: 'object',
-          properties: {
-            action: { const: 'update' },
-            note_id: { type: 'string' },
-            title: { type: 'string' },
-            content: { type: 'string' },
-          },
-          required: ['action', 'note_id'],
-        },
-      ],
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['read', 'create', 'update'], description: 'Operation to perform.' },
+        note_id: { type: 'string', description: 'Required for read/update.' },
+        title: { type: 'string', description: 'Note title (required for create).' },
+        content: { type: 'string', description: 'Markdown content (required for create).' },
+      },
+      required: ['action'],
     },
   },
 
