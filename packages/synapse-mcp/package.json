@@ -7,7 +7,7 @@
     "synapse-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --outdir=dist --format=esm --banner:js=\"#!/usr/bin/env node\" --packages=external && esbuild ../../electron/embeddings/onnx-worker.ts --bundle --platform=node --outfile=dist/onnx-worker.cjs --format=cjs --packages=external && npm rebuild better-sqlite3",
+    "build": "node build.mjs && esbuild ../../electron/embeddings/onnx-worker.ts --bundle --platform=node --outfile=dist/onnx-worker.cjs --format=cjs --packages=external && npm rebuild better-sqlite3",
     "pack": "npm run build && npx @anthropic-ai/mcpb pack",
     "dev": "tsx src/index.ts"
   },
