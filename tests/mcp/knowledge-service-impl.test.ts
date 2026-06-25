@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultKnowledgeService } from '../../src/mcp/knowledge-service-impl';
 import type { CommandContext, CommandEvent } from '../../src/commands/types';
 import type { DbNode, DbEdge } from '../../src/shared/types';
+import * as graphCommands from '../../src/commands/graph-commands';
+import * as noteCommands from '../../src/commands/note-commands';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -193,6 +195,10 @@ describe('DefaultKnowledgeService', () => {
     service = new DefaultKnowledgeService(ctx);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   // ── Search ──────────────────────────────────────────────────────────
 
   describe('search', () => {
@@ -280,9 +286,16 @@ describe('DefaultKnowledgeService', () => {
 
   describe('createEntity', () => {
     it('delegates to graphCommands.createNode and returns effects', async () => {
-      const node = makeDbNode({ id: 'new-1', name: 'Machine Learning', label: 'concept' });
-      // Mock the underlying db.nodes.create which graphCommands.createNode calls
-      (ctx.db.nodes.create as any).mockResolvedValue(node);
+      const mockDbNode = makeDbNode({ id: 'new-1', name: 'Machine Learning', label: 'concept' });
+      const mockGraphNode = {
+        id: 'new-1', name: 'Machine Learning', type: 'entity', label: 'concept',
+        identifier: null, summary: null, properties: {}, size: 1,
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      };
+      const createNodeSpy = vi.spyOn(graphCommands, 'createNode').mockResolvedValue({
+        data: mockGraphNode,
+        events: [{ type: 'node_created', node: mockDbNode }],
+      });
 
       const result = await service.createEntity({
         name: 'Machine Learning',
@@ -290,12 +303,11 @@ describe('DefaultKnowledgeService', () => {
         properties: { domain: 'AI' },
       });
 
-      expect(ctx.db.nodes.create).toHaveBeenCalled();
-      // Verify the create call was for type 'entity'
-      const createCall = (ctx.db.nodes.create as any).mock.calls[0][0];
-      expect(createCall.type).toBe('entity');
-      expect(createCall.name).toBe('Machine Learning');
-      expect(createCall.label).toBe('concept');
+      expect(createNodeSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        type: 'entity',
+        name: 'Machine Learning',
+        label: 'concept',
+      }));
 
       expect(result.data).toMatchObject({
         id: 'new-1',
@@ -306,8 +318,16 @@ describe('DefaultKnowledgeService', () => {
     });
 
     it('sets tags after creation if provided', async () => {
-      const node = makeDbNode({ id: 'new-2', name: 'Test' });
-      (ctx.db.nodes.create as any).mockResolvedValue(node);
+      const mockDbNode = makeDbNode({ id: 'new-2', name: 'Test' });
+      const mockGraphNode = {
+        id: 'new-2', name: 'Test', type: 'entity', label: 'concept',
+        identifier: null, summary: null, properties: {}, size: 1,
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      };
+      vi.spyOn(graphCommands, 'createNode').mockResolvedValue({
+        data: mockGraphNode,
+        events: [{ type: 'node_created', node: mockDbNode }],
+      });
 
       await service.createEntity({
         name: 'Test',
@@ -319,8 +339,16 @@ describe('DefaultKnowledgeService', () => {
     });
 
     it('adds aliases after creation if provided', async () => {
-      const node = makeDbNode({ id: 'new-3', name: 'Test' });
-      (ctx.db.nodes.create as any).mockResolvedValue(node);
+      const mockDbNode = makeDbNode({ id: 'new-3', name: 'Test' });
+      const mockGraphNode = {
+        id: 'new-3', name: 'Test', type: 'entity', label: 'concept',
+        identifier: null, summary: null, properties: {}, size: 1,
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      };
+      vi.spyOn(graphCommands, 'createNode').mockResolvedValue({
+        data: mockGraphNode,
+        events: [{ type: 'node_created', node: mockDbNode }],
+      });
 
       await service.createEntity({
         name: 'Test',
@@ -353,13 +381,15 @@ describe('DefaultKnowledgeService', () => {
 
   describe('deleteEntities', () => {
     it('deletes multiple entities and collects effects', async () => {
-      // deleteNode calls getGraphSnapshot and then db.nodes.delete
-      (ctx.getGraphSnapshot as any).mockResolvedValue({ nodes: [], edges: [] });
-      (ctx.db.nodes.delete as any).mockResolvedValue(true);
+      const deleteNodeSpy = vi.spyOn(graphCommands, 'deleteNode')
+        .mockResolvedValueOnce({ data: true, events: [{ type: 'node_deleted', node: makeDbNode({ id: 'n1' }) }] })
+        .mockResolvedValueOnce({ data: true, events: [{ type: 'node_deleted', node: makeDbNode({ id: 'n2' }) }] });
 
       const result = await service.deleteEntities(['n1', 'n2']);
 
-      expect(ctx.db.nodes.delete).toHaveBeenCalledTimes(2);
+      expect(deleteNodeSpy).toHaveBeenCalledTimes(2);
+      expect(deleteNodeSpy).toHaveBeenCalledWith(expect.anything(), 'n1');
+      expect(deleteNodeSpy).toHaveBeenCalledWith(expect.anything(), 'n2');
       expect(result.data.deleted).toBe(2);
       expect(result.effects.nodeIds).toContain('n1');
       expect(result.effects.nodeIds).toContain('n2');
@@ -370,8 +400,16 @@ describe('DefaultKnowledgeService', () => {
 
   describe('effect extraction', () => {
     it('extracts node and edge IDs from CommandEvents', async () => {
-      const node = makeDbNode({ id: 'eff-1' });
-      (ctx.db.nodes.create as any).mockResolvedValue(node);
+      const mockDbNode = makeDbNode({ id: 'eff-1' });
+      const mockGraphNode = {
+        id: 'eff-1', name: 'Test', type: 'entity', label: 'concept',
+        identifier: null, summary: null, properties: {}, size: 1,
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      };
+      vi.spyOn(graphCommands, 'createNode').mockResolvedValue({
+        data: mockGraphNode,
+        events: [{ type: 'node_created', node: mockDbNode }],
+      });
 
       const result = await service.createEntity({ name: 'Test', label: 'concept' });
 
@@ -385,16 +423,16 @@ describe('DefaultKnowledgeService', () => {
 
   describe('createNote', () => {
     it('delegates to noteCommands.saveNote', async () => {
-      // saveNote internally calls graphCommands.createNode
-      const noteNode = makeDbNode({ id: 'note-new', name: 'My Note', type: 'note' });
-      (ctx.db.nodes.create as any).mockResolvedValue(noteNode);
+      const saveNoteSpy = vi.spyOn(noteCommands, 'saveNote').mockResolvedValue({ nodeId: 'note-new' });
 
       const result = await service.createNote('My Note', 'Some content');
 
-      // It should have called db.nodes.create with type 'note'
-      const createCall = (ctx.db.nodes.create as any).mock.calls[0][0];
-      expect(createCall.type).toBe('note');
-      expect(createCall.name).toBe('My Note');
+      expect(saveNoteSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        nodeId: null,
+        name: 'My Note',
+        content: 'Some content',
+        isNew: true,
+      }));
 
       expect(result.data).toMatchObject({
         id: 'note-new',
@@ -408,11 +446,34 @@ describe('DefaultKnowledgeService', () => {
     it('delegates to noteCommands.saveNote with isNew=false', async () => {
       const noteNode = makeDbNode({ id: 'note-1', name: 'Existing Note', type: 'note' });
       (ctx.db.nodes.getById as any).mockResolvedValue(noteNode);
-      (ctx.db.nodes.update as any).mockResolvedValue(noteNode);
+      (ctx.notes.read as any).mockResolvedValue('existing body');
+      const saveNoteSpy = vi.spyOn(noteCommands, 'saveNote').mockResolvedValue({ nodeId: 'note-1' });
 
       const result = await service.updateNote('note-1', { title: 'Updated', content: 'new content' });
 
+      expect(saveNoteSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        nodeId: 'note-1',
+        name: 'Updated',
+        content: 'new content',
+        isNew: false,
+      }));
       expect(result.data).toMatchObject({ id: 'note-1', action: 'updated' });
+    });
+
+    it('preserves existing content when only title is updated', async () => {
+      const noteNode = makeDbNode({ id: 'note-2', name: 'Old Title', type: 'note' });
+      (ctx.db.nodes.getById as any).mockResolvedValue(noteNode);
+      (ctx.notes.read as any).mockResolvedValue('preserved body text');
+      const saveNoteSpy = vi.spyOn(noteCommands, 'saveNote').mockResolvedValue({ nodeId: 'note-2' });
+
+      await service.updateNote('note-2', { title: 'New Title' });
+
+      expect(saveNoteSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        nodeId: 'note-2',
+        name: 'New Title',
+        content: 'preserved body text',
+        isNew: false,
+      }));
     });
   });
 

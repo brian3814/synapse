@@ -509,7 +509,7 @@ export class DefaultKnowledgeService implements KnowledgeService {
     }
 
     const title = updates.title ?? node.name;
-    const content = updates.content ?? '';
+    const content = updates.content ?? await this.ctx.notes.read(note_id) ?? '';
 
     await saveNote(this.ctx, {
       nodeId: note_id,
