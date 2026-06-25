@@ -42,23 +42,22 @@ export function MCPTab() {
     });
   }, []);
 
-  const httpConfig = JSON.stringify({
+  const vault = vaultPath ?? '/path/to/vault';
+
+  const claudeDesktopConfig = JSON.stringify({
     mcpServers: {
       synapse: {
-        url: 'http://127.0.0.1:19876/mcp',
+        command: 'npx',
+        args: ['synapse-kg', '--vault', vault, '--allow-write'],
       },
     },
   }, null, 2);
 
-  const stdioConfig = JSON.stringify({
+  const claudeCodeConfig = JSON.stringify({
     mcpServers: {
       synapse: {
         command: 'npx',
-        args: [
-          'synapse-kg',
-          '--vault', vaultPath ?? '/path/to/vault',
-          '--allow-write',
-        ],
+        args: ['synapse-kg', '--vault', vault, '--allow-write'],
       },
     },
   }, null, 2);
@@ -69,7 +68,7 @@ export function MCPTab() {
         <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">MCP Connection</h3>
         <p className="text-xs text-zinc-500 mt-1">
           Connect Claude Desktop, Claude Code, Codex, or any MCP client to this vault.
-          Copy a config block below and merge it into your client's MCP config file.
+          Copy the config below and merge it into your client's MCP config file.
         </p>
       </div>
 
@@ -85,26 +84,31 @@ export function MCPTab() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-sm text-zinc-200 font-medium">App Running</span>
+            <span className="text-sm text-zinc-200 font-medium">Claude Desktop</span>
           </div>
           <p className="text-xs text-zinc-500 mb-3">
-            Connects directly to the running Synapse app. Zero setup — tools are available as long as the app is open with a vault.
+            Add to <code className="text-zinc-400">~/Library/Application Support/Claude/claude_desktop_config.json</code>
           </p>
-          <CopyBlock label="Add to claude_desktop_config.json or .claude.json" config={httpConfig} />
+          <CopyBlock label="claude_desktop_config.json" config={claudeDesktopConfig} />
         </div>
 
         <div className="border-t border-zinc-800 pt-5">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="text-sm text-zinc-200 font-medium">Headless</span>
+            <span className="text-sm text-zinc-200 font-medium">Claude Code / Codex / Cursor</span>
           </div>
           <p className="text-xs text-zinc-500 mb-3">
-            Runs independently — no app needed. Connects directly to the vault's SQLite database.
-            Works with Claude Code, Codex, Cursor, and any stdio MCP client.
+            Add to <code className="text-zinc-400">.claude.json</code> (Claude Code) or <code className="text-zinc-400">.cursor/mcp.json</code> (Cursor)
           </p>
-          <CopyBlock label="Add to claude_desktop_config.json, .claude.json, or .cursor/mcp.json" config={stdioConfig} />
+          <CopyBlock label=".claude.json / .cursor/mcp.json" config={claudeCodeConfig} />
         </div>
       </div>
+
+      {!vaultPath && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/20 border border-amber-800/40 rounded text-xs text-amber-400">
+          Open a vault first — the config will auto-fill with the vault path.
+        </div>
+      )}
 
       <div className="border-t border-zinc-800 pt-5">
         <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-2">Available Tools</h3>
