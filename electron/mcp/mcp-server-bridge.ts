@@ -3,11 +3,19 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { IToolRegistry, McpServerExposedConfig, ToolFilter } from './types';
+import type { KnowledgeService } from '../../src/mcp/knowledge-service';
+import { ProfilePolicy, loadProfileFromFile } from '../../src/mcp/authorization';
+import { createSynapseMcpServer } from '../../src/mcp/server';
+import * as path from 'path';
 
 export interface McpBridgeOptions {
   registry: IToolRegistry;
   config: McpServerExposedConfig;
   onGraphMutated?: (nodeIds?: string[], edgeIds?: string[]) => void;
+  /** When set, MCP HTTP requests use the shared KnowledgeService path. */
+  knowledgeService?: KnowledgeService;
+  /** Vault path — needed to load profile config per request. */
+  vaultPath?: string;
 }
 
 const WRITE_TOOL_NAMES = new Set([
@@ -22,11 +30,15 @@ export class McpServerBridge {
   private config: McpServerExposedConfig;
   private registry: IToolRegistry;
   private onGraphMutated?: (nodeIds?: string[], edgeIds?: string[]) => void;
+  private knowledgeService?: KnowledgeService;
+  private vaultPath?: string;
 
   constructor(opts: McpBridgeOptions) {
     this.registry = opts.registry;
     this.config = opts.config;
     this.onGraphMutated = opts.onGraphMutated;
+    this.knowledgeService = opts.knowledgeService;
+    this.vaultPath = opts.vaultPath;
   }
 
   private getFilter(): ToolFilter {
@@ -46,7 +58,11 @@ export class McpServerBridge {
     };
   }
 
-  private createServer(): Server {
+  /**
+   * Create a legacy Server backed by IToolRegistry (used when knowledgeService
+   * is not configured, or as fallback).
+   */
+  private createLegacyServer(): Server {
     const server = new Server(
       { name: 'synapse', version: '1.0.0' },
       { capabilities: { tools: {} } },
@@ -99,10 +115,38 @@ export class McpServerBridge {
     return server;
   }
 
+  /**
+   * Create a Server backed by the shared KnowledgeService.
+   * Profile is loaded from disk per-request for dynamic reload.
+   */
+  private createKnowledgeServer(profileName: string): Server {
+    const configPath = path.join(this.vaultPath!, '.synapse', 'mcp-server.json');
+    const profileConfig = loadProfileFromFile(configPath, profileName);
+    const policy = new ProfilePolicy(profileConfig);
+
+    return createSynapseMcpServer(
+      this.knowledgeService!,
+      policy,
+      (effects) => {
+        this.onGraphMutated?.(effects.nodeIds, effects.edgeIds);
+      },
+    );
+  }
+
+  private createServer(req?: IncomingMessage): Server {
+    // When knowledgeService is available, use the new shared path
+    if (this.knowledgeService && this.vaultPath) {
+      const profileName = req?.headers?.['x-synapse-profile'] as string | undefined;
+      return this.createKnowledgeServer(profileName ?? 'default');
+    }
+    // Fallback to legacy registry-based server
+    return this.createLegacyServer();
+  }
+
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // SDK v1.29+ requires a fresh transport per request in stateless mode
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    const server = this.createServer();
+    const server = this.createServer(req);
     await server.connect(transport);
     try {
       await transport.handleRequest(req, res);
