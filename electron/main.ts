@@ -31,6 +31,7 @@ import { createMainProcessContext } from './mcp/main-process-context';
 import { McpClientManager } from './mcp/mcp-client-manager';
 import { loadMcpClientConfig, loadMcpServerConfig } from './mcp/mcp-config';
 import { McpServerBridge } from './mcp/mcp-server-bridge';
+import { DefaultKnowledgeService } from '../src/mcp/knowledge-service-impl';
 import { initArtifactHandlers, registerArtifactIPC, createArtifactCore, updateArtifactCore } from './main/artifact-handlers';
 import * as artifactQueries from '../src/db/worker/queries/artifact-queries';
 import { EntityFileService } from './entity-files/entity-file-service';
@@ -725,6 +726,9 @@ app.whenReady().then(() => {
     toolRegistry.registerProvider(new BuiltinToolProvider(mainCtx));
     toolRegistry.onToolsChanged(() => broadcastToolsChanged());
 
+    // KnowledgeService — shared domain layer for the new MCP tool surface
+    const knowledgeService = new DefaultKnowledgeService(mainCtx);
+
     // MCP Client — connect to configured external servers
     const globalConfigPath = path.join(app.getPath('userData'), 'mcp-config.json');
     const vaultConfigPath = path.join(ctx.path, '.synapse', 'mcp.json');
@@ -756,6 +760,8 @@ app.whenReady().then(() => {
       mcpServerBridge = new McpServerBridge({
         registry: toolRegistry,
         config: { ...serverConfig, enabled: true },
+        knowledgeService,
+        vaultPath: ctx.path,
         onGraphMutated: (nodeIds?: string[], edgeIds?: string[]) => {
           const windows = BrowserWindow.getAllWindows();
           console.log(`[MCP] Graph mutated, broadcasting reset to ${windows.length} window(s)`);

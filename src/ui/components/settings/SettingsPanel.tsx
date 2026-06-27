@@ -11,6 +11,7 @@ import { EmbeddingSettings } from './EmbeddingSettings';
 import { VaultSandboxSection } from './VaultSandboxSection';
 import type { SettingsTab } from './SettingsModal';
 import { AgentAssignmentsTab } from './AgentAssignmentsTab';
+import { MCPTab } from './MCPTab';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
@@ -95,6 +96,10 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
 
   if (activeTab === 'agents') {
     return <AgentAssignmentsTab />;
+  }
+
+  if (activeTab === 'mcp') {
+    return <MCPTab />;
   }
 
   if (activeTab === 'model') {

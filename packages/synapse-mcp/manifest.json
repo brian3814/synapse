@@ -1,11 +1,11 @@
 {
-  "mcpb_version": "0.1",
-  "name": "synapse",
+  "manifest_version": "0.3",
+  "name": "synapse-kg",
   "display_name": "Synapse Knowledge Graph",
-  "version": "0.1.0",
-  "description": "Connect Claude to your Synapse knowledge graph. Search, create, and manage entities, notes, and relationships.",
+  "version": "0.8.0",
+  "description": "Connect Claude to your Synapse knowledge graph. Search, create, and analyze entities, relationships, and notes with graph intelligence.",
   "author": {
-    "name": "Synapse"
+    "name": "brian3814"
   },
   "server": {
     "type": "node",
@@ -18,28 +18,19 @@
   "user_config": {
     "vault_path": {
       "type": "directory",
-      "required": true,
-      "description": "Path to your Synapse vault (the folder containing .synapse/graph.db)"
+      "title": "Vault Path",
+      "description": "Path to your Synapse vault (the folder containing .synapse/graph.db)",
+      "required": true
     }
   },
   "tools": [
-    { "name": "list_vaults", "description": "List connected vaults" },
-    { "name": "search_nodes", "description": "Search entities by name" },
-    { "name": "get_node_details", "description": "Get full details of a node" },
-    { "name": "get_neighbors", "description": "Traverse graph relationships" },
-    { "name": "get_graph_overview", "description": "Graph statistics and recent activity" },
-    { "name": "get_subgraph", "description": "Extract a subgraph around a node" },
-    { "name": "get_nodes_by_type", "description": "Filter nodes by type" },
-    { "name": "read_note", "description": "Read note markdown content" },
-    { "name": "list_notes", "description": "List all notes" },
-    { "name": "search_notes", "description": "Full-text search in notes" },
-    { "name": "find_similar_entities", "description": "Find potential duplicate entities" },
-    { "name": "create_node", "description": "Create a new entity" },
-    { "name": "update_node", "description": "Update an existing entity" },
-    { "name": "delete_node", "description": "Delete a node and its edges" },
-    { "name": "create_edge", "description": "Create a relationship" },
-    { "name": "delete_edge", "description": "Delete a relationship" },
-    { "name": "create_note", "description": "Create a note with content" },
-    { "name": "merge_nodes", "description": "Merge duplicate entities" }
+    { "name": "search", "description": "Search entities, notes, and sources with relevance scoring" },
+    { "name": "get_entity", "description": "Get complete entity details: properties, relationships, aliases, tags" },
+    { "name": "get_neighbors", "description": "Traverse the graph from a starting entity" },
+    { "name": "manage_entity", "description": "Create, update, or delete entities" },
+    { "name": "manage_relationship", "description": "Create, update, or delete relationships" },
+    { "name": "merge_entities", "description": "Merge duplicate entities with edge transfer" },
+    { "name": "manage_note", "description": "Read, create, or update markdown notes" },
+    { "name": "analyze_graph", "description": "Graph intelligence: overview, health, centrality, orphans, paths" }
   ]
 }

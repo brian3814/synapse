@@ -61,8 +61,8 @@ Synapse is the **harness layer** — it takes the LLM wiki's "paste → extract 
 | **Graph Renderer** | Three.js (custom InstancedMesh) | 1-2 draw calls for 100k+ nodes. Web Worker force layout (Barnes-Hut O(n log n)) |
 | **LLM Extraction** | Anthropic (agentic), OpenAI | Three modes: page extraction with DOM tools, text extraction, file ingestion |
 | **Extraction Review** | React + Zustand | Visual diff with merge recommendations, undo/redo, inline editing |
-| **Chat Agent** | Tool-use loop | RAG retrieval (FTS5 + vector hybrid), 30+ graph tools, agent memory |
-| **MCP Server** | HTTP (companion server) + stdio CLI | Exposes graph as 18 MCP tools to external agents. Write-gated. |
+| **Chat Agent** | Tool-use loop | RAG retrieval (FTS5 + vector hybrid), graph tools, agent memory |
+| **MCP Server** | HTTP + stdio (shared core) | 8 consolidated tools with action-level authorization. Profile-based access control. |
 | **MCP Client** | stdio child processes | Connect to external MCP servers (GitHub, Notion, etc.) |
 | **Vector Search** | sqlite-vec + ONNX/OpenAI | Semantic similarity search, hybrid retrieval with RRF fusion |
 | **Platform Layer** | 6 interfaces | Shared codebase between Electron (primary) and Chrome extension (deprecated) |
@@ -71,22 +71,57 @@ Synapse is the **harness layer** — it takes the LLM wiki's "paste → extract 
 
 Synapse is both an **MCP server** (exposing graph tools) and an **MCP client** (consuming external servers).
 
-**As a server**, any MCP-compatible agent (Claude Code, Cursor, custom agents) can search, create, and traverse the graph:
+**As a server**, any MCP-compatible agent (Claude Desktop, Claude Code, Codex, Cursor) can search, create, and analyze the graph through 8 consolidated tools:
 
-```bash
-# Install as Claude Desktop Extension
-npx @anthropic-ai/mcpb publish packages/synapse-mcp/
+| Tool | Description |
+|------|-------------|
+| `search` | Find entities, notes, and sources with relevance scoring |
+| `get_entity` | Full entity details: properties, relationships, aliases, tags |
+| `get_neighbors` | Traverse the graph from a starting entity |
+| `manage_entity` | Create, update, or delete entities |
+| `manage_relationship` | Create, update, or delete relationships |
+| `merge_entities` | Deduplicate entities with edge transfer |
+| `manage_note` | Read, create, or update markdown notes |
+| `analyze_graph` | Graph intelligence: overview, health, centrality, orphans, paths |
 
-# Or configure in Claude Code .mcp.json
+**Connect Claude Desktop** (stdio):
+```json
 {
-  "synapse": {
-    "command": "node",
-    "args": ["packages/synapse-mcp/dist/index.js", "--allow-write"]
+  "mcpServers": {
+    "synapse": {
+      "command": "npx",
+      "args": ["synapse-kg", "--vault", "/path/to/vault", "--allow-write"]
+    }
   }
 }
 ```
 
-Tools exposed: `search_nodes`, `create_node`, `create_edge`, `get_neighbors`, `get_subgraph`, `merge_nodes`, `create_note`, `read_note`, and 10 more.
+**Connect Claude Code** (same config in `.claude.json`):
+```json
+{
+  "mcpServers": {
+    "synapse": {
+      "command": "npx",
+      "args": ["synapse-kg", "--vault", "/path/to/vault", "--allow-write"]
+    }
+  }
+}
+```
+
+**Or use the app's built-in HTTP server** (requires Synapse running with a vault open):
+```json
+{
+  "mcpServers": {
+    "synapse": {
+      "url": "http://127.0.0.1:19876/mcp"
+    }
+  }
+}
+```
+
+The Settings MCP tab shows the exact config with your vault path pre-filled — just copy and paste.
+
+**Access control**: Profiles in `.synapse/mcp-server.json` control which tools and actions each agent can use (read-only, editor, full access).
 
 ### Chrome Extension (Deprecated)
 
@@ -139,11 +174,17 @@ On first launch, create or open a **vault** — a folder that contains your grap
 2. Optionally configure OpenAI for embeddings (semantic search)
 3. Start extracting from URLs, pasted text, or dropped files
 
-### MCP Server (for Claude Code / IDE integration)
+### MCP Server (for Claude Desktop / Claude Code / Codex)
 
 ```bash
 npm run build:mcp
-# Then add to your .mcp.json (see MCP Integration above)
+
+# Option 1: Use npx (after npm publish)
+# Add to claude_desktop_config.json — see MCP Integration above
+
+# Option 2: Build MCPB bundle for Claude Desktop single-click install
+npm run bundle --prefix packages/synapse-mcp
+# Output: packages/synapse-mcp/synapse-mcp.mcpb
 ```
 
 ## Tech Stack

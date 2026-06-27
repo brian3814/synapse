@@ -4,6 +4,30 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-26
+
+### Added
+- MCP shared core: unified `KnowledgeService` with one implementation for both Electron and standalone CLI — replaces dual codebases with a single shared server
+- 8 consolidated MCP tools (`search`, `get_entity`, `get_neighbors`, `manage_entity`, `manage_relationship`, `merge_entities`, `manage_note`, `analyze_graph`) with snake_case naming, down from 30+ separate tools
+- Action-level authorization via `ProfilePolicy`: per-profile capabilities (`read`/`write`), tool blocking, and action blocking (e.g. allow `manage_note:read` but block `manage_note:create`)
+- Graph intelligence analyses via `analyze_graph` tool: overview, health, centrality, orphans, shortest paths
+- MCP Settings tab: copy-to-clipboard connection configs for Claude Desktop, Claude Code, Codex, and Cursor with auto-filled vault path
+- MCPB bundle support (`npm run bundle`) for single-click Claude Desktop installation
+- Input validation layer with descriptive error messages per tool and action
+- Structured mutation effects: all write operations return `{ nodeIds, edgeIds }` for targeted embedding updates and UI sync
+- 135 MCP tests across 5 test suites covering authorization, validation, service delegation, and end-to-end integration
+
+### Changed
+- Standalone MCP CLI (`packages/synapse-mcp`) reduced from 1075 to 535 lines — inline tool definitions replaced with shared `DefaultKnowledgeService`
+- MCP server bridge supports dual path: new `KnowledgeService` for external MCP clients, legacy `ToolRegistry` for built-in chat agent (Phase 1 coexistence)
+- CLI package renamed from `synapse-mcp` to `synapse-kg` for npm publishing
+- Entity mutations via MCP always set `DbNode.type = 'entity'`; external `label` field maps to `DbNode.label` (semantic type like person, concept, technology)
+- Merge operations run in `BEGIN IMMEDIATE` transaction with rollback on failure
+
+### Fixed
+- `oneOf` JSON schemas silently rejected by Claude Desktop — flattened to `type: "object"` with action enum
+- `updateNote` silently dropped content when only title was updated — now reads existing content before saving
+
 ## [0.8.0] - 2026-06-24
 
 ### Added

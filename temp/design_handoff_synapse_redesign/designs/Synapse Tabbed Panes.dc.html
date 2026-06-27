@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="design-system/colors_and_type.css">
+</helmet>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<div style="position:absolute;left:80px;top:30px;width:700px">
+  <div style="font:700 22px/1.2 Geist,system-ui;color:rgba(240,238,235,0.92);letter-spacing:-0.03em">Synapse — Tabbed Right Pane</div>
+  <div style="font:400 13px/1.5 Geist,system-ui;color:rgba(240,238,235,0.4);margin-top:4px">During extraction review or entity sync, the right pane supports tabs — browse notes, files, or graph preview without leaving the workflow.</div>
+</div>
+
+<!-- ═══════════════════ 5a. EXTRACTION REVIEW — NOTE OPEN ═══════════════════ -->
+<div style="position:absolute;left:80px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">5a — Extraction Review + Note Open</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex">
+
+    {{ sidebarGraph }}
+
+    <!-- Split: Review list left, Tabbed right pane -->
+    <div style="flex:1;display:flex;min-width:0">
+
+      <!-- Left: Extraction review (pinned) -->
+      <div style="width:400px;flex-shrink:0;display:flex;flex-direction:column;background:#0c0c0f;border-right:1px solid rgba(255,255,255,0.03)">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <span style="font:600 14px Geist,system-ui;color:#e4e4e7">Review Extraction</span>
+          <span style="margin-left:auto;font:400 10px Geist,system-ui;color:#52525b">openai.com</span>
+        </div>
+        <!-- Toolbar -->
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <div style="display:flex;background:rgba(255,255,255,0.03);border-radius:7px;padding:2px">
+            <div style="padding:4px 10px;border-radius:5px;background:rgba(129,140,248,0.1);font:500 10px Geist,system-ui;color:#818cf8">All</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Entities</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Edges</div>
+            <div style="padding:4px 10px;border-radius:5px;font:400 10px Geist,system-ui;color:#52525b">Notes</div>
+          </div>
+        </div>
+        <!-- Entity list -->
+        <div style="flex:1;overflow:hidden;padding:8px 12px;display:flex;flex-direction:column;gap:3px">
+          <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em;padding:6px 4px 3px">Entities (10)</div>
+          <!-- Selected entity - highlighted to show which note we're viewing -->
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.12);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#e4e4e7;flex:1">Codex</span>
+            <span style="padding:2px 6px;background:rgba(167,139,250,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#a78bfa">ai_agent</span>
+            <span style="padding:2px 6px;background:rgba(34,197,94,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#22c55e">new</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">OpenAI</span>
+            <span style="padding:2px 6px;background:rgba(251,191,36,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#fbbf24">org</span>
+            <span style="padding:2px 6px;background:rgba(129,140,248,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#818cf8">merge</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#f472b6;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">Ryan Lopopolo</span>
+            <span style="padding:2px 6px;background:rgba(244,114,182,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#f472b6">person</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0"></div>
+            <span style="font:500 12px Geist,system-ui;color:#d4d4d8;flex:1">GPT-5</span>
+            <span style="padding:2px 6px;background:rgba(52,211,153,0.1);border-radius:5px;font:500 9px Geist,system-ui;color:#34d399">tech</span>
+          </div>
+          <div style="font:600 10px Geist,system-ui;color:#3f3f46;text-transform:uppercase;letter-spacing:0.05em;padding:8px 4px 3px">Relationships (9)</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 11px Geist,system-ui;color:#818cf8">created_by</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">OpenAI</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);border-radius:8px">
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">Codex</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:500 11px Geist,system-ui;color:#818cf8">builds_on</span>
+            <span style="font:400 10px Geist,system-ui;color:#52525b">→</span>
+            <span style="font:400 11px Geist,system-ui;color:#d4d4d8">GPT-5</span>
+          </div>
+        </div>
+        <!-- Bottom action bar -->
+        <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.04);display:flex;gap:8px;flex-shrink:0">
+          <div style="padding:6px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:8px;font:500 11px Geist,system-ui;color:#71717a">Discard</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px;background:#6366f1;border-radius:8px;font:600 12px Geist,system-ui;color:white">Add to Graph (19)</div>
+        </div>
+      </div>
+
+      <!-- Resize handle -->
+      <div style="width:3px;background:#0a0a0d;cursor:col-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        <div style="width:1px;height:32px;background:rgba(255,255,255,0.06);border-radius:1px"></div>
+      </div>
+
+      <!-- Right: TABBED PANE (note currently active, graph preview as another tab) -->
+      <div style="flex:1;display:flex;flex-direction:column;background:#0a0a0d;min-width:0">
+        <!-- Tab bar with multiple tabs -->
+        <div style="display:flex;align-items:center;background:rgba(12,12,15,0.8);border-bottom:1px solid rgba(255,255,255,0.03);flex-shrink:0;backdrop-filter:blur(8px)">
+          <div style="display:flex;align-items:center;gap:5px;padding:0 12px;height:30px;font:400 10px Geist,system-ui;color:#52525b;border-bottom:2px solid transparent">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><circle cx="18" cy="6" r="3"></circle><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"></line></svg>
+            <span>Preview</span>
+            <div style="width:6px;height:6px;border-radius:50%;background:rgba(129,140,248,0.4);margin-left:2px"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;padding:0 12px;height:30px;border-bottom:2px solid #38bdf8;font:500 10px Geist,system-ui;color:#e4e4e7">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path></svg>
+            <span>Machine Learning.md</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46;margin-left:2px;cursor:pointer">×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;padding:0 12px;height:30px;font:400 10px Geist,system-ui;color:#52525b;border-bottom:2px solid transparent">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path></svg>
+            <span>Codex.md</span>
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46;margin-left:2px;cursor:pointer">×</span>
+          </div>
+        </div>
+
+        <!-- Active tab: Note content (markdown preview) -->
+        <div style="flex:1;overflow:hidden;padding:28px 36px">
+          <div style="max-width:600px;margin:0 auto">
+            <div style="font:600 22px/1.3 Geist,system-ui;color:#e4e4e7;letter-spacing:-0.02em;margin-bottom:14px">Machine Learning</div>
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa;margin-bottom:16px">
+              Machine learning is a subset of artificial intelligence that enables systems to learn from data. Key developments include deep learning, transformer architectures, and large language models.
+            </div>
+            <div style="font:600 16px/1.3 Geist,system-ui;color:#e4e4e7;margin-bottom:8px;margin-top:20px">Related technologies</div>
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa">
+              <div style="margin-bottom:6px">• <span style="color:#818cf8;text-decoration:underline;text-decoration-color:rgba(129,140,248,0.3);text-underline-offset:3px;cursor:pointer">GPT-5</span> — latest large language model from <span style="color:#818cf8;text-decoration:underline;text-decoration-color:rgba(129,140,248,0.3);text-underline-offset:3px;cursor:pointer">OpenAI</span></div>
+              <div style="margin-bottom:6px">• <span style="color:#818cf8;text-decoration:underline;text-decoration-color:rgba(129,140,248,0.3);text-underline-offset:3px;cursor:pointer">Codex</span> — AI coding agent built on GPT-5</div>
+              <div style="margin-bottom:6px">• Transformer architecture — attention-based neural network design</div>
+            </div>
+            <div style="font:600 16px/1.3 Geist,system-ui;color:#e4e4e7;margin-bottom:8px;margin-top:20px">Applications</div>
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa">
+              Modern ML enables <span style="color:#818cf8;text-decoration:underline;text-decoration-color:rgba(129,140,248,0.3);text-underline-offset:3px;cursor:pointer">agent-first development</span>, autonomous code generation, and intelligent document processing.
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom bar: linked entities -->
+        <div style="border-top:1px solid rgba(255,255,255,0.04);padding:8px 20px;display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font:500 10px Geist,system-ui;color:#3f3f46">Linked:</span>
+          <div style="display:flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px"><div style="width:5px;height:5px;border-radius:50%;background:#34d399"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">GPT-5</span></div>
+          <div style="display:flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px"><div style="width:5px;height:5px;border-radius:50%;background:#fbbf24"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">OpenAI</span></div>
+          <div style="display:flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px"><div style="width:5px;height:5px;border-radius:50%;background:#a78bfa"></div><span style="font:400 10px Geist,system-ui;color:#a1a1aa">Codex</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5a — Annotation -->
+<div style="position:absolute;left:80px;top:910px;width:400px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(-0.5deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Extraction review + note browsing</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Extraction review stays pinned on the left. Right pane has tabs: graph Preview (with merge indicator dot), plus any notes/files the user opens. User can check existing notes before deciding to merge. Clicking a wikilink in the note could highlight the matching entity in the review list. The preview tab's dot shows the merge preview is active.</div>
+</div>
+
+<!-- ═══════════════════ 8a. ENTITY SYNC — FILE VIEWING ═══════════════════ -->
+<div style="position:absolute;left:1400px;top:100px;width:1200px">
+  <div data-drags-parent="1" style="position:absolute;top:-26px;font:600 12px/1 Geist,system-ui;color:rgba(240,238,235,0.45);letter-spacing:0.04em;text-transform:uppercase">8a — Entity Sync + Resource Viewing</div>
+  <div style="background:#09090b;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.5);overflow:hidden;height:780px;display:flex">
+
+    {{ sidebarSync }}
+
+    <div style="flex:1;display:flex;min-width:0">
+      <!-- Left: Sync panel (pinned) -->
+      <div style="width:360px;flex-shrink:0;display:flex;flex-direction:column;background:#0c0c0f;border-right:1px solid rgba(255,255,255,0.03)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font:600 14px Geist,system-ui;color:#e4e4e7">Entity Sync</span>
+            <div style="padding:1px 6px;background:rgba(245,158,11,0.15);border-radius:8px;font:600 10px Geist,system-ui;color:#f59e0b">3</div>
+          </div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+          <!-- Card 1: Title mismatch — SELECTED (viewing the file) -->
+          <div style="padding:12px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.1);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(245,158,11,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#f59e0b;text-transform:uppercase">Title mismatch</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Codex.md</span>
+              <div style="margin-left:auto;padding:2px 6px;background:rgba(129,140,248,0.1);border-radius:4px;font:500 9px Geist,system-ui;color:#818cf8">viewing</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px">
+              <div style="display:flex;align-items:center;gap:6px"><span style="font:400 11px Geist,system-ui;color:#71717a;width:28px">DB:</span><span style="font:500 11px Geist,system-ui;color:#e4e4e7">"Codex"</span></div>
+              <div style="display:flex;align-items:center;gap:6px"><span style="font:400 11px Geist,system-ui;color:#71717a;width:28px">File:</span><span style="font:500 11px Geist,system-ui;color:#f59e0b">"Codex (AI Agent)"</span></div>
+            </div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Rename entity</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Revert file</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#52525b">Dismiss</div>
+            </div>
+          </div>
+          <!-- Card 2: New file -->
+          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(34,197,94,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#22c55e;text-transform:uppercase">New file</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Transformer Architecture.md</span>
+            </div>
+            <div style="font:400 11px Geist,system-ui;color:#a1a1aa;margin-bottom:8px">Title: "Transformer Architecture"</div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Create entity</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#71717a">Ignore</div>
+            </div>
+          </div>
+          <!-- Card 3: Broken link -->
+          <div style="padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="padding:2px 8px;background:rgba(245,158,11,0.12);border-radius:5px;font:600 9px Geist,system-ui;color:#f59e0b;text-transform:uppercase">Broken link</span>
+              <span style="font:400 10px Geist,system-ui;color:#52525b">Machine Learning.md</span>
+            </div>
+            <div style="font:400 11px Geist,system-ui;color:#a1a1aa;margin-bottom:8px">[[ML Ops]] → [[MLOps]]</div>
+            <div style="display:flex;gap:4px">
+              <div style="padding:5px 10px;background:rgba(129,140,248,0.1);border:1px solid rgba(129,140,248,0.12);border-radius:6px;font:500 10px Geist,system-ui;color:#818cf8">Fix</div>
+              <div style="padding:5px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:6px;font:400 10px Geist,system-ui;color:#52525b">Dismiss</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resize handle -->
+      <div style="width:3px;background:#0a0a0d;cursor:col-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        <div style="width:1px;height:32px;background:rgba(255,255,255,0.06);border-radius:1px"></div>
+      </div>
+
+      <!-- Right: TABBED PANE — viewing the entity file for the selected sync issue -->
+      <div style="flex:1;display:flex;flex-direction:column;background:#0a0a0d;min-width:0">
+        <!-- Tab bar -->
+        <div style="display:flex;align-items:center;background:rgba(12,12,15,0.8);border-bottom:1px solid rgba(255,255,255,0.03);flex-shrink:0;backdrop-filter:blur(8px)">
+          <div style="display:flex;align-items:center;gap:5px;padding:0 12px;height:30px;font:400 10px Geist,system-ui;color:#52525b;border-bottom:2px solid transparent">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><circle cx="18" cy="6" r="3"></circle><line x1="8.5" y1="7.5" x2="15.5" y2="16.5"></line></svg>
+            Graph
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;padding:0 12px;height:30px;border-bottom:2px solid #a78bfa;font:500 10px Geist,system-ui;color:#e4e4e7">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path></svg>
+            Codex.md
+            <span style="font:400 10px Geist,system-ui;color:#3f3f46;margin-left:2px;cursor:pointer">×</span>
+          </div>
+        </div>
+
+        <!-- Entity file content with diff highlighting -->
+        <div style="flex:1;overflow:hidden;padding:28px 36px">
+          <div style="max-width:600px;margin:0 auto">
+            <!-- Title diff -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div style="font:600 22px/1.3 Geist,system-ui;color:#e4e4e7;letter-spacing:-0.02em">Codex <span style="color:#f59e0b">(AI Agent)</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:20px;padding:8px 12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.1);border-radius:8px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg>
+              <span style="font:400 11px Geist,system-ui;color:#f59e0b">Title in file differs from graph: "Codex (AI Agent)" vs "Codex"</span>
+            </div>
+
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa;margin-bottom:16px">
+              Codex is a code generation agent developed by <span style="color:#818cf8;cursor:pointer">OpenAI</span> that specializes in automated software development. It's capable of writing entire applications, tests, CI configuration, documentation, and tooling without any manually-written code.
+            </div>
+            <div style="font:600 16px/1.3 Geist,system-ui;color:#e4e4e7;margin-bottom:8px;margin-top:20px">Foundation</div>
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa">
+              Builds on <span style="color:#818cf8;cursor:pointer">GPT-5</span>, giving it advanced language understanding and code generation capabilities. The Codex CLI is the primary interface.
+            </div>
+            <div style="font:600 16px/1.3 Geist,system-ui;color:#e4e4e7;margin-bottom:8px;margin-top:20px">Development paradigm</div>
+            <div style="font:400 14px/1.8 Geist,system-ui;color:#a1a1aa">
+              Enables <span style="color:#818cf8;cursor:pointer">agent-first development</span> — a paradigm where AI agents write all code with zero manually-written code constraint.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 8a — Annotation -->
+<div style="position:absolute;left:1400px;top:910px;width:400px;background:#fef9c3;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.3deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#713f12;margin-bottom:6px">Entity sync + resource viewing</div>
+  <div style="font:400 11px/1.5 system-ui;color:#92400e">Sync cards stay pinned left. Clicking a card's filename opens the entity file in the right pane's tab. The diff highlight (amber warning bar) shows the title mismatch inline. "viewing" badge on the selected card connects the two panes. User can check the file content before deciding which action to take.</div>
+</div>
+
+<!-- ═══════════════════ PATTERN POST-IT ═══════════════════ -->
+<div style="position:absolute;left:560px;top:910px;width:340px;background:#dbeafe;padding:14px 16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.1);transform:rotate(0.8deg)">
+  <div style="font:600 11px/1.3 system-ui;color:#1e3a5f;margin-bottom:6px">The pattern</div>
+  <div style="font:400 11px/1.5 system-ui;color:#1e40af">
+    <b>Left pane = workflow panel</b> (pinned: extraction review, sync, reading list)<br>
+    <b>Right pane = tabbed content</b> (graph preview, notes, files, entity files)<br><br>
+    The right pane tabs work exactly like the existing content tab system. User opens references as needed — the workflow context on the left never gets lost. Clicking ⌘K can also open results directly in the right pane.
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+class Component extends DCLogic {
+  renderVals() {
+    var navItems = [
+      { id: 'graph', label: 'Graph', count: '12', icon: 'M6 6a3 3 0 1 0 0 0M18 18a3 3 0 1 0 0 0M18 6a3 3 0 1 0 0 0M8.5 7.5L15.5 16.5M15.5 6L8.5 6' },
+      { id: 'notes', label: 'Notes', count: '3', icon: 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2zM14 2v6h6' },
+      { id: 'reading', label: 'Reading List', badge: '2', badgeColor: '#22c55e', icon: 'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' },
+      { id: 'chat', label: 'Chat', icon: 'M3 21l1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z' },
+      { id: 'intelligence', label: 'Intelligence', icon: 'M12 3l-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z' },
+      { id: 'sync', label: 'Sync', badge: '3', badgeColor: '#f59e0b', icon: 'M21.5 2v6h-6M2.5 22v-6h6' }
+    ];
+    var pinned = [{ name: 'Codex', color: '#a78bfa', label: 'ai_agent' }, { name: 'OpenAI', color: '#fbbf24', label: 'org' }, { name: 'GPT-5', color: '#34d399', label: 'tech' }];
+
+    var makeSidebar = function(activeItem) {
+      var els = [];
+      els.push(React.createElement('div', { key: 'logo', style: { padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 8 } }, [
+        React.createElement('div', { key: 'm', style: { width: 22, height: 22, background: 'linear-gradient(135deg,#a78bfa,#c084fc)', borderRadius: 6 } }),
+        React.createElement('div', { key: 't' }, [
+          React.createElement('div', { key: 'n', style: { font: '600 14px Geist,system-ui', color: '#e8e5e0', letterSpacing: '-0.01em' } }, 'Synapse'),
+          React.createElement('div', { key: 'v', style: { font: '400 10px Geist,system-ui', color: '#71717a', marginTop: 1 } }, 'notes vault')
+        ])
+      ]));
+      els.push(React.createElement('div', { key: 'srch', style: { padding: '0 12px 12px' } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', height: 32, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 } }, [
+          React.createElement('svg', { key: 'i', width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: '#52525b', strokeWidth: 2 }, [React.createElement('circle', { key: 'c', cx: 11, cy: 11, r: 8 }), React.createElement('line', { key: 'l', x1: 21, y1: 21, x2: 16.65, y2: 16.65 })]),
+          React.createElement('span', { key: 'p', style: { font: '400 12px Geist,system-ui', color: '#3f3f46' } }, 'Search...'),
+          React.createElement('span', { key: 'k', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, '\u2318K')
+        ])
+      ));
+      var ne = navItems.map(function(item) {
+        var a = item.id === activeItem;
+        var s = { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, background: a ? 'rgba(167,139,250,0.08)' : 'transparent', border: a ? '1px solid rgba(167,139,250,0.1)' : '1px solid transparent' };
+        var ch = [
+          React.createElement('svg', { key: 'i', width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: a ? '#a78bfa' : '#71717a', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('path', { d: item.icon })),
+          React.createElement('span', { key: 't', style: { font: (a ? '500' : '400') + ' 13px Geist,system-ui', color: a ? '#c4b5fd' : '#a1a1aa' } }, item.label)
+        ];
+        if (item.count) ch.push(React.createElement('span', { key: 'c', style: { marginLeft: 'auto', font: '400 10px Geist Mono,monospace', color: a ? '#52525b' : '#3f3f46' } }, item.count));
+        if (item.badge && !(a && item.id === 'sync')) ch.push(React.createElement('div', { key: 'b', style: { marginLeft: 'auto', padding: '1px 6px', background: item.badgeColor || '#22c55e', borderRadius: 8, font: '600 9px Geist,system-ui', color: 'white' } }, item.badge));
+        return React.createElement('div', { key: item.id, style: s }, ch);
+      });
+      els.push(React.createElement('div', { key: 'nav', style: { padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 1 } }, [
+        React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Navigate'),
+        ...ne
+      ]));
+      els.push(React.createElement('div', { key: 'pin', style: { padding: '0 8px', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 1 } }, [
+        React.createElement('div', { key: 'h', style: { font: '500 10px Geist,system-ui', color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '8px 8px 4px' } }, 'Pinned'),
+        ...pinned.map(function(p) { return React.createElement('div', { key: p.name, style: { display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6 } }, [React.createElement('div', { key: 'd', style: { width: 6, height: 6, borderRadius: '50%', background: p.color } }), React.createElement('span', { key: 'n', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa' } }, p.name), React.createElement('span', { key: 'l', style: { marginLeft: 'auto', font: '400 10px Geist,system-ui', color: '#3f3f46' } }, p.label)]); })
+      ]));
+      els.push(React.createElement('div', { key: 'set', style: { marginTop: 'auto', padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: 8 } }, [
+        React.createElement('div', { key: 'a', style: { width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 10px Geist,system-ui', color: 'white' } }, 'S'),
+        React.createElement('span', { key: 't', style: { font: '400 12px Geist,system-ui', color: '#a1a1aa', flex: 1 } }, 'Settings')
+      ]));
+      return React.createElement('div', { style: { width: 260, flexShrink: 0, background: '#0c0c0f', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column' } }, els);
+    };
+
+    return {
+      sidebarGraph: makeSidebar('graph'),
+      sidebarSync: makeSidebar('sync'),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

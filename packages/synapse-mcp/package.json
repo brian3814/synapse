@@ -1,14 +1,23 @@
 {
-  "name": "synapse-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for Synapse knowledge graph",
+  "name": "synapse-kg",
+  "version": "0.8.0",
+  "description": "MCP server for Synapse — local-first knowledge graph with entity extraction and graph intelligence",
   "type": "module",
-  "bin": {
-    "synapse-mcp": "./dist/index.js"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brian3814/synapse.git",
+    "directory": "packages/synapse-mcp"
   },
+  "keywords": ["mcp", "knowledge-graph", "synapse", "sqlite", "local-first"],
+  "mcpName": "io.github.brian3814/synapse",
+  "bin": {
+    "synapse-kg": "./dist/index.js"
+  },
+  "files": ["dist/", "manifest.json"],
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --outdir=dist --format=esm --banner:js=\"#!/usr/bin/env node\" --packages=external && esbuild ../../electron/embeddings/onnx-worker.ts --bundle --platform=node --outfile=dist/onnx-worker.cjs --format=cjs --packages=external && npm rebuild better-sqlite3",
-    "pack": "npm run build && npx @anthropic-ai/mcpb pack",
+    "build": "node build.mjs && esbuild ../../electron/embeddings/onnx-worker.ts --bundle --platform=node --outfile=dist/onnx-worker.cjs --format=cjs --packages=external && npm rebuild better-sqlite3",
+    "bundle": "npm run build && npx @anthropic-ai/mcpb pack",
     "dev": "tsx src/index.ts"
   },
   "dependencies": {

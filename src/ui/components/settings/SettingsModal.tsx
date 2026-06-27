@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { SettingsPanel } from './SettingsPanel';
 
-export type SettingsTab = 'general' | 'model' | 'agents' | 'billing' | 'about';
+export type SettingsTab = 'general' | 'model' | 'agents' | 'mcp' | 'billing' | 'about';
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'model', label: 'Model' },
   { id: 'agents', label: 'Agents' },
+  { id: 'mcp', label: 'MCP' },
   { id: 'billing', label: 'Billing' },
   { id: 'about', label: 'About' },
 ];
