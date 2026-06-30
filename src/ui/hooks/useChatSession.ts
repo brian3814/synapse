@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { chat, noteSearch, sourceContent } from '../../db/client/db-client';
 import { type AttachedNode } from '../../graph/store/chat-context-store';
+import { useUIStore } from '../../graph/store/ui-store';
 import { useGraphStore } from '../../graph/store/graph-store';
 import { serializeAttachedContext } from '../utils/chat-context-serializer';
 import { fetchLLMConfigAndTypes } from './nl-query-utils';
@@ -73,6 +74,7 @@ export function useChatSession() {
     await chat.createSession(id, title);
     await chat.pruneSessions();
     sessionIdRef.current = id;
+    useUIStore.getState().bumpChatSessionVersion();
     return id;
   }, []);
 
@@ -293,6 +295,7 @@ export function useChatSession() {
 
   const loadSession = useCallback(async (sessionId: string) => {
     sessionIdRef.current = sessionId;
+    await chat.touchSession(sessionId).catch(() => {});
     const dbMessages = await chat.getMessages(sessionId);
     const restored: ChatMessage[] = dbMessages.map((m: any) => ({
       id: m.id,
@@ -303,6 +306,15 @@ export function useChatSession() {
     setMessages(restored);
     setIsProcessing(false);
   }, []);
+
+  // Pick up pending session switch from ChatHistoryPanel
+  const pendingChatSessionId = useUIStore((s) => s.pendingChatSessionId);
+  useEffect(() => {
+    if (pendingChatSessionId && sessionReady) {
+      loadSession(pendingChatSessionId);
+      useUIStore.getState().setPendingChatSessionId(null);
+    }
+  }, [pendingChatSessionId, sessionReady, loadSession]);
 
   const currentSessionId = sessionIdRef.current;
 

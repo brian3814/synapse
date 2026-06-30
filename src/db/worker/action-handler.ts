@@ -466,6 +466,17 @@ export function createActionHandler(dataStore: DataStore) {
         const p = params as { sessionId: string; limit?: number };
         return { result: await dataStore.chat.getRecentMessages(p.sessionId, p.limit) };
       }
+      case 'chat.deleteSession': {
+        ensureInit();
+        await dataStore.chat.deleteSession(params as string);
+        return { result: { success: true } };
+      }
+      case 'chat.updateSessionTitle': {
+        ensureInit();
+        const p = params as { id: string; title: string };
+        await dataStore.chat.updateSessionTitle(p.id, p.title);
+        return { result: { success: true } };
+      }
 
       // Note attachment operations
       case 'noteAttachments.create': {

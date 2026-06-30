@@ -3,7 +3,6 @@ import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
 import { isSortable } from '@dnd-kit/react/sortable';
 import { Header } from '../components/Header';
 import { KnowledgeGraph } from '../components/graph/KnowledgeGraph';
-import { ActivePanel } from '../components/ActivePanel';
 import { ChatBot } from '../components/chat/ChatBot';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { ColumnResizeHandle } from '../components/ColumnResizeHandle';
@@ -14,7 +13,14 @@ import { ExtractionReviewTab } from '../components/llm/ExtractionReviewTab';
 import { LeftSidebar } from '../components/layout/LeftSidebar';
 import { ViewerTab } from '../components/tabs/ViewerTab';
 import { ArtifactTab } from '../components/tabs/ArtifactTab';
+import { ReadingListPanel } from '../components/reading-list/ReadingListPanel';
+import { NotesPanel } from '../components/notes/NotesPanel';
+import { IntelligencePanel } from '../components/intelligence/IntelligencePanel';
+import { QueryPanel } from '../components/query/QueryPanel';
+import { AgentsPanel } from '../components/panels/AgentsPanel';
+import { ArtifactBrowserTab } from '../components/tabs/ArtifactBrowserTab';
 import { ExtractionProgressPanel } from '../components/reading-list/ExtractionProgressPanel';
+import { TabErrorBoundary } from '../components/TabErrorBoundary';
 import { useUIStore } from '../../graph/store/ui-store';
 import { vaultWorkspace } from '@platform';
 import type { ContentColumn } from '../../graph/store/ui-store';
@@ -25,12 +31,9 @@ interface TabLayoutProps {
 }
 
 export function TabLayout({ onIngest }: TabLayoutProps) {
-  const activePanel = useUIStore((s) => s.activePanel);
   const chatOpen = useUIStore((s) => s.chatOpen);
   const chatDisplayMode = useUIStore((s) => s.chatDisplayMode);
-  const panelWidth = useUIStore((s) => s.panelWidth);
   const chatSidebarWidth = useUIStore((s) => s.chatSidebarWidth);
-  const setPanelWidth = useUIStore((s) => s.setPanelWidth);
   const setChatSidebarWidth = useUIStore((s) => s.setChatSidebarWidth);
   const contentColumns = useUIStore((s) => s.contentColumns);
   const activeColumnId = useUIStore((s) => s.activeColumnId);
@@ -72,10 +75,6 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
     setColumnFlex(rightId, rightFlex);
   }, [setColumnFlex]);
 
-  const onPanelResize = useCallback((delta: number) => {
-    setPanelWidth(panelWidth + delta);
-  }, [panelWidth, setPanelWidth]);
-
   const onChatResize = useCallback((delta: number) => {
     setChatSidebarWidth(chatSidebarWidth + delta);
   }, [chatSidebarWidth, setChatSidebarWidth]);
@@ -115,7 +114,7 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 relative">
-      <Header onIngest={onIngest} />
+      <Header />
       <DragDropProvider onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex-1 flex overflow-hidden min-h-0" ref={columnsContainerRef}>
           <LeftSidebar vaultPath={vaultPath} onOpenFile={handleOpenFile} />
@@ -133,14 +132,6 @@ export function TabLayout({ onIngest }: TabLayoutProps) {
               onColumnResize={handleColumnResize}
             />
           ))}
-          {activePanel !== 'none' && (
-            <>
-              <ResizeHandle onResize={onPanelResize} />
-              <div style={{ width: panelWidth }} className="shrink-0 overflow-y-auto">
-                <ActivePanel />
-              </div>
-            </>
-          )}
           {showChatSidebar && (
             <>
               <ResizeHandle onResize={onChatResize} />
@@ -242,6 +233,7 @@ function ColumnWithDropZones({
               key={tab.id}
               className={`absolute inset-0 ${column.activeTabId === tab.id ? '' : 'hidden'}`}
             >
+              <TabErrorBoundary key={tab.id} tabLabel={tab.type.kind}>
               {tab.type.kind === 'graph' ? (
                 <KnowledgeGraph />
               ) : tab.type.kind === 'extractionReview' ? (
@@ -252,11 +244,24 @@ function ColumnWithDropZones({
                 <ViewerTab filePath={tab.type.filePath} />
               ) : tab.type.kind === 'artifact' ? (
                 <ArtifactTab artifactId={tab.type.artifactId} />
+              ) : tab.type.kind === 'readingList' ? (
+                <div className="h-full overflow-y-auto bg-zinc-900"><ReadingListPanel /></div>
+              ) : tab.type.kind === 'notesBrowser' ? (
+                <div className="h-full overflow-y-auto bg-zinc-900"><NotesPanel /></div>
+              ) : tab.type.kind === 'intelligence' ? (
+                <div className="h-full overflow-y-auto bg-zinc-900"><IntelligencePanel /></div>
+              ) : tab.type.kind === 'query' ? (
+                <div className="h-full overflow-y-auto bg-zinc-900"><QueryPanel /></div>
+              ) : tab.type.kind === 'agents' ? (
+                <div className="h-full overflow-y-auto bg-zinc-900"><AgentsPanel /></div>
+              ) : tab.type.kind === 'artifactBrowser' ? (
+                <ArtifactBrowserTab />
               ) : (
                 <div className="h-full overflow-y-auto bg-zinc-900">
                   <NoteEditor nodeId={tab.type.noteId} isTab />
                 </div>
               )}
+              </TabErrorBoundary>
             </div>
           ))}
         </div>

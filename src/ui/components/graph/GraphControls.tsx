@@ -10,8 +10,8 @@ interface GraphControlsProps {
 export function GraphControls({ graphRef }: GraphControlsProps) {
   const visibleLayers = useUIStore((s) => s.visibleLayers);
   const toggleLayer = useUIStore((s) => s.toggleLayer);
-  const activePanel = useUIStore((s) => s.activePanel);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const graphOverlay = useUIStore((s) => s.graphOverlay);
+  const setGraphOverlay = useUIStore((s) => s.setGraphOverlay);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const edgeCount = useGraphStore((s) => s.edges.length);
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
@@ -86,7 +86,7 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
   };
 
   return (
-    <div className="absolute top-3 left-3 flex items-center gap-2 bg-zinc-900/80 border border-zinc-700 rounded p-1 backdrop-blur-sm">
+    <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-700 rounded-lg p-1.5 backdrop-blur-sm z-10">
       {/* Layer toggles */}
       <div className="flex gap-1">
         {layerButton('entity', 'Entities', '#7C3AED')}
@@ -117,9 +117,9 @@ export function GraphControls({ graphRef }: GraphControlsProps) {
       {/* Create / Delete */}
       <div className="flex items-center gap-0.5">
         <button
-          onClick={() => setActivePanel('create')}
+          onClick={() => setGraphOverlay('create')}
           className={`p-1 rounded transition-colors ${
-            activePanel === 'create'
+            graphOverlay === 'create'
               ? 'bg-indigo-600 text-white'
               : 'text-zinc-300 hover:bg-zinc-700'
           }`}

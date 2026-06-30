@@ -170,6 +170,8 @@ export function createSqliteDataStore(
       getMessages: (sessionId) => chatQueries.getSessionMessages(sessionId),
       getRecentMessages: (sessionId, limit) => chatQueries.getRecentMessages(sessionId, limit),
       getAllSessions: () => chatQueries.getAllSessions(),
+      deleteSession: (id) => chatQueries.deleteSession(id),
+      updateSessionTitle: (id, title) => chatQueries.updateSessionTitle(id, title),
     },
 
     // ── Note Attachment Repository ──────────────────────────────────

@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type { DisplayMode, StructuralNodeType } from '../../shared/types';
 
 type ActivePanel = 'none' | 'nodeDetail' | 'edgeDetail' | 'create' | 'query' | 'notes' | 'intelligence' | 'readingList';
-export type LeftPanel = 'none' | 'explorer' | 'agents' | 'artifacts' | 'sync';
+export type LeftPanel = 'none' | 'explorer' | 'chats';
+type GraphOverlay = 'none' | 'nodeDetail' | 'edgeDetail' | 'create';
 type LayoutType = string;
 type ChatDisplayMode = 'float' | 'sidebar';
 
@@ -12,7 +13,13 @@ export type ContentTabType =
   | { kind: 'extractionReview' }
   | { kind: 'extractionProgress'; resourceId: string }
   | { kind: 'viewer'; filePath: string }
-  | { kind: 'artifact'; artifactId: string };
+  | { kind: 'artifact'; artifactId: string }
+  | { kind: 'readingList' }
+  | { kind: 'notesBrowser' }
+  | { kind: 'intelligence' }
+  | { kind: 'query' }
+  | { kind: 'agents' }
+  | { kind: 'artifactBrowser' };
 
 export interface ContentTab {
   id: string;
@@ -34,6 +41,12 @@ function contentTabId(type: ContentTabType): string {
   if (type.kind === 'noteEditor') return `note-${type.noteId}`;
   if (type.kind === 'viewer') return `viewer-${type.filePath}`;
   if (type.kind === 'artifact') return `artifact-${type.artifactId}`;
+  if (type.kind === 'readingList') return 'reading-list';
+  if (type.kind === 'notesBrowser') return 'notes-browser';
+  if (type.kind === 'intelligence') return 'intelligence';
+  if (type.kind === 'query') return 'query';
+  if (type.kind === 'agents') return 'agents';
+  if (type.kind === 'artifactBrowser') return 'artifact-browser';
   return 'unknown';
 }
 
@@ -114,6 +127,21 @@ interface UIStore {
   reorderContentTabs: (fromColId: string, toColId: string, fromIndex: number, toIndex: number) => void;
   insertColumnAt: (tabId: string, columnIndex: number) => void;
   setColumnFlex: (columnId: string, flex: number) => void;
+
+  graphOverlay: GraphOverlay;
+  setGraphOverlay: (overlay: GraphOverlay) => void;
+  agentViewMode: 'grid' | 'list';
+  setAgentViewMode: (mode: 'grid' | 'list') => void;
+  selectedAgentId: string | null;
+  setSelectedAgentId: (id: string | null) => void;
+  agentSubTab: 'agents' | 'connections' | 'mcp';
+  setAgentSubTab: (tab: 'agents' | 'connections' | 'mcp') => void;
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: (open: boolean) => void;
+  pendingChatSessionId: string | null;
+  chatSessionVersion: number;
+  bumpChatSessionVersion: () => void;
+  setPendingChatSessionId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -171,6 +199,21 @@ export const useUIStore = create<UIStore>((set) => ({
   setChatSidebarWidth: (width) => set({ chatSidebarWidth: Math.min(800, Math.max(200, width)) }),
   setFocusNodeCallback: (cb) => set({ focusNodeCallback: cb }),
   setPendingEditNoteId: (id) => set({ pendingEditNoteId: id }),
+
+  graphOverlay: 'none' as GraphOverlay,
+  setGraphOverlay: (overlay) => set({ graphOverlay: overlay }),
+  agentViewMode: (localStorage.getItem('agent-view-mode') as 'grid' | 'list') || 'grid',
+  setAgentViewMode: (mode) => set(() => { localStorage.setItem('agent-view-mode', mode); return { agentViewMode: mode }; }),
+  selectedAgentId: null as string | null,
+  setSelectedAgentId: (id) => set({ selectedAgentId: id }),
+  agentSubTab: 'agents' as const,
+  setAgentSubTab: (tab) => set({ agentSubTab: tab }),
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  pendingChatSessionId: null as string | null,
+  setPendingChatSessionId: (id) => set({ pendingChatSessionId: id }),
+  chatSessionVersion: 0,
+  bumpChatSessionVersion: () => set((s) => ({ chatSessionVersion: s.chatSessionVersion + 1 })),
 
   contentColumns: [{
     id: 'col-0',

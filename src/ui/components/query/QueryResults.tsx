@@ -13,12 +13,14 @@ interface QueryResultsProps {
 
 export function QueryResults({ results }: QueryResultsProps) {
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
   const handleSelect = (id: string) => {
+    const { openContentTab, setGraphOverlay, focusNodeCallback } = useUIStore.getState();
+    openContentTab({ kind: 'graph' }, 'Graph');
     selectNode(id);
-    setActivePanel('nodeDetail');
+    setGraphOverlay('nodeDetail');
+    if (focusNodeCallback) focusNodeCallback(id);
   };
 
   if (results.results.length === 0) {

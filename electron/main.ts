@@ -423,6 +423,12 @@ app.whenReady().then(() => {
     return { bytes, fileCount };
   });
 
+  ipcMain.handle('vault:clear-all', () => {
+    const vaultDir = getVaultDir();
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+    fs.mkdirSync(vaultDir, { recursive: true });
+  });
+
   // ── Vault Explorer — filesystem operations ──────────────────────────────
   function readDirTree(dirPath: string, depth: number): any[] {
     let entries;
@@ -583,6 +589,8 @@ app.whenReady().then(() => {
     getMcpHandler: () => mcpServerBridge
       ? (req, res) => mcpServerBridge!.handleRequest(req, res)
       : null,
+  }).then((port) => {
+    if (port) console.log(`[Main] Companion server on port ${port}`);
   });
 
   // ── MCP / Tool Registry ──────────────────────────────────────────

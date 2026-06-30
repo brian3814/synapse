@@ -1,22 +1,14 @@
 import React, { useCallback } from 'react';
 import { useDisplayMode } from '../hooks/useDisplayMode';
 import { useUIStore } from '../../graph/store/ui-store';
-import { useReadingListStore } from '../../graph/store/reading-list-store';
 import { HeaderSearch } from './search/HeaderSearch';
-import { ImportButton } from './ingestion/ImportButton';
 import { VaultSwitcher } from './VaultSwitcher';
+import { Tooltip } from './shared/Tooltip';
 import { browser } from '@platform';
-import type { IngestionSource, ProcessingMode } from '../../ingestion/types';
 
-interface HeaderProps {
-  onIngest?: (source: IngestionSource, mode: ProcessingMode) => void;
-}
-
-export function Header({ onIngest }: HeaderProps) {
+export function Header() {
   const { displayMode, toggleMode } = useDisplayMode();
-  const { activePanel, setActivePanel, settingsOpen, setSettingsOpen, llmModalOpen, setLLMModalOpen } = useUIStore();
-  const readingListItems = useReadingListStore((s) => s.items);
-  const readyCount = Object.values(readingListItems).filter(i => i.status === 'ready' || i.status === 'extracted').length;
+  const { settingsOpen, setSettingsOpen } = useUIStore();
   const isSidePanel = displayMode === 'sidePanel';
 
   const handleSettingsClick = useCallback(() => {
@@ -35,57 +27,10 @@ export function Header({ onIngest }: HeaderProps) {
 
       <VaultSwitcher />
 
-      <HeaderSearch />
+      <div className="flex-1" />
 
-      <div className="flex items-center gap-1 shrink-0 ml-auto">
-        <ToolbarButton
-          active={activePanel === 'readingList'}
-          onClick={() => setActivePanel('readingList')}
-          title="Reading List"
-        >
-          <span className="relative">
-            <BookmarkListIcon />
-            {readyCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-bold bg-emerald-500 text-white rounded-full leading-none">
-                {readyCount}
-              </span>
-            )}
-          </span>
-        </ToolbarButton>
-
-        <ToolbarButton
-          active={activePanel === 'query'}
-          onClick={() => setActivePanel('query')}
-          title="Query"
-        >
-          <FilterIcon />
-        </ToolbarButton>
-
-        <ToolbarButton
-          active={llmModalOpen}
-          onClick={() => setLLMModalOpen(!llmModalOpen)}
-          title="LLM Extract"
-        >
-          <SparklesIcon />
-        </ToolbarButton>
-
-        <ToolbarButton
-          active={activePanel === 'notes'}
-          onClick={() => setActivePanel('notes')}
-          title="Notes"
-        >
-          <NoteIcon />
-        </ToolbarButton>
-
-        <ToolbarButton
-          active={activePanel === 'intelligence'}
-          onClick={() => setActivePanel('intelligence')}
-          title="Intelligence"
-        >
-          <BrainIcon />
-        </ToolbarButton>
-
-        {onIngest && <ImportButton onIngest={onIngest} />}
+      <div className="flex items-center gap-1 shrink-0">
+        <HeaderSearch />
 
         <div className="w-px h-4 bg-zinc-600 mx-1" />
 
@@ -119,54 +64,20 @@ function ToolbarButton({
   title: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`p-1.5 rounded transition-colors ${
-        active
-          ? 'bg-indigo-600 text-white'
-          : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip text={title}>
+      <button
+        onClick={onClick}
+        className={`p-1.5 rounded transition-colors ${
+          active
+            ? 'bg-indigo-600 text-white'
+            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
-
-// Simple SVG icons (16x16)
-const BookmarkListIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-    <line x1="9" y1="10" x2="15" y2="10"/>
-    <line x1="9" y1="14" x2="15" y2="14"/>
-  </svg>
-);
-
-const FilterIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-  </svg>
-);
-
-const SparklesIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-  </svg>
-);
-
-const NoteIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-  </svg>
-);
-
-const BrainIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2a4 4 0 0 1 4 4 4 4 0 0 1-1 6.5V20a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-7.5A4 4 0 0 1 8 6a4 4 0 0 1 4-4z"/>
-    <path d="M8 6a4 4 0 0 0-4 4c0 1.5.8 2.8 2 3.4"/>
-    <path d="M16 6a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.4"/>
-  </svg>
-);
 
 const GearIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -186,4 +97,3 @@ const PanelIcon = () => (
     <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>
   </svg>
 );
-

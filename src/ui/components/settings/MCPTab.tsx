@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { vaultWorkspace } from '@platform';
+import { vaultWorkspace, storage } from '@platform';
 
 function CopyBlock({ label, config }: { label: string; config: string }) {
   const [copied, setCopied] = useState(false);
@@ -32,6 +32,7 @@ function CopyBlock({ label, config }: { label: string; config: string }) {
 export function MCPTab() {
   const [vaultPath, setVaultPath] = useState<string | null>(null);
   const [vaultName, setVaultName] = useState<string>('');
+  const [companionPort, setCompanionPort] = useState<number | null>(null);
 
   useEffect(() => {
     vaultWorkspace.getStatus().then((status) => {
@@ -39,6 +40,9 @@ export function MCPTab() {
         setVaultPath(status.path ?? null);
         setVaultName(status.name ?? '');
       }
+    });
+    storage.get<{ companionPort?: number }>('companionPort').then((data) => {
+      if (data.companionPort) setCompanionPort(data.companionPort);
     });
   }, []);
 
@@ -86,6 +90,24 @@ export function MCPTab() {
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="text-sm text-zinc-200 font-medium">Claude Desktop</span>
           </div>
+
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-medium text-emerald-400">Recommended</span>
+              <span className="text-xs text-zinc-500">— Install as Desktop Extension</span>
+            </div>
+            <p className="text-xs text-zinc-500 mb-2">
+              Run in your terminal. Claude Desktop will prompt for your vault path on first use.
+            </p>
+            <CopyBlock label="Terminal" config="claude desktop-extension install synapse-kg" />
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 border-t border-zinc-700" />
+            <span className="text-xs text-zinc-600">or configure manually</span>
+            <div className="flex-1 border-t border-zinc-700" />
+          </div>
+
           <p className="text-xs text-zinc-500 mb-3">
             Add to <code className="text-zinc-400">~/Library/Application Support/Claude/claude_desktop_config.json</code>
           </p>
@@ -107,6 +129,19 @@ export function MCPTab() {
       {!vaultPath && (
         <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/20 border border-amber-800/40 rounded text-xs text-amber-400">
           Open a vault first — the config will auto-fill with the vault path.
+        </div>
+      )}
+
+      {companionPort && (
+        <div className="border-t border-zinc-800 pt-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="text-sm text-zinc-200 font-medium">HTTP Transport</span>
+          </div>
+          <p className="text-xs text-zinc-500 mb-3">
+            For HTTP-based MCP clients. The Synapse desktop app must be running.
+          </p>
+          <CopyBlock label="MCP Endpoint" config={`http://127.0.0.1:${companionPort}/mcp`} />
         </div>
       )}
 

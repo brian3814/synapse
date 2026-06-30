@@ -7,13 +7,16 @@ export function RelatedWidget() {
   const { relatedNodes, loading, enabled } = useContextualRelevance();
   const [collapsed, setCollapsed] = useState(false);
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const openContentTab = useUIStore((s) => s.openContentTab);
+  const focusNodeCallback = useUIStore((s) => s.focusNodeCallback);
 
   if (!enabled || (relatedNodes.length === 0 && !loading)) return null;
 
   const handleNodeClick = (nodeId: string) => {
     selectNode(nodeId);
-    setActivePanel('nodeDetail');
+    openContentTab({ kind: 'graph' }, 'Graph');
+    useUIStore.getState().setGraphOverlay('nodeDetail');
+    if (focusNodeCallback) focusNodeCallback(nodeId);
   };
 
   return (

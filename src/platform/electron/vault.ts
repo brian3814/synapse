@@ -29,4 +29,8 @@ export class ElectronVault implements PlatformVault {
   async getStorageUsage(): Promise<{ bytes: number; fileCount: number }> {
     return window.electronIPC.invoke('vault:usage') as Promise<{ bytes: number; fileCount: number }>;
   }
+
+  async clearAll(): Promise<void> {
+    await window.electronIPC.invoke('vault:clear-all');
+  }
 }

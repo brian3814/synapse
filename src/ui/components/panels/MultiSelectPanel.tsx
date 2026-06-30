@@ -39,14 +39,13 @@ Rules:
 - Follow the user's instruction for the type of note (comparison, summary, synthesis, new idea, etc.)
 - Output ONLY the note content — no title, no metadata, no code fences`;
 
-export function MultiSelectPanel() {
+export function MultiSelectPanel({ onClose }: { onClose?: () => void }) {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
   const nodes = useGraphStore((s) => s.nodes);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const updateNode = useGraphStore((s) => s.updateNode);
   const createEdge = useGraphStore((s) => s.createEdge);
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
   const [action, setAction] = useState<Action>('none');
@@ -119,7 +118,7 @@ export function MultiSelectPanel() {
     for (const n of selectedNodes) {
       await deleteNode(n.id);
     }
-    setActivePanel('none');
+    if (onClose) onClose();
   };
 
   // --- Merge ---
@@ -186,7 +185,7 @@ export function MultiSelectPanel() {
       }
 
       selectNode(masterId);
-      setActivePanel('nodeDetail');
+      useUIStore.getState().setGraphOverlay('nodeDetail');
     } finally {
       setMerging(false);
     }

@@ -10,7 +10,7 @@ const STRUCTURAL_SET = new Set<string>(STRUCTURAL_NODE_TYPES);
 
 type CreateTab = 'node' | 'edge';
 
-export function CreatePanel() {
+export function CreatePanel({ onClose }: { onClose?: () => void }) {
   const [tab, setTab] = useState<CreateTab>('node');
 
   return (

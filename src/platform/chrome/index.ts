@@ -39,6 +39,9 @@ export const entityFiles = {
   async write() { return { contentHash: '' }; },
 } as any;
 
+export function setZoomFactor(_factor: number): void {}
+export function getZoomFactor(): number { return 1; }
+
 export async function initPlatform(): Promise<void> {
   await db.init();
   await notes.init();

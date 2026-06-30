@@ -371,7 +371,10 @@ export function NoteEditor({ nodeId: rawNodeId, onBack, isTab }: NoteEditorProps
           {content.trim() ? (
             <NoteMarkdownPreview content={content} onNodeClick={(nodeId) => {
               useGraphStore.getState().selectNode(nodeId);
-              useUIStore.getState().forceActivePanel('nodeDetail');
+              useUIStore.getState().openContentTab({ kind: 'graph' }, 'Graph');
+              useUIStore.getState().setGraphOverlay('nodeDetail');
+              const cb = useUIStore.getState().focusNodeCallback;
+              if (cb) cb(nodeId);
             }} />
           ) : (
             <p className="text-zinc-600 text-sm italic">Nothing to preview</p>

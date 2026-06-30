@@ -2,9 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { ActivityBar } from './ActivityBar';
 import { VaultDrawer } from './VaultDrawer';
-import { AgentsPanel } from '../panels/AgentsPanel';
-import { ArtifactPanel } from '../sidebar/ArtifactPanel';
-import { EntitySyncPanel } from '../entity-sync/EntitySyncPanel';
+import { ChatHistoryPanel } from '../chat/ChatHistoryPanel';
 
 interface LeftSidebarProps {
   vaultPath: string | null;
@@ -49,9 +47,7 @@ export function LeftSidebar({ vaultPath, onOpenFile }: LeftSidebarProps) {
             {leftPanel === 'explorer' && vaultPath && (
               <VaultDrawer rootPath={vaultPath} onOpenFile={onOpenFile} />
             )}
-            {leftPanel === 'agents' && <AgentsPanel />}
-            {leftPanel === 'artifacts' && <ArtifactPanel />}
-            {leftPanel === 'sync' && <EntitySyncPanel />}
+            {leftPanel === 'chats' && <ChatHistoryPanel />}
           </div>
           <div
             onPointerDown={onPointerDown}

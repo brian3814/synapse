@@ -21,21 +21,13 @@ const STAGE_LABELS: Record<ExtractionStage, string> = {
 
 const STAGE_ORDER: ExtractionStage[] = ['fetch', 'parse', 'extract', 'validate', 'similarity'];
 
-function buildInitialStages(): StageInfo[] {
-  return STAGE_ORDER.map((stage) => ({
-    stage,
-    label: STAGE_LABELS[stage],
-    status: 'pending' as const,
-  }));
-}
-
 interface Props {
   resourceId: string;
 }
 
 export function ExtractionProgressPanel({ resourceId }: Props) {
   const [view, setView] = useState<'steps' | 'stream'>('steps');
-  const [stages, setStages] = useState<StageInfo[]>(buildInitialStages);
+  const [stages, setStages] = useState<StageInfo[]>([]);
   const [streamText, setStreamText] = useState('');
   const [strategy, setStrategy] = useState<string | null>(null);
   const [chunkProgress, setChunkProgress] = useState<{
@@ -47,22 +39,40 @@ export function ExtractionProgressPanel({ resourceId }: Props) {
   const streamRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setStages([]);
+    setStreamText('');
+    setStrategy(null);
+    setChunkProgress(null);
+
+    const upsertStage = (stage: ExtractionStage, update: Partial<StageInfo>) => {
+      setStages((prev) => {
+        const idx = prev.findIndex((s) => s.stage === stage);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], ...update };
+          return updated;
+        }
+        const newStage: StageInfo = {
+          stage,
+          label: STAGE_LABELS[stage],
+          status: 'pending',
+          ...update,
+        };
+        const result = [...prev, newStage];
+        result.sort((a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage));
+        return result;
+      });
+    };
+
     const cleanup = extractionProgress.on(resourceId, (event: ExtractionProgressEvent) => {
       if (event.type === 'stage-start') {
-        setStages((prev) =>
-          prev.map((s) =>
-            s.stage === event.stage ? { ...s, status: 'active', statusText: event.statusText } : s
-          )
-        );
+        upsertStage(event.stage, { status: 'active', statusText: event.statusText });
       } else if (event.type === 'stage-complete') {
-        setStages((prev) =>
-          prev.map((s) =>
-            s.stage === event.stage
-              ? { ...s, status: 'complete', meta: event.meta as Record<string, unknown> | undefined, statusText: event.statusText ?? s.statusText }
-              : s
-          )
-        );
-        // Reset chunk progress when extract stage completes
+        upsertStage(event.stage, {
+          status: 'complete',
+          meta: event.meta as Record<string, unknown> | undefined,
+          ...(event.statusText != null ? { statusText: event.statusText } : {}),
+        });
         if (event.stage === 'extract') {
           setChunkProgress(null);
         }
@@ -73,13 +83,7 @@ export function ExtractionProgressPanel({ resourceId }: Props) {
       } else if (event.type === 'chunk-progress') {
         setChunkProgress({ current: event.current, total: event.total, label: event.label });
       } else if (event.type === 'error') {
-        setStages((prev) =>
-          prev.map((s) =>
-            s.stage === event.stage
-              ? { ...s, status: 'error', errorMessage: event.message }
-              : s
-          )
-        );
+        upsertStage(event.stage, { status: 'error', errorMessage: event.message });
       }
     });
     return cleanup;

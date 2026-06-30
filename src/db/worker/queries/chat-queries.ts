@@ -85,6 +85,15 @@ export async function getAllSessions(): Promise<any[]> {
   return rows;
 }
 
+export async function deleteSession(id: string): Promise<void> {
+  await executeExec('DELETE FROM chat_messages WHERE session_id = ?;', [id]);
+  await executeExec('DELETE FROM chat_sessions WHERE id = ?;', [id]);
+}
+
+export async function updateSessionTitle(id: string, title: string): Promise<void> {
+  await executeExec('UPDATE chat_sessions SET title = ? WHERE id = ?;', [title, id]);
+}
+
 export async function getRecentMessages(sessionId: string, limit: number = 20): Promise<any[]> {
   const { rows } = await executeQuery<any>(
     `SELECT * FROM (

@@ -12,7 +12,8 @@ export function SearchPanel() {
   const [results, setResults] = useState<DbNode[]>([]);
   const [searching, setSearching] = useState(false);
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const openContentTab = useUIStore((s) => s.openContentTab);
+  const focusNodeCallback = useUIStore((s) => s.focusNodeCallback);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -54,7 +55,9 @@ export function SearchPanel() {
 
   const handleSelect = (id: string) => {
     selectNode(id);
-    setActivePanel('nodeDetail');
+    openContentTab({ kind: 'graph' }, 'Graph');
+    useUIStore.getState().setGraphOverlay('nodeDetail');
+    if (focusNodeCallback) focusNodeCallback(id);
   };
 
   return (

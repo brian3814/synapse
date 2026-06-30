@@ -40,6 +40,7 @@ export interface PlatformVault {
   read(vaultPath: string): Promise<ArrayBuffer>;
   remove(vaultPath: string): Promise<void>;
   getStorageUsage(): Promise<{ bytes: number; fileCount: number }>;
+  clearAll?(): Promise<void>;
 }
 
 export interface PlatformFiles {

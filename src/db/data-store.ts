@@ -195,6 +195,8 @@ export interface ChatRepository {
   getMessages(sessionId: string): Promise<any[]>;
   getRecentMessages(sessionId: string, limit?: number): Promise<any[]>;
   getAllSessions(): Promise<any[]>;
+  deleteSession(id: string): Promise<void>;
+  updateSessionTitle(id: string, title: string): Promise<void>;
 }
 
 export interface NoteAttachmentRepository {

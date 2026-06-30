@@ -9,7 +9,7 @@ import { entityFiles, notes } from '@platform';
 import { NoteMarkdownPreview } from '../shared/MarkdownRenderer';
 import { parseMarkdown } from '../../../filesystem/markdown-parser';
 
-export function NodeDetailPanel() {
+export function NodeDetailPanel({ onClose }: { onClose?: () => void }) {
   const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -17,7 +17,6 @@ export function NodeDetailPanel() {
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const selectNode = useGraphStore((s) => s.selectNode);
   const selectEdge = useGraphStore((s) => s.selectEdge);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const nodeTypesList = useNodeTypeStore((s) => s.types);
   const getColorForType = useNodeTypeStore((s) => s.getColorForType);
 
@@ -175,10 +174,10 @@ export function NodeDetailPanel() {
 
   if (!node) {
     return (
-      <div className="p-4 flex items-center justify-between">
-        <span className="text-zinc-500 text-sm">No node selected</span>
+      <div className="px-3 py-2 flex items-center justify-between">
+        <span className="text-zinc-500 text-sm">No node/edge selected</span>
         <button
-          onClick={() => setActivePanel('none')}
+          onClick={() => { if (onClose) onClose(); else useUIStore.getState().setGraphOverlay('none'); }}
           className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
           title="Close panel"
         >
@@ -224,7 +223,7 @@ export function NodeDetailPanel() {
   const handleDelete = async () => {
     if (confirm(`Delete node "${node.name}"? Connected edges will also be removed.`)) {
       await deleteNode(node.id);
-      setActivePanel('none');
+      if (onClose) onClose(); else useUIStore.getState().setGraphOverlay('none');
     }
   };
 
@@ -283,7 +282,7 @@ export function NodeDetailPanel() {
       await deleteNode(noteId);
     }
     await deleteNode(node.id);
-    setActivePanel('none');
+    if (onClose) onClose(); else useUIStore.getState().setGraphOverlay('none');
   };
 
   const handleAddTag = () => {
@@ -345,20 +344,22 @@ export function NodeDetailPanel() {
               + Notes
             </button>
           )}
-          <button
-            onClick={() => setActivePanel('none')}
-            className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
-            title="Close panel"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
+              title="Close panel"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Metadata section */}
-      <div className="space-y-3" style={{ paddingTop: 4 }}>
+      {/* Section 1: Type / Label / Tags */}
+      <div className="space-y-3 pt-1">
         {/* Type (structural layer) */}
         <div>
           <label className="text-xs font-medium text-zinc-400 block mb-1">Type</label>
@@ -450,11 +451,17 @@ export function NodeDetailPanel() {
         </div>
       </div>
 
-      {/* Properties */}
+      <div className="border-t border-zinc-700" />
+
+      {/* Section 2: Properties */}
       <div>
         <label className="text-xs font-medium text-zinc-400 block mb-1">Properties</label>
         <PropertyEditor value={node.properties} onSave={handleSaveProperties} nodeId={node.id} />
       </div>
+
+      <div className="border-t border-zinc-700" />
+
+      {/* Section 3: Content, Sources, Notes, Edges */}
 
       {/* Markdown Content Preview — entity files and notes */}
       {(node.type === 'entity' || node.type === 'note') && (
@@ -590,7 +597,7 @@ export function NodeDetailPanel() {
                   key={edge.id}
                   onClick={() => {
                     selectEdge(edge.id);
-                    setActivePanel('edgeDetail');
+                    useUIStore.getState().setGraphOverlay('edgeDetail');
                   }}
                   className="w-full text-left px-2 py-1.5 bg-zinc-800 rounded text-xs hover:bg-zinc-700 flex items-center gap-2"
                 >

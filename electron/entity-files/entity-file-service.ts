@@ -2,9 +2,11 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   renameSync,
   unlinkSync,
+  rmSync,
   statSync,
 } from 'fs';
 import { dirname } from 'path';
@@ -112,6 +114,37 @@ export class EntityFileService {
   }
 
   // ── IPC-facing methods ─────────────────────────────────────────────
+
+  getUsage(): { fileCount: number; bytes: number } {
+    const dir = this.ctx.resolve(ENTITIES_DIR);
+    if (!existsSync(dir)) return { fileCount: 0, bytes: 0 };
+
+    let fileCount = 0;
+    let bytes = 0;
+    const walk = (d: string) => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        const full = `${d}/${entry.name}`;
+        if (entry.isDirectory()) { walk(full); }
+        else if (entry.isFile() && entry.name.endsWith('.md')) {
+          fileCount++;
+          bytes += statSync(full).size;
+        }
+      }
+    };
+    walk(dir);
+    return { fileCount, bytes };
+  }
+
+  clearAllFiles(): void {
+    const dir = this.ctx.resolve(ENTITIES_DIR);
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+      mkdirSync(dir, { recursive: true });
+    }
+    this.ctx.db.prepare(
+      "UPDATE nodes SET vault_path = NULL, file_mtime = NULL, file_size = NULL, content_hash = NULL WHERE vault_path LIKE 'entities/%'"
+    ).run();
+  }
 
   generateAll(): { generated: number } {
     const rows = this.ctx.db.prepare(

@@ -24,6 +24,8 @@ declare const window: Window & {
   electronIPC: {
     invoke(channel: string, ...args: unknown[]): Promise<unknown>;
     on(channel: string, cb: (...args: unknown[]) => void): () => void;
+    setZoomFactor(factor: number): void;
+    getZoomFactor(): number;
   };
 };
 
@@ -38,8 +40,21 @@ export const entityFiles: import('../types').PlatformEntityFiles = {
   async write(nodeId: string, markdown: string, expectedHash?: string) { return window.electronIPC.invoke('entity-files:write', nodeId, markdown, expectedHash) as Promise<{ contentHash: string }>; },
 };
 
+export function setZoomFactor(factor: number): void {
+  window.electronIPC.setZoomFactor(factor);
+}
+
+export function getZoomFactor(): number {
+  return window.electronIPC.getZoomFactor();
+}
+
 export async function initPlatform(): Promise<void> {
   await db.init();
   await notes.init();
   await vault.init();
+
+  const result = await storage.get(['uiZoomFactor']) as Record<string, any>;
+  if (result.uiZoomFactor != null) {
+    window.electronIPC.setZoomFactor(result.uiZoomFactor);
+  }
 }

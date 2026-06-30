@@ -1,6 +1,6 @@
 import { useLLMStore } from '../../../graph/store/llm-store';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
-import { useLLMExtraction } from '../../hooks/useLLMExtraction';
+import { startExtraction, startQuickExtraction, startAgentExtraction } from '../../extractionActions';
 import { TextInput } from './TextInput';
 import { PromptInput } from './PromptInput';
 import { PrivacyDisclosure } from './PrivacyDisclosure';
@@ -23,7 +23,6 @@ export function LLMPanel({ onClose }: { onClose?: () => void }) {
   const resetReview = useExtractionReviewStore((s) => s.reset);
   const extractionMode = useLLMStore((s) => s.extractionMode);
   const reset = () => { resetLLM(); resetReview(); };
-  const { startExtraction, startQuickExtraction, startAgentExtraction } = useLLMExtraction();
 
   const isIdle = status === 'idle' || status === 'error';
 

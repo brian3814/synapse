@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronIPC', {
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronIPC', {
   // webUtils.getPathForFile is the replacement but must be called from preload.
   // See: https://github.com/electron/electron/issues/43534
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor),
+  getZoomFactor: () => webFrame.getZoomFactor(),
 });

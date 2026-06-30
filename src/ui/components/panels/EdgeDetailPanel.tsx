@@ -14,14 +14,13 @@ interface EdgeProvenanceRow {
   created_at: string;
 }
 
-export function EdgeDetailPanel() {
+export function EdgeDetailPanel({ onClose }: { onClose?: () => void }) {
   const selectedEdgeId = useGraphStore((s) => s.selectedEdgeId);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const updateEdge = useGraphStore((s) => s.updateEdge);
   const deleteEdge = useGraphStore((s) => s.deleteEdge);
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
 
   const edge = edges.find((e) => e.id === selectedEdgeId);
   const sourceNode = edge ? nodes.find((n) => n.id === edge.sourceId) : null;
@@ -48,17 +47,19 @@ export function EdgeDetailPanel() {
 
   if (!edge) {
     return (
-      <div className="p-4 flex items-center justify-between">
+      <div className="px-3 py-2 flex items-center justify-between">
         <span className="text-zinc-500 text-sm">No edge selected</span>
-        <button
-          onClick={() => setActivePanel('none')}
-          className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
-          title="Close panel"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-700 transition-colors"
+            title="Close panel"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
     );
   }
@@ -71,13 +72,13 @@ export function EdgeDetailPanel() {
   const handleDelete = async () => {
     if (confirm(`Delete edge "${edge.label}"?`)) {
       await deleteEdge(edge.id);
-      setActivePanel('none');
+      if (onClose) onClose();
     }
   };
 
   const goToNode = (id: string) => {
     selectNode(id);
-    setActivePanel('nodeDetail');
+    useUIStore.getState().setGraphOverlay('nodeDetail');
   };
 
   return (
@@ -106,6 +107,7 @@ export function EdgeDetailPanel() {
         </button>
       </PanelHeader>
 
+      {/* Section 1: Path + Label + Type */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 bg-zinc-800 rounded p-2">
           <button onClick={() => goToNode(edge.sourceId)} className="text-indigo-400 hover:text-indigo-300 text-sm truncate">
@@ -156,16 +158,6 @@ export function EdgeDetailPanel() {
           )}
         </Field>
 
-        <Field label="Properties">
-          {editing ? (
-            <PropertyEditor value={properties} onChange={setProperties} />
-          ) : (
-            <pre className="text-xs text-zinc-400 bg-zinc-800 rounded p-2 overflow-x-auto">
-              {JSON.stringify(edge.properties, null, 2)}
-            </pre>
-          )}
-        </Field>
-
         <Field label="Directed">
           <span className="text-sm text-zinc-200">{edge.directed ? 'Yes' : 'No'}</span>
         </Field>
@@ -173,8 +165,28 @@ export function EdgeDetailPanel() {
         <Field label="Created">
           <span className="text-xs text-zinc-500">{edge.createdAt}</span>
         </Field>
+      </div>
 
-        {provenance.length > 0 && (
+      <div className="border-t border-zinc-700" />
+
+      {/* Section 2: Properties */}
+      <div className="space-y-3">
+        <Field label="Properties">
+          {editing ? (
+            <PropertyEditor value={properties} onSave={setProperties} nodeId={edge.id} />
+          ) : (
+            <pre className="text-xs text-zinc-400 bg-zinc-800 rounded p-2 overflow-x-auto">
+              {JSON.stringify(edge.properties, null, 2)}
+            </pre>
+          )}
+        </Field>
+      </div>
+
+      {/* Section 3: Provenance */}
+      {provenance.length > 0 && (
+        <>
+        <div className="border-t border-zinc-700" />
+        <div className="space-y-3">
           <Field label={`Provenance (${provenance.length})`}>
             <div className="space-y-1">
               {provenance.map((p) => {
@@ -200,8 +212,9 @@ export function EdgeDetailPanel() {
               })}
             </div>
           </Field>
-        )}
-      </div>
+        </div>
+        </>
+      )}
     </div>
   );
 }

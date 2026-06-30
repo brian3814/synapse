@@ -271,6 +271,10 @@ export const chat = {
     sendRequest('chat.getRecentMessages', { sessionId, limit }) as Promise<any[]>,
   getAllSessions: () =>
     sendRequest('chat.getAllSessions') as Promise<any[]>,
+  deleteSession: (id: string) =>
+    sendRequest('chat.deleteSession', id) as Promise<{ success: boolean }>,
+  updateSessionTitle: (id: string, title: string) =>
+    sendRequest('chat.updateSessionTitle', { id, title }) as Promise<{ success: boolean }>,
 };
 
 // Query engine operations

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FALLBACK_MODELS, LLM_CONFIG_STORAGE_KEY } from '../../../shared/constants';
-import { storage, platformId, notes, vaultWorkspace, llm } from '@platform';
+import { storage, platformId, notes, vaultWorkspace, llm, setZoomFactor, getZoomFactor } from '@platform';
 import type { LLMProvider } from '../../../shared/types';
 import type { ModelInfo } from '../../../core/model-provider';
 import type { UsageRecord } from '../../../service-worker/usage-tracker';
@@ -12,6 +12,7 @@ import { VaultSandboxSection } from './VaultSandboxSection';
 import type { SettingsTab } from './SettingsModal';
 import { AgentAssignmentsTab } from './AgentAssignmentsTab';
 import { MCPTab } from './MCPTab';
+import { VaultCleanupModal } from './VaultCleanupModal';
 
 export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
@@ -196,7 +197,7 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
         <div>
           <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">About</h3>
           <p className="text-sm text-zinc-200 font-medium">Synapse</p>
-          <p className="text-xs text-zinc-500 mt-1">Version 0.1.0</p>
+          <p className="text-xs text-zinc-500 mt-1">Version 0.13.0</p>
         </div>
         <div className="space-y-2">
           <p className="text-xs text-zinc-400">
@@ -213,21 +214,29 @@ export function SettingsPanel({ activeTab }: { activeTab: SettingsTab }) {
     );
   }
 
+  if (activeTab === 'vault') {
+    return (
+      <div className="p-5 space-y-0">
+        {platformId === 'electron' ? <VaultSection /> : <NotesStorageSection />}
+
+        <EmbeddingSettings />
+
+        <ImportBehaviorSection />
+
+        <VaultSandboxSection />
+
+        <StressTest />
+      </div>
+    );
+  }
+
   return (
     <div className="p-5 space-y-0">
+      <AppearanceSection />
+
       <RelevanceSection />
 
-      {platformId === 'electron' ? <VaultSection /> : <NotesStorageSection />}
-
-      <EmbeddingSettings />
-
       <ReadingListSettings />
-
-      <ImportBehaviorSection />
-
-      <VaultSandboxSection />
-
-      <StressTest />
 
       <DangerZone />
     </div>
@@ -353,6 +362,71 @@ function UsageSection() {
   );
 }
 
+const ZOOM_PRESETS = [
+  { factor: 0.85, label: 'Small' },
+  { factor: 0.925, label: 'Compact' },
+  { factor: 1.0, label: 'Default' },
+  { factor: 1.1, label: 'Large' },
+  { factor: 1.25, label: 'X-Large' },
+];
+
+function AppearanceSection() {
+  const [stepIdx, setStepIdx] = useState(2);
+
+  useEffect(() => {
+    if (platformId === 'electron') {
+      const current = getZoomFactor();
+      const closest = ZOOM_PRESETS.reduce((best, p, i) =>
+        Math.abs(p.factor - current) < Math.abs(ZOOM_PRESETS[best].factor - current) ? i : best, 0);
+      setStepIdx(closest);
+    }
+  }, []);
+
+  const handleChange = async (idx: number) => {
+    setStepIdx(idx);
+    const factor = ZOOM_PRESETS[idx].factor;
+    setZoomFactor(factor);
+    await storage.set({ uiZoomFactor: factor });
+  };
+
+  if (platformId !== 'electron') return null;
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide mb-3">Appearance</h3>
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-medium text-zinc-400">
+            UI Scale — {ZOOM_PRESETS[stepIdx].label}
+          </label>
+          {stepIdx !== 2 && (
+            <button
+              onClick={() => handleChange(2)}
+              className="text-[10px] text-zinc-500 hover:text-zinc-300"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={ZOOM_PRESETS.length - 1}
+          step={1}
+          value={stepIdx}
+          onChange={(e) => handleChange(parseInt(e.target.value))}
+          className="w-full accent-indigo-500"
+        />
+        <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+          {ZOOM_PRESETS.map((p) => (
+            <span key={p.factor}>{p.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RelevanceSection() {
   const [enabled, setEnabled] = useState(true);
 
@@ -369,11 +443,11 @@ function RelevanceSection() {
     setEnabled(newValue);
     try {
       await storage.set({ contextualRelevanceEnabled: newValue });
-    } catch {}
+    } catch {};
   };
 
   return (
-    <div>
+    <div className="border-t border-zinc-700 pt-4 mt-4">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-xs font-medium text-zinc-400">Contextual Relevance</h4>
@@ -402,7 +476,7 @@ function VaultSection() {
   if (!status?.open) return null;
 
   return (
-    <div className="border-t border-zinc-700 pt-4 mt-4">
+    <div>
       <h4 className="text-xs font-medium text-zinc-400 mb-2">Vault</h4>
       <div className="space-y-2">
         <div>
@@ -455,7 +529,7 @@ function NotesStorageSection() {
   };
 
   return (
-    <div className="border-t border-zinc-700 pt-4 mt-4">
+    <div>
       <h4 className="text-xs font-medium text-zinc-400 mb-2">Notes Storage</h4>
 
       <div className="space-y-2">
@@ -654,47 +728,24 @@ function StressTest() {
 }
 
 function DangerZone() {
-  const [confirming, setConfirming] = useState(false);
-  const clearAll = useGraphStore((s) => s.clearAll);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const edgeCount = useGraphStore((s) => s.edges.length);
-
-  const handleClearAll = async () => {
-    await clearAll();
-    setConfirming(false);
-  };
 
   return (
     <div className="border-t border-zinc-700 pt-4 mt-4">
       <h4 className="text-xs font-medium text-red-400 mb-2">Danger Zone</h4>
-      {!confirming ? (
-        <button
-          onClick={() => setConfirming(true)}
-          disabled={nodeCount === 0 && edgeCount === 0}
-          className="w-full bg-red-900/30 text-red-400 text-sm py-1.5 rounded border border-red-900/50 hover:bg-red-900/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Clear All Nodes & Edges
-        </button>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs text-red-400">
-            Delete all {nodeCount} nodes and {edgeCount} edges? This cannot be undone.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={handleClearAll}
-              className="flex-1 bg-red-600 text-white text-sm py-1.5 rounded hover:bg-red-500 transition-colors"
-            >
-              Confirm Delete
-            </button>
-            <button
-              onClick={() => setConfirming(false)}
-              className="flex-1 bg-zinc-700 text-zinc-300 text-sm py-1.5 rounded hover:bg-zinc-600 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+      <button
+        onClick={() => setShowCleanupModal(true)}
+        className="w-full bg-red-900/30 text-red-400 text-sm py-1.5 rounded border border-red-900/50 hover:bg-red-900/50 transition-colors"
+      >
+        Clear Vault Data
+      </button>
+      <p className="text-[10px] text-zinc-600 mt-1">
+        {nodeCount} nodes, {edgeCount} edges in graph
+      </p>
+      {showCleanupModal && (
+        <VaultCleanupModal onClose={() => setShowCleanupModal(false)} />
       )}
     </div>
   );

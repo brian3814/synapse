@@ -41,3 +41,5 @@ electron/sandbox/vendor/
 # Local test data (contains live SQLite db + wal/shm)
 synapse-test-vault/
 *.mcpb
+
+temp/

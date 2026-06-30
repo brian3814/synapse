@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useLLMStore } from '../../graph/store/llm-store';
 import { useUIStore } from '../../graph/store/ui-store';
 import { useReadingListStore } from '../../graph/store/reading-list-store';
-import { useLLMExtraction, buildDiffItems } from './useLLMExtraction';
+import { proceedToReview, buildDiffItems } from '../extractionActions';
 import { readingList as readingListDb } from '../../db/client/db-client';
 import type { ReadingListResource } from '../../shared/reading-list-types';
 import { browser } from '@platform';
 
 export function useReadingListMerge() {
-  const { proceedToReview } = useLLMExtraction();
   const mergingIdRef = useRef<string | null>(null);
 
   const startMerge = useCallback(async (item: ReadingListResource) => {
@@ -37,7 +36,7 @@ export function useReadingListMerge() {
     // Advance to review and open the extraction review tab
     await proceedToReview();
     useUIStore.getState().openContentTab({ kind: 'extractionReview' }, 'Extraction');
-  }, [proceedToReview]);
+  }, []);
 
   // Watch for review completion — when LLM store resets to 'idle' after we started a merge
   useEffect(() => {
@@ -78,7 +77,7 @@ export function useReadingListMerge() {
           useReadingListStore.getState().markComplete(id);
 
           // 5. Switch back to reading list panel
-          useUIStore.getState().forceActivePanel('readingList');
+          useUIStore.getState().openContentTab({ kind: 'readingList' }, 'Inbox');
         } catch (e) {
           console.error('[ReadingListMerge] Post-merge cleanup failed:', e);
         }

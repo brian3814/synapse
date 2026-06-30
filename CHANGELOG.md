@@ -4,6 +4,78 @@ All notable changes to Synapse will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-30
+
+### Added
+- **UI Scale preference**: 5-step zoom slider (Small / Compact / Default / Large / X-Large) in Settings → General, powered by Electron's `webFrame.setZoomFactor()` — persisted and restored on app startup
+- **Vault settings tab**: vault-related settings (vault info, embeddings, file import, sandbox, stress test, danger zone) moved from General to a dedicated Vault tab for cleaner organization
+
+### Changed
+- General settings tab streamlined to app-wide preferences: Appearance (UI Scale), Contextual Relevance, Reading List
+
+## [0.12.0] - 2026-06-30
+
+### Added
+- **Vault cleanup modal**: multi-step destructive action flow replacing inline confirm/cancel in Danger Zone — confirmation step, vault path verification with copy button, and granular category selection tree
+- **Selective data cleanup**: choose which data to delete — graph data, chat history, artifacts, memories, notes, vault files — each with live count badges and per-category progress indicators
+- **TabErrorBoundary**: tab content wrapped in error boundaries so render crashes show inline error details (with component stack in dev mode) instead of blanking the entire UI
+- `vault:clear-all` IPC handler for bulk vault file cleanup
+- 29 TDD tests for vault cleanup logic (path matching, category selection, deletion ordering, error handling)
+
+### Fixed
+- **Agent panel crash**: clicking an agent card blanked the UI — `useState`/`useRef` hooks in `AgentDetailDrawer` were placed after a conditional early return, violating React's Rules of Hooks
+
+## [0.11.0] - 2026-06-30
+
+### Added
+- **UI redesign**: consolidated ActivityBar with 3 groups (Library / Workspace / Tools) replacing scattered Header toolbar buttons
+- **Content tabs**: ReadingList, Notes, Intelligence, Query, Agents, and Artifacts now open as main-area content tabs instead of sidebar panels
+- **Floating graph panels**: node/edge detail and create panels float inside the graph pane (bounded to graph column in split-view), replacing the fixed right-side ActivePanel column
+- **Resizable graph detail panel**: drag left edge to resize, max 30% of graph pane width
+- **Agent management view**: grid/list toggle with 2-column responsive cards, detail drawer (resizable 260–480px), sub-tabs for Agents/Connections/MCP Server
+- **Command palette** (⌘K): centered modal overlay with type filter tabs, keyboard navigation, match highlighting, semantic vector fallback
+- **Artifact browser**: content tab with split-pane list + inline preview using existing type-specific renderers, "Open in Tab" for full editing
+- **Chat history sidebar**: left panel listing conversations grouped by date, with session loading, ⋮ options menu (rename/delete), auto-refresh on new sessions
+- **Custom tooltip component**: 500ms hover delay, replaces native HTML title attributes across header buttons
+- Chat DB operations: `deleteSession` and `updateSessionTitle` wired through full stack
+
+### Changed
+- Header simplified to logo, vault switcher, search icon (⌘K), settings gear
+- ActivityBar width increased from 32px to 40px
+- Graph toolbar styling: rounded-lg corners, z-10 layering
+- Node/edge detail panels organized into sections with separators
+- Inbox badge counts only 'ready' items (not 'complete')
+- Search bar replaced with icon button showing tooltip "Search (⌘K)"
+- Create button removed from header (available in graph toolbar)
+- Theme toggle commented out until light theme is built
+
+### Removed
+- `ActivePanel` component and right-side panel column
+- Header toolbar buttons for ReadingList, Query, LLM Extract, Notes, Intelligence
+
+### Tests
+- 23 TDD tests for chat history DB operations (session CRUD, lifecycle, messages, integration)
+- 9 tests for inbox badge count logic
+
+## [0.10.1] - 2026-06-29
+
+### Changed
+- `useLLMExtraction` hook refactored into `extractionActions` module — 8 stateless async functions exported directly instead of wrapped in unnecessary `useCallback`/hook pattern
+- Scattered imports in the extraction module consolidated at the top of the file
+
+### Fixed
+- Existing vaults at schema v11-v13 threw a fatal error on startup instead of migrating incrementally — implemented migration steps v12 (content_hash column), v13 (artifacts table), and v14 (schema cleanup: dead table/column drops, table rebuilds) with per-migration atomic transactions and rollback support
+
+## [0.10.0] - 2026-06-29
+
+### Added
+- Extraction regeneration with feedback: "Regenerate with feedback" button in the review step lets users describe how extraction should differ, then re-runs with the previous results included in the prompt so the LLM knows what to change
+- Reading list panel card updates to "processing" during regeneration if the resource came from the reading list
+
+### Changed
+- Unified extraction progress UI: all extraction paths (LLM panel, quick extraction, regeneration) now use the same `ExtractionProgressPanel` component with stage-based progress (fetch/extract/validate), matching the Chrome companion extraction flow
+- `ExtractionProgressPanel` stages are now dynamic — only stages that receive events are shown, so text extraction shows 2 stages while page extraction shows 3
+
 ## [0.9.0] - 2026-06-26
 
 ### Added

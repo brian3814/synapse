@@ -9,7 +9,7 @@ import { initArtifactStoreListener } from '../graph/store/artifact-store';
 import { useTierStore } from '../graph/store/tier-store';
 import { useDisplayMode } from './hooks/useDisplayMode';
 import { useCompanionCapture } from './hooks/useCompanionCapture';
-import { useLLMExtraction } from './hooks/useLLMExtraction';
+import { startIngestion } from './extractionActions';
 import { useLLMStore } from '../graph/store/llm-store';
 import { registerQueryMessageHandler } from '../db/client/query-message-handler';
 import { SidePanelLayout } from './layouts/SidePanelLayout';
@@ -55,7 +55,6 @@ function AppMain() {
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
 
   // Ingestion state
-  const { startIngestion } = useLLMExtraction();
   const [pendingSource, setPendingSource] = useState<IngestionSource | null>(null);
   const [modePromptInfo, setModePromptInfo] = useState<ModePromptResult | null>(null);
 
@@ -69,7 +68,7 @@ function AppMain() {
     } else {
       startIngestion(source, 'full');
     }
-  }, [startIngestion]);
+  }, []);
 
   const handleModeSelect = useCallback((mode: ProcessingMode) => {
     if (pendingSource) {
@@ -77,7 +76,7 @@ function AppMain() {
       setPendingSource(null);
       setModePromptInfo(null);
     }
-  }, [pendingSource, startIngestion]);
+  }, [pendingSource]);
 
   const handleModeCancel = useCallback(() => {
     setPendingSource(null);
@@ -155,7 +154,7 @@ function AppMain() {
   useEffect(() => {
     const extractionStates = new Set(['extracting', 'agent-running']);
     return useLLMStore.subscribe((state, prev) => {
-      if (extractionStates.has(state.status) && prev.status === 'idle') {
+      if (extractionStates.has(state.status) && !extractionStates.has(prev.status)) {
         useUIStore.getState().setLLMModalOpen(false);
         useUIStore.getState().openContentTab({ kind: 'extractionReview' }, 'Extraction');
       }

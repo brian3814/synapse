@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
+import { useRef, useCallback, useMemo, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Modifiers } from '../../../graph/renderer/types';
 import { bfsPathWithEdges } from '../../../graph/algorithms/graph-algorithms';
 import { GraphCanvas } from './GraphCanvas';
@@ -9,6 +9,10 @@ import { useGraphStore } from '../../../graph/store/graph-store';
 import { useNodeTypeStore } from '../../../graph/store/node-type-store';
 import { GraphControls } from './GraphControls';
 import { GraphContextMenu } from './GraphContextMenu';
+import { NodeDetailPanel } from '../panels/NodeDetailPanel';
+import { EdgeDetailPanel } from '../panels/EdgeDetailPanel';
+import { CreatePanel } from '../panels/CreatePanel';
+import { MultiSelectPanel } from '../panels/MultiSelectPanel';
 import { spatial } from '../../../db/client/db-client';
 import { SMALL_GRAPH_THRESHOLD } from '../../../shared/constants';
 
@@ -26,14 +30,34 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   const selectNodes = useGraphStore((s) => s.selectNodes);
   const addNodesToSelection = useGraphStore((s) => s.addNodesToSelection);
   const selectEdge = useGraphStore((s) => s.selectEdge);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const forceActivePanel = useUIStore((s) => s.forceActivePanel);
+  const setGraphOverlay = useUIStore((s) => s.setGraphOverlay);
+  const graphOverlay = useUIStore((s) => s.graphOverlay);
   const types = useNodeTypeStore((s) => s.types);
 
   const adjacency = useGraphStore((s) => s.adjacency);
   const setFocusNodeCallback = useUIStore((s) => s.setFocusNodeCallback);
 
   const [windowed, setWindowed] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState(320);
+  const panelDragging = useRef(false);
+  const panelLastX = useRef(0);
+
+  const onPanelPointerDown = useCallback((e: ReactPointerEvent) => {
+    e.preventDefault();
+    panelDragging.current = true;
+    panelLastX.current = e.clientX;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+  const onPanelPointerMove = useCallback((e: ReactPointerEvent) => {
+    if (!panelDragging.current) return;
+    const delta = panelLastX.current - e.clientX;
+    panelLastX.current = e.clientX;
+    const maxW = containerRef.current ? containerRef.current.clientWidth * 0.3 : 400;
+    setPanelWidth(w => Math.min(maxW, Math.max(240, w + delta)));
+  }, []);
+  const onPanelPointerUp = useCallback(() => { panelDragging.current = false; }, []);
+
   const [contextMenu, setContextMenu] = useState<{
     screenX: number;
     screenY: number;
@@ -48,12 +72,12 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
       const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
       if (ids.length === 1) {
         selectNode(ids[0]);
-        forceActivePanel('nodeDetail');
+        setGraphOverlay('nodeDetail');
       }
       graphRef.current?.fitToView(ids);
     });
     return () => setFocusNodeCallback(null);
-  }, [selectNode, forceActivePanel, setFocusNodeCallback]);
+  }, [selectNode, setGraphOverlay, setFocusNodeCallback]);
 
   // Check total node count to determine windowed mode
   useEffect(() => {
@@ -77,12 +101,12 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         useGraphStore.getState().clearSelection();
-        setActivePanel('none');
+        setGraphOverlay('none');
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [setActivePanel]);
+  }, [setGraphOverlay]);
 
   const handleNodeClick = useCallback(
     (nodeId: string, modifiers: Modifiers) => {
@@ -91,17 +115,17 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
       } else {
         selectNode(nodeId);
       }
-      forceActivePanel('nodeDetail');
+      setGraphOverlay('nodeDetail');
     },
-    [selectNode, toggleNodeSelection, forceActivePanel]
+    [selectNode, toggleNodeSelection, setGraphOverlay]
   );
 
   const handleEdgeClick = useCallback(
     (edgeId: string) => {
       selectEdge(edgeId);
-      forceActivePanel('edgeDetail');
+      setGraphOverlay('edgeDetail');
     },
-    [selectEdge, forceActivePanel]
+    [selectEdge, setGraphOverlay]
   );
 
   const handleCanvasClick = useCallback((modifiers: Modifiers) => {
@@ -118,9 +142,9 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
       } else {
         selectNodes(nodeIds);
       }
-      if (nodeIds.size > 0) forceActivePanel('nodeDetail');
+      if (nodeIds.size > 0) setGraphOverlay('nodeDetail');
     },
-    [addNodesToSelection, selectNodes, forceActivePanel]
+    [addNodesToSelection, selectNodes, setGraphOverlay]
   );
 
   const handleContextMenu = useCallback(
@@ -164,7 +188,7 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
   }
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0" ref={containerRef}>
       <GraphCanvas
         ref={graphRef}
         nodes={nodes}
@@ -188,6 +212,30 @@ export function KnowledgeGraph({ compact = false }: KnowledgeGraphProps) {
           nodeId={contextMenu.nodeId}
           onClose={() => setContextMenu(null)}
         />
+      )}
+      {(selectedNodeIds.size > 1 || graphOverlay !== 'none') && (
+        <div
+          className="absolute top-3 right-3 max-h-[calc(100%-24px)] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-20 flex"
+          style={{ width: panelWidth }}
+        >
+          <div
+            onPointerDown={onPanelPointerDown}
+            onPointerMove={onPanelPointerMove}
+            onPointerUp={onPanelPointerUp}
+            className="w-1.5 shrink-0 cursor-col-resize hover:bg-indigo-500 active:bg-indigo-400 transition-colors"
+          />
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {selectedNodeIds.size > 1 ? (
+              <MultiSelectPanel onClose={() => setGraphOverlay('none')} />
+            ) : graphOverlay === 'nodeDetail' ? (
+              <NodeDetailPanel onClose={() => setGraphOverlay('none')} />
+            ) : graphOverlay === 'edgeDetail' ? (
+              <EdgeDetailPanel onClose={() => setGraphOverlay('none')} />
+            ) : graphOverlay === 'create' ? (
+              <CreatePanel onClose={() => setGraphOverlay('none')} />
+            ) : null}
+          </div>
+        </div>
       )}
     </div>
   );

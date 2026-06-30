@@ -23,7 +23,6 @@ export function IntelligencePanel() {
   const edges = useGraphStore((s) => s.edges);
   const adjacency = useGraphStore((s) => s.adjacency);
   const selectNode = useGraphStore((s) => s.selectNode);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
 
   const analysis = useMemo(() => {
     if (nodes.length < 3) return null;
@@ -47,8 +46,11 @@ export function IntelligencePanel() {
   }, [nodes, edges, adjacency]);
 
   const handleNodeClick = (nodeId: string) => {
+    const { openContentTab, setGraphOverlay, focusNodeCallback } = useUIStore.getState();
+    openContentTab({ kind: 'graph' }, 'Graph');
     selectNode(nodeId);
-    setActivePanel('nodeDetail');
+    setGraphOverlay('nodeDetail');
+    if (focusNodeCallback) focusNodeCallback(nodeId);
   };
 
   if (nodes.length < 3) {

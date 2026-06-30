@@ -2,7 +2,8 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow } from 'electron';
 import { StorageBackend } from './storage-backend';
 
-const PORT = 19876;
+const DEFAULT_PORT = 19876;
+const MAX_PORT_ATTEMPTS = 10;
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,7 +31,23 @@ interface CompanionServerOptions {
   getMcpHandler?: () => ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | null;
 }
 
-export function startCompanionServer(options: CompanionServerOptions | StorageBackend = {}): void {
+function tryListen(server: ReturnType<typeof createServer>, port: number, host: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (e: NodeJS.ErrnoException) => {
+      server.removeListener('listening', onListening);
+      reject(e);
+    };
+    const onListening = () => {
+      server.removeListener('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, host);
+  });
+}
+
+export async function startCompanionServer(options: CompanionServerOptions | StorageBackend = {}): Promise<number | null> {
   // Support legacy call signature: startCompanionServer(storage)
   const opts: CompanionServerOptions = options instanceof StorageBackend
     ? { storage: options }
@@ -140,15 +157,28 @@ export function startCompanionServer(options: CompanionServerOptions | StorageBa
     json(res, 404, { error: 'Not found' });
   });
 
-  server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[Companion Server] Listening on http://127.0.0.1:${PORT}`);
-  });
-
-  server.on('error', (e: any) => {
-    if (e.code === 'EADDRINUSE') {
-      console.warn(`[Companion Server] Port ${PORT} in use, skipping`);
-    } else {
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const port = DEFAULT_PORT + attempt;
+    try {
+      await tryListen(server, port, '127.0.0.1');
+      console.log(`[Companion Server] Listening on http://127.0.0.1:${port}`);
+      if (storageBackend) {
+        storageBackend.set({ companionPort: port });
+      }
+      server.on('error', (e) => {
+        console.error('[Companion Server] Runtime error:', e);
+      });
+      return port;
+    } catch (e: any) {
+      if (e.code === 'EADDRINUSE') {
+        console.warn(`[Companion Server] Port ${port} in use, trying next...`);
+        continue;
+      }
       console.error('[Companion Server] Error:', e);
+      return null;
     }
-  });
+  }
+
+  console.error(`[Companion Server] All ports ${DEFAULT_PORT}-${DEFAULT_PORT + MAX_PORT_ATTEMPTS - 1} in use`);
+  return null;
 }

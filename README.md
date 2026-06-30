@@ -1,90 +1,53 @@
 # Synapse
 
-A local-first knowledge graph that turns articles, notes, and conversations into a structured, queryable graph. LLM-powered extraction with human review, entity resolution, provenance tracking, and an agent chat interface — all running on your machine.
+Turn articles, notes, and conversations into a structured knowledge graph. Paste a URL, review what the LLM extracted, and watch your graph grow — with entity resolution, provenance tracking, and typed relationships. Everything runs locally on your machine.
 
-## Why Synapse
+![Graph overview](docs/images/graph-overview.png)
 
-Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) introduced a compelling pattern: instead of re-deriving answers from raw documents on every query, have an LLM incrementally build a persistent, interlinked wiki that compounds over time. The LLM handles the boring bookkeeping — touching 15 files in one pass, maintaining cross-references, linting for contradictions.
+## How it works
 
-The pattern works. What it lacks is **data governance**:
+**1. Capture** — Browse an article and send it to your vault with one click using the companion extension. The LLM extracts typed entities (people, organizations, technologies, concepts) and labeled relationships. Choose Quick (single LLM call) or Deep (agentic with DOM inspection).
 
-| LLM Wiki (flat markdown) | Synapse (structured graph) |
-|---|---|
-| Untyped markdown links | Typed edges (`created_by`, `studied_at`, `builds_on`) |
-| No deduplication | Entity resolution with fuzzy matching + merge |
-| Convention-based schema | Enforced node types (`person`, `technology`, `concept`) |
-| No provenance chain | Source tracking per edge (extraction, user, agent) |
-| LLM compliance assumed | Human review step before any graph mutation |
-| Single flat namespace | SQLite with FTS5, spatial indexing, vector embeddings |
-| No external access | MCP server exposes graph to Claude Code, IDEs, other agents |
+![Companion capture](docs/images/companion-capture.gif)
 
-Synapse is the **harness layer** — it takes the LLM wiki's "paste → extract → compound" loop and wraps it in the governance that makes it reliable: entity resolution catches duplicates, typed relationships make traversal meaningful, provenance lets you trace any claim back to its source, and human review ensures nothing enters the graph unchecked.
+**2. Review** — Nothing touches the graph without your approval. A visual diff shows every entity and relationship the LLM found, with merge recommendations for duplicates. Edit inline, remove noise, accept what's useful.
 
-## Architecture
+![Extraction review](docs/images/extraction-review.png)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Electron App                         │
-│  ┌──────────────────────┐   ┌────────────────────────────┐  │
-│  │     Main Process     │   │     Renderer (React 19)    │  │
-│  │  ┌────────────────┐  │   │  ┌──────────────────────┐  │  │
-│  │  │  VaultManager  │  │   │  │   Zustand Stores     │  │  │
-│  │  │  SQLite (b-s3) │  │   │  │  (graph, ui, llm,    │  │  │
-│  │  │  FileWatcher   │  │   │  │   node-type, review) │  │  │
-│  │  │  EventBus      │  │◄─┤  ├──────────────────────┤  │  │
-│  │  ├────────────────┤  │IPC│  │  Three.js Renderer   │  │  │
-│  │  │  LLM Backend   │  │   │  │  (InstancedMesh)     │  │  │
-│  │  │  (Anthropic,   │  │   │  ├──────────────────────┤  │  │
-│  │  │   OpenAI)      │  │   │  │  Web Worker          │  │  │
-│  │  ├────────────────┤  │   │  │  (Force Layout)      │  │  │
-│  │  │  MCP Server    │──┤───┤──┴──────────────────────┘  │  │
-│  │  │  (HTTP+stdio)  │  │   └────────────────────────────┘  │
-│  │  ├────────────────┤  │                                   │
-│  │  │  MCP Client    │──┼── External MCP Servers            │
-│  │  └────────────────┘  │                                   │
-│  └──────────────────────┘                                   │
-└─────────────────────────────────────────────────────────────┘
-         │                              │
-    ┌────┴────┐                  ┌──────┴──────┐
-    │  Vault  │                  │ Claude Code  │
-    │ (.kg/)  │                  │  IDE, other  │
-    │ graph.db│                  │   agents     │
-    │ notes/  │                  │  (via MCP)   │
-    └─────────┘                  └─────────────┘
+**3. Explore** — Entities appear as color-coded nodes with force-directed layout. Click any node to see its properties, relationships, and source provenance. Search with full-text (FTS5) or semantic similarity (vector embeddings).
+
+![Search bar](docs/images/search-bar.png)
+
+**4. Analyze** — The Intelligence panel shows graph health at a glance: clusters, central entities, bridge nodes, orphan detection, and density metrics.
+
+![Intelligence panel](docs/images/intelligence-panel.png)
+
+**5. Ask** — Chat with an agent that has full access to your graph. It uses tool calls (search, traverse, inspect) to ground answers in your actual data — not hallucinated associations.
+
+![Chat response](docs/images/chat-response.png)
+
+**6. Generate** — Ask the agent to create artifacts: interactive dashboards, visualizations, reports. Artifacts are persisted in the vault and browsable from the Artifacts panel.
+
+![Artifact viewer](docs/images/artifact-viewer.png)
+
+## Agents and artifacts
+
+Define custom agents with per-agent tool access, system prompts, and MCP server connections. Each agent gets its own tool filter — restrict one to read-only graph queries, give another full write access.
+
+![Agents panel](docs/images/agents-panel.png)
+
+## MCP integration
+
+Synapse is both an **MCP server** and an **MCP client**. Any MCP-compatible agent can search, create, and analyze your graph.
+
+![Settings MCP](docs/images/settings-mcp.png)
+
+**Connect Claude Desktop** (recommended):
+```bash
+claude desktop-extension install synapse-kg
 ```
 
-### Key Components
-
-| Component | Technology | Role |
-|---|---|---|
-| **Database** | SQLite (better-sqlite3) | Source of truth. FTS5 full-text search, WAL mode, 16 repository interfaces |
-| **Graph Renderer** | Three.js (custom InstancedMesh) | 1-2 draw calls for 100k+ nodes. Web Worker force layout (Barnes-Hut O(n log n)) |
-| **LLM Extraction** | Anthropic (agentic), OpenAI | Three modes: page extraction with DOM tools, text extraction, file ingestion |
-| **Extraction Review** | React + Zustand | Visual diff with merge recommendations, undo/redo, inline editing |
-| **Chat Agent** | Tool-use loop | RAG retrieval (FTS5 + vector hybrid), graph tools, agent memory |
-| **MCP Server** | HTTP + stdio (shared core) | 8 consolidated tools with action-level authorization. Profile-based access control. |
-| **MCP Client** | stdio child processes | Connect to external MCP servers (GitHub, Notion, etc.) |
-| **Vector Search** | sqlite-vec + ONNX/OpenAI | Semantic similarity search, hybrid retrieval with RRF fusion |
-| **Platform Layer** | 6 interfaces | Shared codebase between Electron (primary) and Chrome extension (deprecated) |
-
-### MCP Integration
-
-Synapse is both an **MCP server** (exposing graph tools) and an **MCP client** (consuming external servers).
-
-**As a server**, any MCP-compatible agent (Claude Desktop, Claude Code, Codex, Cursor) can search, create, and analyze the graph through 8 consolidated tools:
-
-| Tool | Description |
-|------|-------------|
-| `search` | Find entities, notes, and sources with relevance scoring |
-| `get_entity` | Full entity details: properties, relationships, aliases, tags |
-| `get_neighbors` | Traverse the graph from a starting entity |
-| `manage_entity` | Create, update, or delete entities |
-| `manage_relationship` | Create, update, or delete relationships |
-| `merge_entities` | Deduplicate entities with edge transfer |
-| `manage_note` | Read, create, or update markdown notes |
-| `analyze_graph` | Graph intelligence: overview, health, centrality, orphans, paths |
-
-**Connect Claude Desktop** (stdio):
+**Or configure manually** — add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
@@ -96,19 +59,7 @@ Synapse is both an **MCP server** (exposing graph tools) and an **MCP client** (
 }
 ```
 
-**Connect Claude Code** (same config in `.claude.json`):
-```json
-{
-  "mcpServers": {
-    "synapse": {
-      "command": "npx",
-      "args": ["synapse-kg", "--vault", "/path/to/vault", "--allow-write"]
-    }
-  }
-}
-```
-
-**Or use the app's built-in HTTP server** (requires Synapse running with a vault open):
+**Connect to the running app** (HTTP, requires Synapse open with a vault):
 ```json
 {
   "mcpServers": {
@@ -119,45 +70,26 @@ Synapse is both an **MCP server** (exposing graph tools) and an **MCP client** (
 }
 ```
 
-The Settings MCP tab shows the exact config with your vault path pre-filled — just copy and paste.
+The Settings > MCP tab shows the exact config with your vault path pre-filled — just copy and paste.
 
-**Access control**: Profiles in `.synapse/mcp-server.json` control which tools and actions each agent can use (read-only, editor, full access).
+### Available tools
 
-### Chrome Extension (Deprecated)
+| Tool | Description |
+|------|-------------|
+| `search` | Find entities, notes, and sources with relevance scoring |
+| `get_entity` | Full entity details: properties, relationships, aliases |
+| `get_neighbors` | Traverse the graph from a starting entity |
+| `manage_entity` | Create, update, or delete entities |
+| `manage_relationship` | Create, update, or delete relationships |
+| `merge_entities` | Deduplicate entities with edge transfer |
+| `manage_note` | Read, create, or update markdown notes |
+| `analyze_graph` | Graph intelligence: overview, health, centrality, paths |
 
-The Chrome extension shares 95% of the codebase via the platform abstraction layer (`src/platform/{chrome,electron}/`). It uses wa-sqlite with OPFS instead of better-sqlite3, and runs the LLM loop in an offscreen document. No new features target it — the Electron app provides vault management, file watching, MCP, and ONNX embeddings that aren't possible in the extension sandbox.
+Access control profiles in `.synapse/mcp-server.json` control which tools each agent can use (read-only, editor, full access).
 
-## Workflows
+As an **MCP client**, Synapse connects to external servers (GitHub, Notion, etc.) so your chat agent can pull context from other systems.
 
-### Entity Extraction
-
-Paste a URL or text, and the LLM extracts structured entities and relationships with typed labels. A review step lets you approve, edit, or merge before anything touches the graph.
-
-**1. Start extraction** — Enter a URL or paste text. Choose Quick (single LLM call) or Deep (agentic with DOM inspection).
-
-![Extraction start](docs/images/extraction-start.png)
-
-**2. Review extracted entities** — The LLM returns typed entities (person, organization, technology, concept) and labeled relationships. Review before committing.
-
-![Extraction review](docs/images/extraction-review.png)
-
-**3. Graph populated** — Entities appear as color-coded nodes with force-directed layout. Edges represent the extracted relationships.
-
-![Graph after extraction](docs/images/graph-after-extraction.png)
-
-*Demo: extracting from [Harness engineering: leveraging Codex in an agent-first world](https://openai.com/index/harness-engineering/) by Ryan Lopopolo (OpenAI). Synapse identified 10 entities across 5 types and 9 relationships in a single extraction.*
-
-### Agent Chat
-
-Ask questions about your graph in natural language. The agent uses tool calls (search, traverse, inspect) to ground its answers in your actual data.
-
-![Chat response](docs/images/chat-response.png)
-
-*The agent searched the graph, found Codex and its connections, and returned a structured answer with entity references — all grounded in the extracted knowledge, not hallucinated.*
-
-## Getting Started
-
-### Electron (Primary)
+## Getting started
 
 ```bash
 git clone <repo-url>
@@ -166,35 +98,45 @@ npm install
 npm run dev:electron    # Build + launch
 ```
 
-On first launch, create or open a **vault** — a folder that contains your graph database, notes, and files.
-
-### Configuration
+On first launch, create or open a **vault** — a folder that holds your graph database, notes, and files.
 
 1. Open **Settings** (gear icon) and enter your Anthropic API key
-2. Optionally configure OpenAI for embeddings (semantic search)
-3. Start extracting from URLs, pasted text, or dropped files
+2. Start extracting from URLs, pasted text, or dropped files
+3. Optionally configure OpenAI for vector embeddings (semantic search)
 
-### MCP Server (for Claude Desktop / Claude Code / Codex)
+### MCP server (for Claude Desktop / Claude Code / Codex)
 
 ```bash
 npm run build:mcp
 
-# Option 1: Use npx (after npm publish)
-# Add to claude_desktop_config.json — see MCP Integration above
-
-# Option 2: Build MCPB bundle for Claude Desktop single-click install
-npm run bundle --prefix packages/synapse-mcp
-# Output: packages/synapse-mcp/synapse-mcp.mcpb
+# Add to claude_desktop_config.json — see MCP integration above
 ```
 
-## Tech Stack
+## Architecture
 
-React 19, TypeScript, Vite 7, Zustand 5, Three.js, Tailwind CSS 4, better-sqlite3, sqlite-vec, Zod 4, @mozilla/readability, @modelcontextprotocol/sdk
+```
+UI (React + Zustand) → @platform → Main Process → External (SQLite, LLM, FS)
+```
+
+| Component | Technology | Role |
+|---|---|---|
+| **Database** | SQLite (better-sqlite3) | Source of truth. FTS5 search, WAL mode, 16 repository interfaces |
+| **Graph renderer** | Three.js (InstancedMesh) | 1-2 draw calls for 100k+ nodes. Web Worker force layout |
+| **LLM extraction** | Anthropic (agentic), OpenAI | Page, text, and file ingestion with human review |
+| **Chat agent** | Tool-use loop | RAG retrieval (FTS5 + vector hybrid), graph traversal, agent memory |
+| **MCP server** | HTTP + stdio | 8 tools with profile-based access control |
+| **Vector search** | sqlite-vec + ONNX/OpenAI | Semantic similarity, hybrid retrieval with RRF fusion |
+| **Vault** | Local filesystem | Single directory with graph DB, notes, embeddings, config |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design, SQLite schema, and worker patterns.
+
+## Tech stack
+
+React 19, TypeScript, Vite 7, Zustand 5, Three.js, Tailwind CSS 4, better-sqlite3, sqlite-vec, Zod 4, @modelcontextprotocol/sdk
 
 ## References
 
 - [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Karpathy's pattern for LLM-maintained personal knowledge bases
-- [Harness engineering](https://openai.com/index/harness-engineering/) — OpenAI's experiment building with zero manually-written code
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Full system design, SQLite schema, worker patterns
 
 ## License

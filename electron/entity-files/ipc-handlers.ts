@@ -2,6 +2,18 @@ import { ipcMain } from 'electron';
 import type { EntityFileService } from './entity-file-service';
 
 export function registerEntityFileIpc(getService: () => EntityFileService | null): void {
+  ipcMain.handle('entity-files:usage', async () => {
+    const service = getService();
+    if (!service) return { fileCount: 0, bytes: 0 };
+    return service.getUsage();
+  });
+
+  ipcMain.handle('entity-files:clear-all', async () => {
+    const service = getService();
+    if (!service) return;
+    service.clearAllFiles();
+  });
+
   ipcMain.handle('entity-files:generate-all', async () => {
     const service = getService();
     if (!service) return { generated: 0 };
@@ -52,6 +64,8 @@ export function registerEntityFileIpc(getService: () => EntityFileService | null
 }
 
 export function unregisterEntityFileIpc(): void {
+  ipcMain.removeHandler('entity-files:usage');
+  ipcMain.removeHandler('entity-files:clear-all');
   ipcMain.removeHandler('entity-files:generate-all');
   ipcMain.removeHandler('entity-files:list-sync-issues');
   ipcMain.removeHandler('entity-files:dismiss-sync-issue');

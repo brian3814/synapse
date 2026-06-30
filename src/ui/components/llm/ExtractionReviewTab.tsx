@@ -1,17 +1,18 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useLLMStore } from '../../../graph/store/llm-store';
 import { useUIStore } from '../../../graph/store/ui-store';
 import { useExtractionReviewStore } from '../../../graph/store/extraction-review-store';
 import { useReadingListStore } from '../../../graph/store/reading-list-store';
-import { useLLMExtraction } from '../../hooks/useLLMExtraction';
+import { applyReview, proceedToReview, regenerateExtraction } from '../../extractionActions';
 import { ExtractionReview } from './ExtractionReview';
 import { ExtractionSummary } from './ExtractionSummary';
 import { AgentTimeline } from './AgentTimeline';
-import { StepTimeline, RateLimitCountdown, FetchError } from './ExtractionProgress';
+import { RateLimitCountdown, FetchError } from './ExtractionProgress';
+import { ExtractionProgressPanel } from '../reading-list/ExtractionProgressPanel';
 
 export function ExtractionReviewTab() {
-  const { applyReview, proceedToReview } = useLLMExtraction();
   const status = useLLMStore((s) => s.status);
+  const extractionResourceId = useLLMStore((s) => s.extractionResourceId);
   const error = useLLMStore((s) => s.error);
   const rateLimitWait = useLLMStore((s) => s.rateLimitWait);
 
@@ -61,14 +62,21 @@ export function ExtractionReviewTab() {
     handleDiscard();
   }, [handleDiscard]);
 
-  if (status === 'extracting') {
+  if (status === 'extracting' && extractionResourceId) {
     return (
-      <div className="h-full overflow-y-auto bg-zinc-900 p-6">
-        <div className="max-w-lg mx-auto space-y-3">
-          <h3 className="text-sm font-medium text-zinc-200">Extracting entities...</h3>
-          <StepTimeline />
-          {rateLimitWait && <RateLimitCountdown wait={rateLimitWait} />}
-          {error && <FetchError error={error} />}
+      <div className="h-full flex flex-col bg-zinc-900">
+        <ExtractionProgressPanel resourceId={extractionResourceId} />
+        {rateLimitWait && (
+          <div className="px-4 pb-2">
+            <RateLimitCountdown wait={rateLimitWait} />
+          </div>
+        )}
+        {error && (
+          <div className="px-4 pb-2">
+            <FetchError error={error} />
+          </div>
+        )}
+        <div className="px-4 pb-4 shrink-0">
           <ActionBar onDiscard={handleDiscard} onSendToReadingList={handleSendToReadingList} />
         </div>
       </div>
@@ -107,6 +115,7 @@ export function ExtractionReviewTab() {
           <PreviewGraphButton />
           <ActionBar onDiscard={handleDiscard} onSendToReadingList={handleSendToReadingList} inline />
         </div>
+        <RegenerateFeedback onRegenerate={regenerateExtraction} />
         <ExtractionReview onApply={applyReview} />
       </div>
     );
@@ -153,6 +162,80 @@ function ActionBar({
           Save to Reading List
         </button>
       )}
+    </div>
+  );
+}
+
+function RegenerateFeedback({ onRegenerate }: { onRegenerate: (feedback: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const inputText = useLLMStore((s) => s.inputText);
+
+  if (!inputText) return null;
+
+  const handleSubmit = () => {
+    const trimmed = feedback.trim();
+    if (!trimmed) return;
+    setExpanded(false);
+    setFeedback('');
+    onRegenerate(trimmed);
+  };
+
+  if (!expanded) {
+    return (
+      <div className="mb-3">
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-lg hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M1 4v-1a2 2 0 0 1 2-2h1" />
+            <path d="M1 12v1a2 2 0 0 0 2 2h1" />
+            <path d="M12 1h1a2 2 0 0 1 2 2v1" />
+            <path d="M12 15h1a2 2 0 0 0 2-2v-1" />
+            <path d="M8 4v8" />
+            <path d="M5 7l3-3 3 3" />
+          </svg>
+          Regenerate with feedback
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 space-y-2 p-3 bg-zinc-800/50 border border-zinc-700 rounded-lg">
+      <label className="text-xs font-medium text-zinc-400 block">
+        How should the extraction be different?
+      </label>
+      <textarea
+        value={feedback}
+        onChange={(e) => setFeedback(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        placeholder="e.g. Focus on people and their roles, extract more granular relationships..."
+        className="w-full bg-zinc-900 border border-zinc-700 rounded text-sm text-zinc-200 p-2 resize-none placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+        rows={3}
+        autoFocus
+      />
+      <div className="flex gap-2 justify-end">
+        <button
+          onClick={() => { setExpanded(false); setFeedback(''); }}
+          className="px-3 py-1.5 text-xs bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={!feedback.trim()}
+          className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Regenerate
+        </button>
+      </div>
     </div>
   );
 }

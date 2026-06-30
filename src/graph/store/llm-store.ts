@@ -27,6 +27,7 @@ interface LLMStore {
   error: string | null;
   inputText: string;
   sourceUrl: string | null;
+  extractionResourceId: string | null;
   agentRun: AgentRun | null;
   agentTurns: AgentTurn[];
   lastUsage: LastUsage | null;
@@ -40,6 +41,7 @@ interface LLMStore {
   setError: (error: string | null) => void;
   setInputText: (text: string) => void;
   setSourceUrl: (url: string | null) => void;
+  setExtractionResourceId: (id: string | null) => void;
   setLastUsage: (usage: LastUsage | null) => void;
   setRateLimitWait: (wait: RateLimitWait | null) => void;
   setShowPrivacyModal: (show: boolean, pendingAction?: () => void) => void;
@@ -69,6 +71,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   error: null,
   inputText: '',
   sourceUrl: null,
+  extractionResourceId: null,
   agentRun: null,
   agentTurns: [],
   lastUsage: null,
@@ -83,6 +86,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
   setInputText: (text) => set({ inputText: text }),
   setSourceUrl: (url) => set({ sourceUrl: url }),
+  setExtractionResourceId: (id) => set({ extractionResourceId: id }),
   setLastUsage: (usage) => set({ lastUsage: usage }),
   setRateLimitWait: (wait) => set({ rateLimitWait: wait }),
   setShowPrivacyModal: (show, pendingAction) => set({ showPrivacyModal: show, pendingAction: pendingAction ?? null }),
@@ -119,6 +123,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
       error: null,
       inputText: '',
       sourceUrl: null,
+      extractionResourceId: null,
       agentRun: null,
       agentTurns: [],
       lastUsage: null,
